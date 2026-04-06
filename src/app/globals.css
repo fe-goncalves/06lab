@@ -1,26 +1,71 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Fontes */
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-space-mono);
+  --font-display: var(--font-fjalla);
+
+  /* Cores base */
+  --color-background: #0D0D0D;
+  --color-surface: #141414;
+  --color-border: #1F1F1F;
+
+  /* Texto */
+  --color-text-primary: #F2F2F2;
+  --color-text-secondary: #A6A6A6;
+  --color-text-accent: #FBFFED;
+
+  /* Brand — verde neon */
+  --color-brand: #BFF205;
+  --color-brand-alt: #D7F205;
+
+  /* Estados */
+  --color-danger: #FF4444;
+  --color-warning: #F2A705;
+  --color-success: #BFF205;
+
+  /* Gradientes de marca */
+  --gradient-brand: linear-gradient(135deg, #BFF205 0%, #D7F205 100%);
+  --gradient-subtle: linear-gradient(180deg, #141414 0%, #0D0D0D 100%);
+  --gradient-glow: radial-gradient(ellipse at top, rgba(191, 242, 5, 0.08) 0%, transparent 70%);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--color-border);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar customizada para dark mode */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2A2A2A;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3A3A3A;
+}
+
+/* Classes utilitárias de fonte */
+.font-display {
+  font-family: var(--font-display);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
 }

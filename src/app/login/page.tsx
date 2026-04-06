@@ -1,17 +1,15 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
-import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
 
-function LoginForm() {
+export default function LoginPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(
-    () => searchParams.get("error"),
-  );
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -28,7 +26,7 @@ function LoginForm() {
     setLoading(false);
 
     if (signInError) {
-      setError(signInError.message);
+      setError("Email ou senha incorretos.");
       return;
     }
 
@@ -37,79 +35,140 @@ function LoginForm() {
   }
 
   return (
-    <div className="flex min-h-full flex-1 flex-col items-center justify-center bg-zinc-50 px-4 py-12 dark:bg-zinc-950">
-      <div className="w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h1 className="mb-6 text-center text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-          Entrar
-        </h1>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="email"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+    <div className="flex min-h-screen flex-col items-center justify-center px-4">
+      {/* Glow sutil no topo */}
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={{ background: "var(--gradient-glow)" }}
+      />
+
+      <div className="relative w-full max-w-sm">
+        {/* Logo */}
+        <div className="mb-10 flex flex-col items-center gap-4">
+          <Image
+            src="/brand/logo.svg"
+            alt="06.lab"
+            width={48}
+            height={48}
+            priority
+          />
+          <div className="text-center">
+            <p
+              className="font-display text-2xl tracking-tight"
+              style={{ color: "var(--color-text-primary)" }}
             >
-              Email
-            </label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-zinc-400 focus:border-zinc-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label
-              htmlFor="password"
-              className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              06.lab
+            </p>
+            <p
+              className="mt-1 text-sm"
+              style={{ color: "var(--color-text-secondary)" }}
             >
-              Senha
-            </label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-zinc-400 focus:border-zinc-400 focus:ring-2 dark:border-zinc-600 dark:bg-zinc-950 dark:text-zinc-50"
-            />
+              Painel administrativo
+            </p>
           </div>
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-2 rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            {loading ? "Entrando…" : "Entrar"}
-          </button>
-        </form>
-        {error ? (
-          <p
-            className="mt-4 text-center text-sm text-red-600 dark:text-red-400"
-            role="alert"
-          >
-            {error}
-          </p>
-        ) : null}
+        </div>
+
+        {/* Card */}
+        <div
+          className="rounded-2xl border p-8"
+          style={{
+            background: "var(--color-surface)",
+            borderColor: "var(--color-border)",
+          }}
+        >
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="email"
+                className="text-sm"
+                style={{ color: "var(--color-text-secondary)" }}
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
+                style={{
+                  background: "var(--color-background)",
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text-primary)",
+                }}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--color-brand)")
+                }
+                onBlur={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--color-border)")
+                }
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="password"
+                className="text-sm"
+                style={{ color: "var(--color-text-secondary)" }}
+              >
+                Senha
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
+                style={{
+                  background: "var(--color-background)",
+                  borderColor: "var(--color-border)",
+                  color: "var(--color-text-primary)",
+                }}
+                onFocus={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--color-brand)")
+                }
+                onBlur={(e) =>
+                  (e.currentTarget.style.borderColor = "var(--color-border)")
+                }
+              />
+            </div>
+
+            {error && (
+              <p
+                className="text-sm"
+                role="alert"
+                style={{ color: "var(--color-danger)" }}
+              >
+                {error}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                background: "var(--color-brand)",
+                color: "#0D0D0D",
+              }}
+            >
+              {loading ? "Entrando…" : "Entrar"}
+            </button>
+          </form>
+        </div>
+
+        {/* Rodapé */}
+        <p
+          className="mt-6 text-center text-xs"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          06.lab © {new Date().getFullYear()}
+        </p>
       </div>
     </div>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-full flex-1 items-center justify-center bg-zinc-50 px-4 dark:bg-zinc-950">
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">Carregando…</p>
-        </div>
-      }
-    >
-      <LoginForm />
-    </Suspense>
   );
 }
