@@ -1,7 +1,6 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
-import { getPalette } from "colorthief";
 import { useRouter } from "next/navigation";
 import {
   type ChangeEvent,
@@ -66,32 +65,67 @@ export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
       setHexColors([]);
       return;
     }
-
+  
     if (file?.type === "image/svg+xml") {
       setHexColors([]);
       return;
     }
-
+  
     const img = document.createElement("img");
-    img.crossOrigin = "anonymous";
     img.src = previewUrl;
-
+  
     img.onload = () => {
       try {
-        const palette = getPalette(img, 3);
-        const hex = (palette ?? []).map(([r, g, b]: number[]) =>
-          rgbToHex(r, g, b)
-        );
-        setHexColors(hex);
+        const canvas = document.createElement("canvas");
+        const size = 100;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+  
+        ctx.drawImage(img, 0, 0, size, size);
+        const imageData = ctx.getImageData(0, 0, size, size).data;
+  
+        // Conta frequência de cores agrupadas em blocos de 24 (reduz variações sutis)
+        const colorMap: Record<string, number> = {};
+  
+        for (let i = 0; i < imageData.length; i += 4) {
+          const a = imageData[i + 3];
+          if (a < 128) continue; // ignora transparente
+  
+          const r = Math.round(imageData[i] / 24) * 24;
+          const g = Math.round(imageData[i + 1] / 24) * 24;
+          const b = Math.round(imageData[i + 2] / 24) * 24;
+  
+          // Ignora preto, branco e cinzas
+          const isNeutral = Math.abs(r - g) < 20 && Math.abs(g - b) < 20 && Math.abs(r - b) < 20;
+          if (isNeutral && r > 220) continue; // branco
+          if (isNeutral && r < 30) continue;  // preto
+  
+          const key = `${r},${g},${b}`;
+          colorMap[key] = (colorMap[key] ?? 0) + 1;
+        }
+  
+        // Ordena por frequência e pega as 3 mais dominantes
+        const sorted = Object.entries(colorMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([key]) => {
+            const [r, g, b] = key.split(",").map(Number);
+            return rgbToHex(r, g, b);
+          });
+  
+        // Se não encontrou cores suficientes, completa com o que tem
+        setHexColors(sorted);
       } catch {
         setHexColors([]);
       }
     };
-
+  
     img.onerror = () => {
       setHexColors([]);
     };
-
+  
     return () => {
       img.onload = null;
       img.onerror = null;
@@ -131,6 +165,7 @@ export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
       if (hexColors[2]) formData.append("tertiary_color", hexColors[2]);
   
       const result = await criarEquipe(formData);
+      console.log("result:", result);
   
       if (result.error) {
         setError(result.error);
@@ -142,9 +177,8 @@ export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
         return;
       }
   
-      onClose();
       router.push(`/equipes/${result.id}`);
-      router.refresh();
+      onClose();
     } finally {
       setLoading(false);
     }
