@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import EquipesClient from "./equipes-client";
 
@@ -80,13 +81,13 @@ export default async function EquipesPage() {
     <div className="p-6 md:p-8">
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1
-        className="font-display text-2xl font-semibold tracking-tight md:text-3xl"
-        style={{ color: "var(--color-text-primary)" }}
+          className="font-display text-2xl font-semibold tracking-tight md:text-3xl"
+          style={{ color: "var(--color-text-primary)" }}
         >
-        Equipes
+          Equipes
         </h1>
         <EquipesClient />
-        </header>
+      </header>
 
       {fetchError ? (
         <p
@@ -126,82 +127,84 @@ export default async function EquipesPage() {
               team.primary_color?.trim() || "var(--color-border)";
 
             return (
-              <li
-                key={team.id}
-                className="flex flex-col rounded-xl border p-4 transition-colors hover:border-[color-mix(in_oklab,var(--color-brand)_35%,var(--color-border))]"
-                style={{
-                  backgroundColor: "var(--color-surface)",
-                  borderColor: "var(--color-border)",
-                }}
-              >
-                <div className="flex gap-3">
-                  <div
-                    className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-xs font-bold"
-                    style={{
-                      borderColor: "var(--color-border)",
-                      backgroundColor: "var(--color-background)",
-                      color: "var(--color-text-secondary)",
-                    }}
-                  >
-                    {team.logo_url ? (
-                      <img
-                        src={team.logo_url}
-                        alt=""
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span style={{ color: "var(--color-text-primary)" }}>
-                        {initials}
-                      </span>
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <h2
-                        className="truncate text-base font-semibold leading-snug"
-                        style={{ color: "var(--color-text-primary)" }}
-                        title={team.full_name}
-                      >
-                        {team.full_name}
-                      </h2>
-                      <span
-                        className="mt-1.5 h-3 w-3 shrink-0 rounded-full border"
-                        style={{
-                          backgroundColor: dotColor,
-                          borderColor: "var(--color-border)",
-                        }}
-                        title={team.primary_color ?? undefined}
-                        aria-hidden
-                      />
-                    </div>
-                    {team.abbreviation ? (
-                      <p
-                        className="mt-0.5 text-sm"
-                        style={{ color: "var(--color-text-secondary)" }}
-                      >
-                        Sigla:{" "}
-                        <span
-                          className="font-medium"
-                          style={{ color: "var(--color-text-primary)" }}
-                        >
-                          {team.abbreviation}
+              <li key={team.id}>
+                <Link
+                  href={`/equipes/${team.id}`}
+                  className="flex flex-col rounded-xl border p-4 transition-colors hover:border-[color-mix(in_oklab,var(--color-brand)_35%,var(--color-border))]"
+                  style={{
+                    backgroundColor: "var(--color-surface)",
+                    borderColor: "var(--color-border)",
+                  }}
+                >
+                  <div className="flex gap-3">
+                    <div
+                      className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border text-xs font-bold"
+                      style={{
+                        borderColor: "var(--color-border)",
+                        backgroundColor: "var(--color-background)",
+                        color: "var(--color-text-secondary)",
+                      }}
+                    >
+                      {team.logo_url ? (
+                        <img
+                          src={team.logo_url}
+                          alt=""
+                          className="h-full w-full object-contain"
+                        />
+                      ) : (
+                        <span style={{ color: "var(--color-text-primary)" }}>
+                          {initials}
                         </span>
-                      </p>
-                    ) : null}
-                    <div className="mt-3">
-                      <span
-                        className="inline-block rounded-md border px-2 py-0.5 text-xs font-medium"
-                        style={{
-                          borderColor: "var(--color-border)",
-                          color: "var(--color-text-primary)",
-                          backgroundColor: "var(--color-background)",
-                        }}
-                      >
-                        {gender}
-                      </span>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <h2
+                          className="truncate text-base font-semibold leading-snug"
+                          style={{ color: "var(--color-text-primary)" }}
+                          title={team.full_name}
+                        >
+                          {team.full_name}
+                        </h2>
+                        <span
+                          className="mt-1.5 h-3 w-3 shrink-0 rounded-full border"
+                          style={{
+                            backgroundColor: dotColor,
+                            borderColor: "var(--color-border)",
+                          }}
+                          title={team.primary_color ?? undefined}
+                          aria-hidden
+                        />
+                      </div>
+                      {team.abbreviation ? (
+                        <p
+                          className="mt-0.5 text-sm"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
+                          Sigla:{" "}
+                          <span
+                            className="font-medium"
+                            style={{ color: "var(--color-text-primary)" }}
+                          >
+                            {team.abbreviation}
+                          </span>
+                        </p>
+                      ) : null}
+                      <div className="mt-3">
+                        <span
+                          className="inline-block rounded-md border px-2 py-0.5 text-xs font-medium"
+                          style={{
+                            borderColor: "var(--color-border)",
+                            color: "var(--color-text-primary)",
+                            backgroundColor: "var(--color-background)",
+                          }}
+                        >
+                          {gender}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
+                </Link>
               </li>
             );
           })}
