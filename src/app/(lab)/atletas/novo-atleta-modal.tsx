@@ -1,0 +1,239 @@
+"use client";
+
+import { createClient } from "@/lib/supabase";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { criarAtleta } from "./actions";
+
+type Position = { id: string; full_name: string; is_goalkeeper: boolean };
+
+function applyDateMask(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+export function NovoAtletaModal({
+  isOpen,
+  onClose,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [fullName, setFullName] = useState("");
+  const [surname, setSurname] = useState("");
+  const [gender, setGender] = useState("");
+  const [positionId, setPositionId] = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [rg, setRg] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const supabase = createClient();
+    supabase
+      .from("player_positions")
+      .select("id, full_name, is_goalkeeper")
+      .eq("sport_slug", "football7")
+      .order("display_order")
+      .then(({ data }) => setPositions((data ?? []) as Position[]));
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFullName(""); setSurname(""); setGender(""); setPositionId("");
+      setBirthDate(""); setRg(""); setFile(null); setError(null);
+      setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return null; });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] ?? null;
+    setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return f ? URL.createObjectURL(f) : null; });
+    setFile(f);
+  }
+
+  function handleBirthDateChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setBirthDate(applyDateMask(e.target.value));
+  }
+
+  function handleBirthDatePaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData("text");
+    setBirthDate(applyDateMask(pasted));
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append("full_name", fullName.trim());
+      if (surname) fd.append("surname", surname.trim());
+      if (gender) fd.append("gender", gender);
+      if (positionId) fd.append("position_id", positionId);
+      if (birthDate) fd.append("birth_date", birthDate);
+      if (rg) fd.append("rg", rg);
+      if (file) fd.append("photo", file);
+
+      const result = await criarAtleta(fd);
+      if ("error" in result) { setError(result.error); return; }
+      router.push(`/atletas/${result.id}`);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!isOpen) return null;
+
+  const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
+  const inputStyle = {
+    borderColor: "var(--color-border)",
+    backgroundColor: "var(--color-background)",
+    color: "var(--color-text-primary)",
+  };
+  const labelStyle = { color: "var(--color-text-primary)" };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6 shadow-lg"
+        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>
+            Novo atleta
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg border px-2 py-1 text-sm"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Nome completo *</span>
+            <input type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Apelido</span>
+            <input type="text" value={surname} onChange={(e) => setSurname(e.target.value)} className={inputClass} style={inputStyle} />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Gênero</span>
+            <select value={gender} onChange={(e) => setGender(e.target.value)} className={inputClass} style={inputStyle}>
+              <option value="">Selecione…</option>
+              <option value="male">Masculino</option>
+              <option value="female">Feminino</option>
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Posição</span>
+            <select value={positionId} onChange={(e) => setPositionId(e.target.value)} className={inputClass} style={inputStyle}>
+              <option value="">Selecione…</option>
+              {positions.map((p) => (
+                <option key={p.id} value={p.id}>{p.full_name}</option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Data de nascimento</span>
+            <input
+              type="text"
+              placeholder="DD/MM/AAAA"
+              value={birthDate}
+              onChange={handleBirthDateChange}
+              onPaste={handleBirthDatePaste}
+              maxLength={10}
+              className={inputClass}
+              style={inputStyle}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>RG</span>
+            <input
+              type="text"
+              value={rg}
+              onChange={(e) => setRg(e.target.value.replace(/[^\d.\-]/g, ""))}
+              className={inputClass}
+              style={inputStyle}
+              placeholder="000.000.000-0"
+            />
+          </label>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={labelStyle}>Foto</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="rounded-lg border px-3 py-2 text-sm"
+              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
+            >
+              {file ? file.name : "Escolher foto"}
+            </button>
+            {previewUrl && (
+              <img
+                src={previewUrl}
+                alt="Preview"
+                className="mt-2 h-24 w-24 rounded-full border object-cover"
+                style={{ borderColor: "var(--color-border)" }}
+              />
+            )}
+          </div>
+
+          {error && (
+            <p className="text-sm" style={{ color: "var(--color-danger)" }} role="alert">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="mt-2 rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+          >
+            {loading ? "Salvando…" : "Criar atleta"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
