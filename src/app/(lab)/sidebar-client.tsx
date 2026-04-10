@@ -354,7 +354,7 @@ export default function LabSidebarClient({
                   ["Rankings", "/rankings"],
                   ["Estatísticas", "/estatisticas"],
                   ["Arbitragem", "/arbitros"],
-                  ["Arenas", "/arenas"],
+                  ["Arenas", "/locais"],
                 ].map(([label, href]) => (
                   <Link
                     key={href}
