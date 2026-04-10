@@ -118,3 +118,45 @@ export async function editarAtleta(id: string, formData: FormData) {
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function vincularAtleta(
+  athleteId: string,
+  teamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("organization_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+
+  // Encerra stint atual se existir
+  await supabase
+    .from("athlete_team_stints")
+    .update({ ended_at: new Date().toISOString().split("T")[0], is_current: false })
+    .eq("athlete_id", athleteId)
+    .eq("is_current", true);
+
+  // Cria novo stint
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .insert({
+      athlete_id: athleteId,
+      team_id: teamId,
+      started_at: new Date().toISOString().split("T")[0],
+      is_current: true,
+    });
+
+  if (error) return { error: error.message };
+
+  return { success: true };
+}
