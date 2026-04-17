@@ -49,20 +49,3 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-  return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ backgroundColor: "var(--color-background)" }}
-    >
-      <LabSidebarClient pinnedCompetitions={pinnedCompetitions} />
-
-      <main
-        className="min-w-0 flex-1 overflow-y-auto"
-        style={{ backgroundColor: "var(--color-background)" }}
-      >
-        {children}
-      </main>
-    </div>
-  );
-}
