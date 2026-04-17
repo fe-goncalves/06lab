@@ -351,10 +351,12 @@ export default function LabSidebarClient({
                 style={{ borderColor: "var(--color-border)" }}
               >
                 {[
+                  ["Suspensões", "/suspensoes"],
                   ["Rankings", "/rankings"],
                   ["Estatísticas", "/estatisticas"],
                   ["Arbitragem", "/arbitros"],
                   ["Arenas", "/locais"],
+                  ["Aprovações", "/aprovacoes"],
                 ].map(([label, href]) => (
                   <Link
                     key={href}
