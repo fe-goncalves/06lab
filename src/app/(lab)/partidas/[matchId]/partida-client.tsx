@@ -51,7 +51,9 @@ function ActionRow({
     ? (teamA?.abbreviation ?? teamA?.full_name ?? "A")
     : (teamB?.abbreviation ?? teamB?.full_name ?? "B");
   const name =
-    action.primary_athlete?.surname ?? action.primary_athlete?.full_name ?? "";
+    action.primary_athlete?.surname ??
+    action.primary_athlete?.full_name ??
+    "";
 
   return (
     <div
@@ -87,7 +89,10 @@ function ActionRow({
         type="button"
         onClick={onDelete}
         className="shrink-0 rounded border px-2 py-0.5 text-xs"
-        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}
+        style={{
+          borderColor: "var(--color-border)",
+          color: "var(--color-danger)",
+        }}
       >
         ×
       </button>
@@ -149,7 +154,8 @@ export default function PartidaClient({
   const roundName: string =
     match.rounds?.custom_label ?? match.rounds?.name ?? "Rodada";
   const competitionName: string =
-    match.phases?.competition_editions?.competitions?.full_name ?? "Competição";
+    match.phases?.competition_editions?.competitions?.full_name ??
+    "Competição";
 
   function getAthletes(teamId: string) {
     const et = editionTeamsWithAthletes.find(
@@ -273,6 +279,7 @@ export default function PartidaClient({
   const firstHalf = [...actions]
     .filter((a) => a.period === "first")
     .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+
   const secondHalf = [...actions]
     .filter((a) => a.period === "second")
     .sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
@@ -293,7 +300,6 @@ export default function PartidaClient({
         <span>{roundName}</span>
       </div>
 
-      {/* Placar */}
       <div
         className="mb-6 rounded-xl border p-6"
         style={{
@@ -403,10 +409,7 @@ export default function PartidaClient({
             {saving ? "Salvando…" : "Salvar partida"}
           </button>
           {saveFeedback && (
-            <span
-              className="text-xs"
-              style={{ color: "var(--color-success)" }}
-            >
+            <span className="text-xs" style={{ color: "var(--color-success)" }}>
               {saveFeedback}
             </span>
           )}
@@ -416,15 +419,14 @@ export default function PartidaClient({
             className="mt-4 text-center text-xs"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            {new Date(
-              match.match_date + "T00:00:00"
-            ).toLocaleDateString("pt-BR")}
+            {new Date(match.match_date + "T00:00:00").toLocaleDateString(
+              "pt-BR"
+            )}
             {match.match_time ? ` às ${match.match_time.slice(0, 5)}` : ""}
           </p>
         )}
       </div>
 
-      {/* Ações */}
       <div
         className="rounded-xl border p-5"
         style={{
@@ -501,8 +503,12 @@ export default function PartidaClient({
                   className={inputClass}
                   style={inputStyle}
                 >
-                  {teamA && <option value={teamA.id}>{teamA.full_name}</option>}
-                  {teamB && <option value={teamB.id}>{teamB.full_name}</option>}
+                  {teamA && (
+                    <option value={teamA.id}>{teamA.full_name}</option>
+                  )}
+                  {teamB && (
+                    <option value={teamB.id}>{teamB.full_name}</option>
+                  )}
                 </select>
               </label>
               <label className="flex flex-col gap-1">
@@ -518,9 +524,7 @@ export default function PartidaClient({
                   className={inputClass}
                   style={inputStyle}
                 >
-                  <option value="first">
-                    1º Tempo (1-{halfDuration})
-                  </option>
+                  <option value="first">1º Tempo (1-{halfDuration})</option>
                   <option value="second">
                     2º Tempo ({halfDuration + 1}-{halfDuration * 2})
                   </option>
@@ -645,10 +649,7 @@ export default function PartidaClient({
               )}
             </div>
             {actionError && (
-              <p
-                className="text-sm"
-                style={{ color: "var(--color-danger)" }}
-              >
+              <p className="text-sm" style={{ color: "var(--color-danger)" }}>
                 {actionError}
               </p>
             )}
@@ -668,10 +669,7 @@ export default function PartidaClient({
         )}
 
         {actions.length === 0 ? (
-          <p
-            className="text-sm"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
+          <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
             Nenhuma ação registrada.
           </p>
         ) : (
