@@ -1,8 +1,13 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
-import LabSidebarClient, { type PinnedCompetition } from "./sidebar-client";
+import LabSidebarClient from "./sidebar-client";
 import Notificacoes from "./components/notificacoes";
+
+type PinnedCompetition = {
+  id: string;
+  displayName: string;
+};
 
 export default async function LabLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
@@ -14,6 +19,21 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
     .select("organization_id, id")
     .eq("auth_user_id", user.id)
     .maybeSingle();
+
+  const { data: org } = await supabase
+    .from("organizations")
+    .select("name, short_name, logo_url, favicon_url, slug, custom_domain")
+    .eq("id", profile?.organization_id ?? "")
+    .maybeSingle();
+
+  const orgInfo = {
+    name: org?.name ?? "06LAB",
+    short_name: org?.short_name ?? null,
+    logo_url: org?.logo_url ?? null,
+    favicon_url: org?.favicon_url ?? null,
+    slug: org?.slug ?? null,
+    custom_domain: org?.custom_domain ?? null,
+  };
 
   let pinnedCompetitions: PinnedCompetition[] = [];
 
@@ -33,7 +53,7 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--color-background)" }}>
-      <LabSidebarClient pinnedCompetitions={pinnedCompetitions} />
+      <LabSidebarClient pinnedCompetitions={pinnedCompetitions} orgInfo={orgInfo} />
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
         <div
