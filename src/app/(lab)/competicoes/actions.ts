@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 export async function criarCompeticao(
@@ -48,6 +49,8 @@ export async function criarCompeticao(
     .select("id").single();
 
   if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  revalidatePath("/competicoes");
   return { id: inserted.id };
 }
 
@@ -99,5 +102,8 @@ export async function editarCompeticao(
     .eq("id", id).eq("organization_id", profile.organization_id);
 
   if (error) return { error: error.message };
+  revalidatePath("/", "layout");
+  revalidatePath("/competicoes");
+  revalidatePath(`/competicoes/${id}`);
   return { success: true };
 }

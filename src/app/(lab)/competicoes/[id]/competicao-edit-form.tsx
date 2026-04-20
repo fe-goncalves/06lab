@@ -1,6 +1,7 @@
 "use client";
 
 import { editarCompeticao } from "../actions";
+import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 type Competition = {
@@ -20,6 +21,7 @@ type Props = {
 };
 
 export default function CompeticaoEditForm({ competition, allCompetitions }: Props) {
+  const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -59,6 +61,7 @@ export default function CompeticaoEditForm({ competition, allCompetitions }: Pro
       if ("error" in result) { setFeedback({ type: "error", text: result.error }); return; }
       setFeedback({ type: "success", text: "Alterações salvas." });
       setPendingLogo(null);
+      router.refresh();
     } finally { setSaving(false); }
   }
 

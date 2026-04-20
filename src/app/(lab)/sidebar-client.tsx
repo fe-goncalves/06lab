@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase";
 type PinnedCompetition = {
   id: string;
   displayName: string;
+  logo_url: string | null;
 };
 
 type OrgInfo = {
@@ -42,7 +43,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
       : "#";
 
   // Quebra nome em até 2 linhas se necessário
-  const nameFontSize = displayName.length > 12 ? "11px" : displayName.length > 8 ? "13px" : "16px";
+  const nameFontSize = displayName.length > 12 ? "13px" : displayName.length > 8 ? "16px" : "20px";
 
   return (
     <aside
@@ -51,7 +52,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
     >
       {/* Degradê lateral direito */}
       <div
-        className="pointer-events-none absolute inset-y-0 right-0 w-px"
+        className="pointer-events-none absolute inset-y-0 right-0 w-[3px]"
         style={{
           background: "linear-gradient(180deg, #D7F205 0%, #BFF205 100%)",
         }}
@@ -59,7 +60,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
       />
 
       {/* SEÇÃO 1 — Logo + Nome da organização */}
-      <div className="flex items-center gap-3 px-5 pt-7 pb-6">
+      <Link href="/" className="flex items-center gap-3 px-5 pt-7 pb-6 transition-opacity hover:opacity-80">
         <img
           src={faviconSrc}
           alt=""
@@ -68,28 +69,39 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
         <span
           className="font-mono font-normal leading-tight"
           style={{
-            color: "var(--color-brand-alt)",
+            color: "#F2F2F2",
             fontSize: nameFontSize,
+            fontWeight: 700,
             wordBreak: "break-word",
             maxWidth: "120px",
           }}
         >
           {displayName.toUpperCase()}
         </span>
-      </div>
+      </Link>
 
       {/* SEÇÃO 2 — Competições fixadas */}
       {pinnedCompetitions.length > 0 && (
-        <div className="px-5 pb-5">
+        <div className="px-5 pt-2 pb-5">
           <div className="flex flex-col gap-3">
             {pinnedCompetitions.slice(0, 3).map((comp) => (
               <Link
                 key={comp.id}
                 href={`/competicoes/${comp.id}`}
-                className="font-mono text-base font-normal leading-tight transition-opacity hover:opacity-70"
+                className="flex items-center gap-2 font-mono text-base font-normal leading-tight transition-opacity hover:opacity-70"
                 style={{ color: "var(--color-text-primary)", fontSize: "15px" }}
               >
-                {comp.displayName.toUpperCase()}
+                <span
+                  className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded"
+                  style={{ backgroundColor: "rgba(215,242,5,0.1)" }}
+                >
+                  {comp.logo_url ? (
+                    <img src={comp.logo_url} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <Crown size={13} strokeWidth={2.2} style={{ color: "var(--color-brand-alt)" }} />
+                  )}
+                </span>
+                <span className="truncate">{comp.displayName}</span>
               </Link>
             ))}
           </div>
@@ -102,7 +114,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
       )}
 
       {/* SEÇÃO 3 — Cadastros mais usados */}
-      <div className="flex flex-col gap-1 px-5 pb-6">
+      <div className="flex flex-col gap-3 px-5 pb-6">
         <SidebarIconItem
           href="/competicoes"
           icon={<Crown size={16} strokeWidth={2.5} />}
@@ -179,7 +191,7 @@ function SidebarIconItem({
     <Link
       href={href}
       className="flex items-center gap-3 font-mono font-normal transition-opacity hover:opacity-70"
-      style={{ color: "var(--color-brand-alt)", fontSize: "15px" }}
+      style={{ color: "#F2F2F2", fontSize: "15px" }}
     >
       <span
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded"
@@ -190,7 +202,7 @@ function SidebarIconItem({
       >
         {icon}
       </span>
-      {label}
+      <span style={{ color: "#F2F2F2" }}>{label}</span>
     </Link>
   );
 }

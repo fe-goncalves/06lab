@@ -7,6 +7,7 @@ import Notificacoes from "./components/notificacoes";
 type PinnedCompetition = {
   id: string;
   displayName: string;
+  logo_url: string | null;
 };
 
 export default async function LabLayout({ children }: { children: ReactNode }) {
@@ -40,14 +41,15 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
   if (profile?.organization_id) {
     const { data: pinnedRows } = await supabase
       .from("competitions")
-      .select("id, short_name, name")
+      .select("id, short_name, full_name, logo_url")
       .eq("organization_id", profile.organization_id)
       .eq("pinned_in_sidebar", true)
       .limit(3);
 
     pinnedCompetitions = (pinnedRows ?? []).map((row) => ({
       id: row.id as string,
-      displayName: row.short_name?.trim() || row.name?.trim() || "Competição",
+      displayName: (row.short_name?.trim() || row.full_name?.trim() || "Competição").toUpperCase(),
+      logo_url: row.logo_url ?? null,
     }));
   }
 
