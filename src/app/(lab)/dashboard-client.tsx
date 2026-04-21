@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase";
 import Link from "next/link";
-import { Dice6, Search, Bell, Calendar } from "lucide-react";
+import { Dice6, Search, Bell, Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
 
 type Team = {
@@ -60,8 +60,9 @@ const MONTHS = [
   "Janeiro","Fevereiro","Março","Abril","Maio","Junho",
   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro",
 ];
-const DAYS_SHORT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+const DAYS_SHORT = ["Seg","Ter","Qua","Qui","Sex","Sáb","Dom"];
 const MONTHS_SHORT = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+const DAYS_MODAL = ["SEG", "TER", "QUA", "QUI", "SEX", "SÁB", "DOM"];
 
 function formatFullDate() {
   const d = new Date();
@@ -79,6 +80,21 @@ function buildCalendarDays(centerDate: Date, range = 10) {
     d.setDate(centerDate.getDate() + i);
     days.push(d);
   }
+  return days;
+}
+
+function buildWeekDays(centerDate: Date) {
+  const days: Date[] = [];
+  const mondayOffset = (centerDate.getDay() + 6) % 7;
+  const monday = new Date(centerDate);
+  monday.setDate(centerDate.getDate() - mondayOffset);
+
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    days.push(d);
+  }
+
   return days;
 }
 
@@ -114,9 +130,13 @@ export default function DashboardClient({
   const [notifications, setNotifications] = useState<any[]>([]);
 
   // Jogos
-  const today = new Date();
+  const [today] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(today);
-  const [calendarDays] = useState(() => buildCalendarDays(today, 14));
+  const [calendarCenter, setCalendarCenter] = useState<Date>(today);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [calendarMatchDates, setCalendarMatchDates] = useState<string[]>([]);
+  const [loadingCalendarMatchDates, setLoadingCalendarMatchDates] = useState(false);
+  const calendarDays = buildWeekDays(calendarCenter);
   const [matches, setMatches] = useState<Match[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
 
@@ -162,6 +182,19 @@ export default function DashboardClient({
       .order("match_time", { nullsFirst: false });
     setMatches((data as any) ?? []);
     setLoadingMatches(false);
+  }
+
+  async function openCalendarModal() {
+    setShowCalendarModal(true);
+    setLoadingCalendarMatchDates(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("matches")
+      .select("match_date")
+      .not("match_date", "is", null);
+    const matchDates = [...new Set((data ?? []).map((m: { match_date: string | null }) => m.match_date).filter(Boolean))] as string[];
+    setCalendarMatchDates(matchDates);
+    setLoadingCalendarMatchDates(false);
   }
 
   async function handleRefresh() {
@@ -419,42 +452,53 @@ export default function DashboardClient({
             className="border-b px-8 py-4"
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
           >
-            <div className="flex gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
-              {calendarDays.map(day => {
-                const isSelected = toDateStr(day) === toDateStr(selectedDate);
-                const isTodayDay = toDateStr(day) === toDateStr(today);
-                return (
-                  <button
-                    key={toDateStr(day)}
-                    type="button"
-                    onClick={() => setSelectedDate(day)}
-                    className="flex shrink-0 flex-col items-center gap-1 rounded-lg px-3 py-2 transition-all"
-                    style={{
-                      backgroundColor: isSelected ? "var(--color-brand)" : "transparent",
-                      minWidth: "52px",
-                    }}
-                  >
-                    <span
-                      className="font-mono text-xs"
-                      style={{ color: isSelected ? "var(--color-background)" : "#A6A6A6" }}
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 gap-1 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
+                {calendarDays.map(day => {
+                  const isSelected = toDateStr(day) === toDateStr(selectedDate);
+                  const isTodayDay = toDateStr(day) === toDateStr(today);
+                  return (
+                    <button
+                      key={toDateStr(day)}
+                      type="button"
+                      onClick={() => setSelectedDate(day)}
+                      className="flex shrink-0 flex-col items-center gap-1 rounded-lg px-3 py-2 transition-all"
+                      style={{
+                        backgroundColor: isSelected ? "var(--color-brand)" : "transparent",
+                        minWidth: "52px",
+                      }}
                     >
-                      {DAYS_SHORT[day.getDay()].toUpperCase()}
-                    </span>
-                    <span
-                      className="font-display text-lg font-bold"
-                      style={{ color: isSelected ? "var(--color-background)" : isTodayDay ? "var(--color-brand)" : "var(--color-text-primary)" }}
-                    >
-                      {day.getDate()}
-                    </span>
-                    <span
-                      className="font-mono text-xs"
-                      style={{ color: isSelected ? "var(--color-background)" : "#555" }}
-                    >
-                      {MONTHS_SHORT[day.getMonth()]}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span
+                        className="font-mono text-xs"
+                        style={{ color: isSelected ? "var(--color-background)" : "#A6A6A6" }}
+                      >
+                        {DAYS_SHORT[(day.getDay() + 6) % 7].toUpperCase()}
+                      </span>
+                      <span
+                        className="font-display text-lg font-bold"
+                        style={{ color: isSelected ? "var(--color-background)" : isTodayDay ? "var(--color-brand)" : "var(--color-text-primary)" }}
+                      >
+                        {day.getDate()}
+                      </span>
+                      <span
+                        className="font-mono text-xs"
+                        style={{ color: isSelected ? "var(--color-background)" : "#555" }}
+                      >
+                        {MONTHS_SHORT[day.getMonth()]}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={openCalendarModal}
+                className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-lg border transition-colors hover:opacity-80"
+                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}
+                aria-label="Abrir calendário completo"
+              >
+                <CalendarDays size={20} strokeWidth={2} />
+              </button>
             </div>
           </div>
 
@@ -590,6 +634,162 @@ export default function DashboardClient({
           </div>
         </div>
       )}
+      {showCalendarModal && (
+        <CalendarModal
+          selectedDate={selectedDate}
+          today={today}
+          matchDates={calendarMatchDates}
+          loadingMatchDates={loadingCalendarMatchDates}
+          onClose={() => setShowCalendarModal(false)}
+          onSelectDate={(date) => {
+            setSelectedDate(date);
+            setCalendarCenter(date);
+            setShowCalendarModal(false);
+          }}
+          onGoToday={() => {
+            setSelectedDate(today);
+            setCalendarCenter(today);
+            setShowCalendarModal(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function CalendarModal({
+  selectedDate,
+  today,
+  matchDates,
+  loadingMatchDates,
+  onClose,
+  onSelectDate,
+  onGoToday,
+}: {
+  selectedDate: Date;
+  today: Date;
+  matchDates: string[];
+  loadingMatchDates: boolean;
+  onClose: () => void;
+  onSelectDate: (date: Date) => void;
+  onGoToday: () => void;
+}) {
+  const [visibleMonth, setVisibleMonth] = useState<Date>(
+    () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
+  );
+
+  const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const startOffset = (monthStart.getDay() + 6) % 7;
+  const gridStart = new Date(monthStart);
+  gridStart.setDate(monthStart.getDate() - startOffset);
+  const calendarGrid: Date[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(gridStart);
+    d.setDate(gridStart.getDate() + i);
+    calendarGrid.push(d);
+  }
+
+  const matchDateSet = new Set(matchDates);
+
+  return (
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 px-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border p-5 shadow-xl"
+        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1))}
+            className="flex h-8 w-8 items-center justify-center rounded-md border"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-primary)" }}
+            aria-label="Mês anterior"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <p className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
+            {MONTHS[visibleMonth.getMonth()]} {visibleMonth.getFullYear()}
+          </p>
+          <button
+            type="button"
+            onClick={() => setVisibleMonth(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 1))}
+            className="flex h-8 w-8 items-center justify-center rounded-md border"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-primary)" }}
+            aria-label="Próximo mês"
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div className="mb-2 grid grid-cols-7 gap-1">
+          {DAYS_MODAL.map((label) => (
+            <div key={label} className="text-center font-mono text-[11px]" style={{ color: "#A6A6A6" }}>
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+          {calendarGrid.map((day) => {
+            const dayStr = toDateStr(day);
+            const isCurrentMonth = day.getMonth() === visibleMonth.getMonth();
+            const isSelected = dayStr === toDateStr(selectedDate);
+            const isTodayDay = dayStr === toDateStr(today);
+            const hasMatch = matchDateSet.has(dayStr);
+
+            return (
+              <button
+                key={dayStr}
+                type="button"
+                onClick={() => onSelectDate(day)}
+                className="flex h-12 flex-col items-center justify-center rounded-md transition-colors"
+                style={{
+                  backgroundColor: isSelected ? "var(--color-brand)" : "transparent",
+                  opacity: isCurrentMonth ? 1 : 0.35,
+                }}
+              >
+                <span
+                  className="flex h-6 w-6 items-center justify-center rounded-full text-sm"
+                  style={{
+                    color: isSelected ? "var(--color-background)" : isTodayDay ? "var(--color-brand)" : "var(--color-text-primary)",
+                    border: !isSelected && isTodayDay ? "1px solid var(--color-brand)" : "1px solid transparent",
+                  }}
+                >
+                  {day.getDate()}
+                </span>
+                <span
+                  className="mt-0.5 h-1.5 w-1.5 rounded-full"
+                  style={{
+                    backgroundColor: hasMatch ? (isSelected ? "var(--color-background)" : "var(--color-brand)") : "transparent",
+                    opacity: loadingMatchDates ? 0.25 : 1,
+                  }}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between">
+          <button type="button" onClick={onGoToday} className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
+            Hoje
+          </button>
+          <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>
+            • Dias com partidas
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-3 w-full rounded-md border py-2 font-mono text-xs"
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
+        >
+          Fechar
+        </button>
+      </div>
     </div>
   );
 }
