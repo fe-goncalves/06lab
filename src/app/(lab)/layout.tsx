@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import LabSidebarClient from "./sidebar-client";
-import Notificacoes from "./components/notificacoes";
 
 type PinnedCompetition = {
   id: string;
@@ -56,18 +55,9 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--color-background)" }}>
       <LabSidebarClient pinnedCompetitions={pinnedCompetitions} orgInfo={orgInfo} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <div
-          className="flex h-12 shrink-0 items-center justify-end border-b px-4"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-        >
-          {profile?.id && <Notificacoes userId={profile.id} />}
-        </div>
-        <main className="min-w-0 flex-1 overflow-y-auto" style={{ backgroundColor: "var(--color-background)" }}>
-          {children}
-        </main>
-      </div>
+      <main className="min-w-0 flex-1 overflow-y-auto" style={{ backgroundColor: "var(--color-background)" }}>
+        {children}
+      </main>
     </div>
   );
 }
