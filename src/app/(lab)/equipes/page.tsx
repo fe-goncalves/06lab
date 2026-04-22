@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
-import EquipesClient from "./equipes-client";
+import CompeticoesClient from "./competicoes-client";
 
-export default async function EquipesPage() {
+export default async function CompeticoesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -11,11 +11,11 @@ export default async function EquipesPage() {
     .from("user_profiles").select("organization_id")
     .eq("auth_user_id", user.id).maybeSingle();
 
-  const { data: teams } = await supabase
-    .from("teams")
-    .select("id, full_name, short_name, abbreviation, gender, logo_url, primary_color, secondary_color, founded_year")
+  const { data: competitions } = await supabase
+    .from("competitions")
+    .select("id, full_name, short_name, gender, logo_url, pinned_in_sidebar")
     .eq("organization_id", profile?.organization_id ?? "")
     .order("full_name");
 
-  return <EquipesClient teams={teams ?? []} />;
+  return <CompeticoesClient competitions={competitions ?? []} />;
 }
