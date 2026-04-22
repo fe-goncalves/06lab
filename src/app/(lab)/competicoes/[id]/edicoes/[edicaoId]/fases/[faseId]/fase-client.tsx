@@ -1,6 +1,7 @@
 "use client";
 
 import { editarFase, deletarFase, criarRodada, criarConfrontoEliminatorio } from "../actions";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +14,8 @@ type Props = {
   roundLabels: any[];
   competitionId: string;
   edicaoId: string;
+  competitionName: string;
+  seasonName: string;
 };
 
 export default function FaseClient({
@@ -23,6 +26,8 @@ export default function FaseClient({
   roundLabels,
   competitionId,
   edicaoId,
+  competitionName,
+  seasonName,
 }: Props) {
   const router = useRouter();
   const isKnockout = phase.phase_type === "knockout" || phase.phase_type === "conference";
@@ -150,6 +155,14 @@ export default function FaseClient({
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Competições", href: "/competicoes" },
+          { label: competitionName || "Competição", href: `/competicoes/${competitionId}` },
+          { label: seasonName || "Temporada", href: `/competicoes/${competitionId}/edicoes/${edicaoId}` },
+          { label: customLabel || fullName || "Fase" },
+        ]}
+      />
       <header className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link href={`/competicoes/${competitionId}/edicoes/${edicaoId}`}

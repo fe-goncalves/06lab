@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import CompeticaoEditForm from "./competicao-edit-form";
 import EdicoesSection from "./edicoes-section";
 
@@ -57,6 +58,12 @@ export default async function CompeticaoPage({
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Competições", href: "/competicoes" },
+          { label: comp.full_name ?? "Competição" },
+        ]}
+      />
       <CompeticaoEditForm
         competition={comp}
         allCompetitions={others ?? []}

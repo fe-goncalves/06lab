@@ -1,6 +1,7 @@
 "use client";
 
 import { criarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -13,6 +14,9 @@ type Props = {
   competitionId: string;
   edicaoId: string;
   faseId: string;
+  competitionName: string;
+  seasonName: string;
+  phaseName: string;
 };
 
 export default function RodadaClient({
@@ -23,6 +27,9 @@ export default function RodadaClient({
   competitionId,
   edicaoId,
   faseId,
+  competitionName,
+  seasonName,
+  phaseName,
 }: Props) {
   const router = useRouter();
   const [matches, setMatches] = useState(initialMatches);
@@ -67,6 +74,15 @@ export default function RodadaClient({
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Competições", href: "/competicoes" },
+          { label: competitionName || "Competição", href: `/competicoes/${competitionId}` },
+          { label: seasonName || "Temporada", href: `/competicoes/${competitionId}/edicoes/${edicaoId}` },
+          { label: phaseName || "Fase", href: `/competicoes/${competitionId}/edicoes/${edicaoId}/fases/${faseId}` },
+          { label: round.custom_label ?? round.name ?? "Rodada" },
+        ]}
+      />
       <header className="mb-8 flex items-center gap-4">
         <Link href={`/competicoes/${competitionId}/edicoes/${edicaoId}/fases/${faseId}`}
           className="text-sm" style={{ color: "var(--color-text-secondary)" }}>

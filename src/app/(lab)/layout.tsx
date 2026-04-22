@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import LabSidebarClient from "./sidebar-client";
+import { ToastContainer } from "./components/toast";
 
 type PinnedCompetition = {
   id: string;
@@ -58,6 +59,7 @@ export default async function LabLayout({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1 overflow-y-auto" style={{ backgroundColor: "var(--color-background)" }}>
         {children}
       </main>
+      <ToastContainer />
     </div>
   );
 }

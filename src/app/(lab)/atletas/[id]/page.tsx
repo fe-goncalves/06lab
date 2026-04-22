@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { editarAtleta, vincularAtleta } from "../actions";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -176,6 +177,12 @@ export default function AtletaPage() {
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Atletas", href: "/atletas" },
+          { label: fullName || "Atleta" },
+        ]}
+      />
       {/* Cabeçalho */}
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">

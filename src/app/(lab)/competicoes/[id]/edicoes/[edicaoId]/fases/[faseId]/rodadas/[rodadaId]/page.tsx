@@ -26,7 +26,9 @@ export default async function RodadaPage({
     { data: venues },
   ] = await Promise.all([
     supabase.from("rounds")
-      .select("id, name, custom_label, phase_id")
+      .select(
+        "id, name, custom_label, phase_id, phases(id, full_name, custom_label, competition_editions(seasons(name), competitions(full_name)))",
+      )
       .eq("id", rodadaId).maybeSingle(),
     supabase.from("matches")
       .select("id, match_date, match_time, status, score_a, score_b, finish_type, team_a_id, team_b_id, venues(full_name), teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url)")
@@ -49,6 +51,9 @@ export default async function RodadaPage({
       competitionId={competitionId}
       edicaoId={edicaoId}
       faseId={faseId}
+      competitionName={(round as any)?.phases?.competition_editions?.competitions?.full_name ?? "Competição"}
+      seasonName={(round as any)?.phases?.competition_editions?.seasons?.name ?? "Temporada"}
+      phaseName={(round as any)?.phases?.custom_label ?? (round as any)?.phases?.full_name ?? "Fase"}
     />
   );
 }

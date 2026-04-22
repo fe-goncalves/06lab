@@ -24,7 +24,13 @@ export default async function FasePage({
     { data: editionTeams },
     { data: roundLabels },
   ] = await Promise.all([
-    supabase.from("phases").select("*").eq("id", faseId).maybeSingle(),
+    supabase
+      .from("phases")
+      .select(
+        "*, competition_editions(seasons(name), competitions(full_name))",
+      )
+      .eq("id", faseId)
+      .maybeSingle(),
     supabase.from("rounds").select("id, name, custom_label, display_order")
       .eq("phase_id", faseId).order("display_order"),
     supabase.from("matchups")
@@ -50,6 +56,8 @@ export default async function FasePage({
       roundLabels={roundLabels ?? []}
       competitionId={competitionId}
       edicaoId={edicaoId}
+      competitionName={(phase as any)?.competition_editions?.competitions?.full_name ?? "Competição"}
+      seasonName={(phase as any)?.competition_editions?.seasons?.name ?? "Temporada"}
     />
   );
 }

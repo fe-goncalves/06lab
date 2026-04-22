@@ -1,6 +1,7 @@
 "use client";
 
 import { adicionarAcao, deletarAcao, editarPartida } from "./actions";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -286,6 +287,13 @@ export default function PartidaClient({
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Competições", href: "/competicoes" },
+          { label: competitionName || "Competição", href: `/competicoes/${competitionId}` },
+          { label: roundName || "Rodada" },
+        ]}
+      />
       <div
         className="mb-6 flex items-center gap-2 text-sm"
         style={{ color: "var(--color-text-secondary)" }}

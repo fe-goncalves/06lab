@@ -6,6 +6,7 @@ import {
   adicionarEquipeEdicao,
   removerEquipeEdicao,
 } from "../actions";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -18,6 +19,8 @@ type Props = {
   allTeams: any[];
   phases: any[];
   competitionId: string;
+  competitionName: string;
+  seasonName: string;
 };
 
 export default function EdicaoClient({
@@ -28,6 +31,8 @@ export default function EdicaoClient({
   allTeams,
   phases: initialPhases,
   competitionId,
+  competitionName: breadcrumbCompetitionName,
+  seasonName: breadcrumbSeasonName,
 }: Props) {
   const router = useRouter();
 
@@ -145,6 +150,17 @@ export default function EdicaoClient({
           ← {competitionName}
         </Link>
       </header>
+
+      <Breadcrumb
+        items={[
+          { label: "Competições", href: "/competicoes" },
+          {
+            label: breadcrumbCompetitionName || "Competição",
+            href: `/competicoes/${competitionId}`,
+          },
+          { label: breadcrumbSeasonName || seasonName || "Temporada" },
+        ]}
+      />
 
       <div className="mb-6 flex items-center gap-4">
         {logoUrl && <img src={logoUrl} alt="" className="h-12 w-12 rounded-xl border object-contain" style={{ borderColor: "var(--color-border)" }} />}

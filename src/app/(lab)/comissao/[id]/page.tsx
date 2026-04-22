@@ -2,6 +2,7 @@
 
 import { editarMembro, vincularMembroEquipe } from "../actions";
 import { createClient } from "@/lib/supabase";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -137,6 +138,12 @@ export default function MembroPage() {
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Comissão Técnica", href: "/comissao" },
+          { label: fullName || "Membro" },
+        ]}
+      />
       <header className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {displayPhoto ? (

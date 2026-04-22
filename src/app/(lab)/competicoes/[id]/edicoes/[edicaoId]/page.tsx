@@ -57,6 +57,8 @@ export default async function EdicaoPage({
       allTeams={allTeams ?? []}
       phases={phases ?? []}
       competitionId={competitionId}
+      competitionName={(edition as any).competitions?.full_name ?? "Competição"}
+      seasonName={(edition as any).seasons?.name ?? "Temporada"}
     />
   );
 }

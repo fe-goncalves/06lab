@@ -2,6 +2,7 @@
 
 import { editarLocal } from "../actions";
 import { createClient } from "@/lib/supabase";
+import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -82,6 +83,12 @@ export default function LocalPage() {
 
   return (
     <div className="p-6 md:p-8">
+      <Breadcrumb
+        items={[
+          { label: "Locais", href: "/locais" },
+          { label: fullName || "Local" },
+        ]}
+      />
       <header className="mb-8 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {displayLogo ? (
