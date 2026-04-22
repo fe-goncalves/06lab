@@ -6,6 +6,8 @@ import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { salvarFaseComoTemplate } from "../actions";
+
 
 type Props = {
   phase: any;
@@ -69,6 +71,8 @@ export default function FaseClient({
   const [matchupOrder, setMatchupOrder] = useState("0");
   const [savingMatchup, setSavingMatchup] = useState(false);
   const [matchupError, setMatchupError] = useState<string | null>(null);
+
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -153,6 +157,17 @@ export default function FaseClient({
     setMatchupTeamA(""); setMatchupTeamB(""); setMatchupOrder("0");
   }
 
+
+  async function handleSaveAsTemplate() {
+    setSavingTemplate(true);
+    const result = await salvarFaseComoTemplate(phase.id, competitionId);
+    setSavingTemplate(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Fase salva como template.");
+  }
+
+
+
   return (
     <div className="p-6 md:p-8">
       <Breadcrumb
@@ -185,7 +200,14 @@ export default function FaseClient({
             {saving ? "Salvando…" : "Salvar"}
           </button>
         </div>
+
+        <button type="button" onClick={handleSaveAsTemplate} disabled={savingTemplate}
+            className="rounded-lg border px-3 py-2 text-sm disabled:opacity-50"
+            style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+            {savingTemplate ? "Salvando…" : "Salvar como template"}
+        </button>
       </header>
+      
 
       {/* Configurações */}
       <div className="mb-6 rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
