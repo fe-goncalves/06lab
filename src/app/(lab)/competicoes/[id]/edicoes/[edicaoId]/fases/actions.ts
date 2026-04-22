@@ -282,49 +282,6 @@ export async function salvarFaseComoTemplate(
   return { success: true };
 }
 
-export async function criarFaseDoTemplate(
-  templateId: string,
-  edicaoId: string,
-): Promise<{ id: string } | { error: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const { data: template, error: templateError } = await supabase
-    .from("phase_templates").select("*").eq("id", templateId).maybeSingle();
-
-  if (templateError || !template) return { error: "Template não encontrado." };
-
-  const isKnockout = template.phase_type === "knockout" || template.phase_type === "conference";
-  const isClassificatory = template.phase_type === "round_robin" || template.phase_type === "group_stage";
-
-  const { data: inserted, error } = await supabase
-    .from("phases")
-    .insert({
-      edition_id: edicaoId,
-      phase_type: template.phase_type,
-      full_name: template.name,
-      custom_label: template.custom_label,
-      display_order: template.display_order,
-      half_duration_minutes: template.half_duration_minutes,
-      is_current: false,
-      ...(isKnockout ? {
-        legs: template.legs,
-        aggregate_score: template.aggregate_score,
-        third_place_match: template.third_place_match,
-        penalty_tiebreaker_type: template.penalty_tiebreaker_type,
-      } : {}),
-      ...(isClassificatory ? {
-        points_win: template.points_win,
-        points_draw: template.points_draw,
-        points_loss: template.points_loss,
-      } : {}),
-    })
-    .select("id").single();
-
-  if (error) return { error: error.message };
-  return { id: inserted.id };
-}
 
 export async function deletarTemplate(
   templateId: string,
