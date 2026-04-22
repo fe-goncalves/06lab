@@ -325,11 +325,11 @@ export default function FaseClient({
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_for ?? 0}</td>
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_against ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_scored ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_conceded ?? 0}</td>
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      {((row.goals_for ?? 0) - (row.goals_against ?? 0)) > 0 ? "+" : ""}
-                      {(row.goals_for ?? 0) - (row.goals_against ?? 0)}
+                      {((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}
+                      {(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}
                     </td>
                     <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
                       {row.points ?? 0}

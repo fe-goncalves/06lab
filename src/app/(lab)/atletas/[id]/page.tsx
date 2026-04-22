@@ -22,6 +22,14 @@ type AthleteRow = {
 type Position = { id: string; full_name: string; abbreviation: string };
 type Team = { id: string; full_name: string };
 type Stint = { id: string; team_id: string; teams: { id: string; full_name: string } };
+type StintHistory = {
+  id: string;
+  team_id: string;
+  started_at: string;
+  ended_at: string | null;
+  is_current: boolean;
+  teams: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null } | null;
+};
 
 function formatDateToBR(iso: string | null): string {
   if (!iso) return "";
@@ -68,6 +76,7 @@ export default function AtletaPage() {
   const [positions, setPositions] = useState<Position[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [currentStint, setCurrentStint] = useState<Stint | null>(null);
+  const [stintHistory, setStintHistory] = useState<StintHistory[]>([]);
   const [showTransfer, setShowTransfer] = useState(false);
   const [transferTeamId, setTransferTeamId] = useState("");
   const [transferring, setTransferring] = useState(false);
@@ -97,12 +106,16 @@ export default function AtletaPage() {
 
     if (!profile?.organization_id) { setLoadError("Organização não encontrada."); setLoading(false); return; }
 
-    const [{ data: athlete, error: athleteErr }, { data: posData }, { data: teamsData }, { data: stintData }] =
+    const [{ data: athlete, error: athleteErr }, { data: posData }, { data: teamsData }, { data: stintData }, { data: historyData }] =
       await Promise.all([
         supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
         supabase.from("player_positions").select("id, full_name, abbreviation").eq("sport_slug", "football7").order("display_order"),
         supabase.from("teams").select("id, full_name").eq("organization_id", profile.organization_id).order("full_name"),
         supabase.from("athlete_team_stints").select("id, team_id, teams(id, full_name)").eq("athlete_id", id).eq("is_current", true).maybeSingle(),
+        supabase.from("athlete_team_stints")
+          .select("id, team_id, started_at, ended_at, is_current, teams(id, full_name, abbreviation, logo_url)")
+          .eq("athlete_id", id)
+          .order("started_at", { ascending: false }),
       ]);
 
     if (athleteErr || !athlete) { setLoadError("Atleta não encontrado."); setLoading(false); return; }
@@ -119,6 +132,7 @@ export default function AtletaPage() {
     setPositions((posData ?? []) as Position[]);
     setTeams((teamsData ?? []) as Team[]);
     setCurrentStint(stintData as Stint | null);
+    setStintHistory((historyData ?? []) as StintHistory[]);
     setLoading(false);
   }, [id, router]);
 
@@ -320,6 +334,50 @@ export default function AtletaPage() {
           )}
         </div>
       </div>
+
+      {/* Histórico de equipes */}
+      {stintHistory.length > 0 && (
+        <div className="mt-6 rounded-xl border overflow-hidden" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+            <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+              Histórico de equipes
+            </h2>
+          </div>
+          {stintHistory.map((stint, idx) => (
+            <div key={stint.id}
+              className="flex items-center gap-4 px-5 py-3"
+              style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+              {stint.teams?.logo_url ? (
+                <img src={stint.teams.logo_url} alt="" className="h-8 w-8 rounded border object-contain shrink-0"
+                  style={{ borderColor: "var(--color-border)" }} />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-xs font-bold"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-secondary)" }}>
+                  {stint.teams?.abbreviation?.slice(0, 2) ?? stint.teams?.full_name?.slice(0, 2) ?? "?"}
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
+                  {stint.teams?.full_name ?? "Equipe desconhecida"}
+                </p>
+                <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  {new Date(stint.started_at + "T00:00:00").toLocaleDateString("pt-BR")}
+                  {" → "}
+                  {stint.ended_at
+                    ? new Date(stint.ended_at + "T00:00:00").toLocaleDateString("pt-BR")
+                    : "atual"}
+                </p>
+              </div>
+              {stint.is_current && (
+                <span className="shrink-0 rounded px-2 py-0.5 font-mono text-xs"
+                  style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
+                  atual
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
