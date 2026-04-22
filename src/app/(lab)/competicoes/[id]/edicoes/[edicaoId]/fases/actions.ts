@@ -20,6 +20,7 @@ export async function criarFase(
   const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
   const display_order = Number(formData.get("display_order") ?? 0) || 0;
   const half_duration_minutes = Number(formData.get("half_duration_minutes") ?? 0) || null;
+  const template_id = String(formData.get("template_id") ?? "").trim() || null;
   const legs = formData.get("legs") === "true";
   const aggregate_score = formData.get("aggregate_score") === "true";
   const third_place_match = formData.get("third_place_match") === "true";
@@ -40,8 +41,54 @@ export async function criarFase(
       display_order,
       half_duration_minutes,
       is_current: false,
+      template_id,
       ...(isKnockout ? { legs, aggregate_score, third_place_match, penalty_tiebreaker_type } : {}),
       ...(isClassificatory ? { points_win, points_draw, points_loss } : {}),
+    })
+    .select("id").single();
+
+  if (error) return { error: error.message };
+  return { id: inserted.id };
+}
+
+export async function criarFaseDoTemplate(
+  templateId: string,
+  edicaoId: string,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: template, error: templateError } = await supabase
+    .from("phase_templates").select("*").eq("id", templateId).maybeSingle();
+
+  if (templateError || !template) return { error: "Template não encontrado." };
+
+  const isKnockout = template.phase_type === "knockout" || template.phase_type === "conference";
+  const isClassificatory = template.phase_type === "round_robin" || template.phase_type === "group_stage";
+
+  const { data: inserted, error } = await supabase
+    .from("phases")
+    .insert({
+      edition_id: edicaoId,
+      phase_type: template.phase_type,
+      full_name: template.name,
+      custom_label: template.custom_label,
+      display_order: template.display_order,
+      half_duration_minutes: template.half_duration_minutes,
+      is_current: false,
+      template_id: templateId,
+      ...(isKnockout ? {
+        legs: template.legs,
+        aggregate_score: template.aggregate_score,
+        third_place_match: template.third_place_match,
+        penalty_tiebreaker_type: template.penalty_tiebreaker_type,
+      } : {}),
+      ...(isClassificatory ? {
+        points_win: template.points_win,
+        points_draw: template.points_draw,
+        points_loss: template.points_loss,
+      } : {}),
     })
     .select("id").single();
 

@@ -35,6 +35,7 @@ export default function NovaFasePage() {
 
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [customLabel, setCustomLabel] = useState("");
@@ -70,6 +71,7 @@ export default function NovaFasePage() {
   }, [competitionId]);
 
   function applyTemplate(template: Template) {
+    setSelectedTemplateId(template.id);
     setFullName(template.name);
     setCustomLabel(template.custom_label ?? "");
     setPhaseType(template.phase_type);
@@ -121,6 +123,11 @@ export default function NovaFasePage() {
         fd.append("points_draw", pointsDraw);
         fd.append("points_loss", pointsLoss);
       }
+
+      if (selectedTemplateId) {
+        fd.append("template_id", selectedTemplateId);
+      }
+
       const result = await criarFase(edicaoId, fd);
       if ("error" in result) { setError(result.error); return; }
       router.push(`/competicoes/${competitionId}/edicoes/${edicaoId}/fases/${result.id}`);
@@ -186,6 +193,20 @@ export default function NovaFasePage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {selectedTemplateId && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border px-4 py-2"
+          style={{ borderColor: "rgba(191,242,5,0.3)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+          <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
+            ● Fase será vinculada ao template "{templates.find(t => t.id === selectedTemplateId)?.name}"
+          </span>
+          <button type="button" onClick={() => setSelectedTemplateId(null)}
+            className="ml-auto font-mono text-xs"
+            style={{ color: "var(--color-text-secondary)" }}>
+            Desvincular
+          </button>
         </div>
       )}
 
