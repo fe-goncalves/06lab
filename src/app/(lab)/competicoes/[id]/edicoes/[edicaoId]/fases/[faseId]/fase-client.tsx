@@ -2,6 +2,7 @@
 
 import { editarFase, deletarFase, criarRodada, criarConfrontoEliminatorio } from "../actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
+import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,6 +17,8 @@ type Props = {
   edicaoId: string;
   competitionName: string;
   seasonName: string;
+  standings: any[];
+  topScorers: any[];
 };
 
 export default function FaseClient({
@@ -28,6 +31,8 @@ export default function FaseClient({
   edicaoId,
   competitionName,
   seasonName,
+  standings,
+  topScorers,
 }: Props) {
   const router = useRouter();
   const isKnockout = phase.phase_type === "knockout" || phase.phase_type === "conference";
@@ -36,7 +41,6 @@ export default function FaseClient({
   const [rounds, setRounds] = useState(initialRounds);
   const [matchups, setMatchups] = useState(initialMatchups);
 
-  // Edição da fase
   const [fullName, setFullName] = useState(phase.full_name ?? "");
   const [customLabel, setCustomLabel] = useState(phase.custom_label ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(phase.display_order ?? 0));
@@ -50,9 +54,7 @@ export default function FaseClient({
   const [pointsDraw, setPointsDraw] = useState(String(phase.points_draw ?? 1));
   const [pointsLoss, setPointsLoss] = useState(String(phase.points_loss ?? 0));
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Nova rodada
   const [showRoundForm, setShowRoundForm] = useState(false);
   const [roundName, setRoundName] = useState("");
   const [roundCustomLabel, setRoundCustomLabel] = useState("");
@@ -60,7 +62,6 @@ export default function FaseClient({
   const [savingRound, setSavingRound] = useState(false);
   const [roundError, setRoundError] = useState<string | null>(null);
 
-  // Novo confronto
   const [showMatchupForm, setShowMatchupForm] = useState(false);
   const [matchupRoundLabel, setMatchupRoundLabel] = useState(roundLabels[0]?.label ?? "");
   const [matchupTeamA, setMatchupTeamA] = useState("");
@@ -74,9 +75,15 @@ export default function FaseClient({
 
   const teams = editionTeams.map((et: any) => et.teams).filter(Boolean);
 
+  const phaseTypeLabel: Record<string, string> = {
+    knockout: "Mata-mata",
+    round_robin: "Pontos Corridos",
+    group_stage: "Fase de Grupos",
+    conference: "Conferência",
+  };
+
   async function handleSave() {
     setSaving(true);
-    setFeedback(null);
     const fd = new FormData();
     fd.append("full_name", fullName.trim());
     fd.append("custom_label", customLabel.trim());
@@ -97,14 +104,14 @@ export default function FaseClient({
     }
     const result = await editarFase(phase.id, fd);
     setSaving(false);
-    if ("error" in result) { setFeedback({ type: "error", text: result.error }); return; }
-    setFeedback({ type: "success", text: "Fase salva." });
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Fase salva com sucesso.");
   }
 
   async function handleDelete() {
     if (!confirm("Excluir esta fase? Esta ação não pode ser desfeita.")) return;
     const result = await deletarFase(phase.id);
-    if ("error" in result) { alert(result.error); return; }
+    if ("error" in result) { toast("error", result.error); return; }
     router.push(`/competicoes/${competitionId}/edicoes/${edicaoId}`);
   }
 
@@ -146,13 +153,6 @@ export default function FaseClient({
     setMatchupTeamA(""); setMatchupTeamB(""); setMatchupOrder("0");
   }
 
-  const phaseTypeLabel: Record<string, string> = {
-    knockout: "Mata-mata",
-    round_robin: "Pontos Corridos",
-    group_stage: "Fase de Grupos",
-    conference: "Conferência",
-  };
-
   return (
     <div className="p-6 md:p-8">
       <Breadcrumb
@@ -163,20 +163,15 @@ export default function FaseClient({
           { label: customLabel || fullName || "Fase" },
         ]}
       />
+
       <header className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href={`/competicoes/${competitionId}/edicoes/${edicaoId}`}
-            className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-            ← Edição
-          </Link>
-          <div>
-            <h1 className="font-display text-2xl" style={{ color: "var(--color-text-primary)" }}>
-              {customLabel || fullName}
-            </h1>
-            <p className="text-xs font-mono" style={{ color: "var(--color-brand)" }}>
-              {phaseTypeLabel[phase.phase_type] ?? phase.phase_type}
-            </p>
-          </div>
+        <div>
+          <h1 className="font-display text-2xl" style={{ color: "var(--color-text-primary)" }}>
+            {customLabel || fullName}
+          </h1>
+          <p className="text-xs font-mono" style={{ color: "var(--color-brand)" }}>
+            {phaseTypeLabel[phase.phase_type] ?? phase.phase_type}
+          </p>
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={handleDelete}
@@ -192,14 +187,7 @@ export default function FaseClient({
         </div>
       </header>
 
-      {feedback && (
-        <div className="mb-6 rounded-lg border px-3 py-2 text-sm"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: feedback.type === "error" ? "var(--color-danger)" : "var(--color-success)" }}>
-          {feedback.text}
-        </div>
-      )}
-
-      {/* Configurações da fase */}
+      {/* Configurações */}
       <div className="mb-6 rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
         <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Configurações</h2>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -271,7 +259,125 @@ export default function FaseClient({
         )}
       </div>
 
-      {/* Rodadas (fases classificatórias) */}
+      {/* Tabela de classificação — apenas fases classificatórias */}
+      {isClassificatory && standings.length > 0 && (
+        <div className="mb-6 rounded-xl border overflow-hidden" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+            <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+              Classificação
+            </h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                  {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
+                    <th key={h} className="px-4 py-3 text-left font-mono text-xs"
+                      style={{ color: "var(--color-text-secondary)" }}>
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {standings.map((row: any, idx: number) => (
+                  <tr key={row.team_id}
+                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
+                    className="hover:bg-[rgba(255,255,255,0.02)]">
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+                      {idx + 1}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {row.teams?.logo_url ? (
+                          <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" />
+                        ) : (
+                          <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />
+                        )}
+                        <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>
+                          {row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_for ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_against ?? 0}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      {((row.goals_for ?? 0) - (row.goals_against ?? 0)) > 0 ? "+" : ""}
+                      {(row.goals_for ?? 0) - (row.goals_against ?? 0)}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
+                      {row.points ?? 0}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Artilharia — apenas fases classificatórias */}
+      {isClassificatory && topScorers.length > 0 && (
+        <div className="mb-6 rounded-xl border overflow-hidden" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+            <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+              Artilharia
+            </h2>
+          </div>
+          <div>
+            {topScorers.slice(0, 10).map((scorer: any, idx: number) => (
+              <div key={scorer.athlete_id}
+                className="flex items-center gap-4 px-5 py-3 hover:bg-[rgba(255,255,255,0.02)]"
+                style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                <span className="w-6 font-mono text-xs text-right shrink-0"
+                  style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+                  {idx + 1}
+                </span>
+                {scorer.athletes?.photo_url ? (
+                  <img src={scorer.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                    style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                    {(scorer.athletes?.surname ?? scorer.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
+                    {scorer.athletes?.surname ?? scorer.athletes?.full_name ?? "—"}
+                  </p>
+                  {scorer.team?.full_name && (
+                    <p className="text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
+                      {scorer.team.abbreviation ?? scorer.team.full_name}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-6 shrink-0">
+                  <div className="text-center">
+                    <p className="font-display text-xl font-bold" style={{ color: "var(--color-brand)" }}>
+                      {scorer.goals ?? 0}
+                    </p>
+                    <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>gols</p>
+                  </div>
+                  {(scorer.assists ?? 0) > 0 && (
+                    <div className="text-center">
+                      <p className="font-display text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>
+                        {scorer.assists}
+                      </p>
+                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>assist.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Rodadas */}
       {isClassificatory && (
         <div className="mb-6 rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
           <div className="mb-4 flex items-center justify-between">
@@ -330,7 +436,7 @@ export default function FaseClient({
         </div>
       )}
 
-      {/* Confrontos (fases eliminatórias) */}
+      {/* Confrontos */}
       {isKnockout && (
         <div className="mb-6 rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
           <div className="mb-4 flex items-center justify-between">
@@ -392,7 +498,8 @@ export default function FaseClient({
                     </p>
                   </div>
                   {m.is_completed && (
-                    <span className="rounded px-2 py-0.5 text-xs" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                    <span className="rounded px-2 py-0.5 text-xs"
+                      style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                       Concluído
                     </span>
                   )}
