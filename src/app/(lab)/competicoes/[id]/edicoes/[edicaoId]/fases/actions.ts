@@ -339,3 +339,44 @@ export async function deletarTemplate(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function editarTemplate(
+  templateId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Nome é obrigatório." };
+
+  const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
+  const half_duration_minutes = Number(formData.get("half_duration_minutes") ?? 0) || null;
+  const legs = formData.get("legs") === "true";
+  const aggregate_score = formData.get("aggregate_score") === "true";
+  const third_place_match = formData.get("third_place_match") === "true";
+  const penalty_tiebreaker_type = String(formData.get("penalty_tiebreaker_type") ?? "").trim() || null;
+  const points_win = Number(formData.get("points_win") ?? 3) || 3;
+  const points_draw = Number(formData.get("points_draw") ?? 1) || 1;
+  const points_loss = Number(formData.get("points_loss") ?? 0);
+
+  const { error } = await supabase
+    .from("phase_templates")
+    .update({
+      name,
+      custom_label,
+      half_duration_minutes,
+      legs,
+      aggregate_score,
+      third_place_match,
+      penalty_tiebreaker_type,
+      points_win,
+      points_draw,
+      points_loss,
+    })
+    .eq("id", templateId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}

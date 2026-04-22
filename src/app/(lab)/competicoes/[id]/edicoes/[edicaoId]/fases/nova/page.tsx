@@ -1,6 +1,6 @@
 "use client";
 
-import { criarFase, criarFaseDoTemplate, deletarTemplate } from "../actions";
+import { criarFase, criarFaseDoTemplate, deletarTemplate, editarTemplate } from "../actions";
 import { createClient } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -36,6 +36,14 @@ export default function NovaFasePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editTemplateName, setEditTemplateName] = useState("");
+  const [editTemplateCustomLabel, setEditTemplateCustomLabel] = useState("");
+  const [editTemplateHalfDuration, setEditTemplateHalfDuration] = useState("");
+  const [editTemplatePointsWin, setEditTemplatePointsWin] = useState("3");
+  const [editTemplatePointsDraw, setEditTemplatePointsDraw] = useState("1");
+  const [editTemplatePointsLoss, setEditTemplatePointsLoss] = useState("0");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const [fullName, setFullName] = useState("");
   const [customLabel, setCustomLabel] = useState("");
@@ -91,6 +99,41 @@ export default function NovaFasePage() {
     setLoading(false);
     if ("error" in result) { toast("error", result.error); return; }
     router.push(`/competicoes/${competitionId}/edicoes/${edicaoId}/fases/${result.id}`);
+  }
+
+  function startEditTemplate(t: Template) {
+    setEditingTemplateId(t.id);
+    setEditTemplateName(t.name);
+    setEditTemplateCustomLabel(t.custom_label ?? "");
+    setEditTemplateHalfDuration(String(t.half_duration_minutes ?? 25));
+    setEditTemplatePointsWin(String(t.points_win ?? 3));
+    setEditTemplatePointsDraw(String(t.points_draw ?? 1));
+    setEditTemplatePointsLoss(String(t.points_loss ?? 0));
+  }
+
+  async function handleSaveTemplate(templateId: string) {
+    setSavingTemplate(true);
+    const fd = new FormData();
+    fd.append("name", editTemplateName);
+    fd.append("custom_label", editTemplateCustomLabel);
+    fd.append("half_duration_minutes", editTemplateHalfDuration);
+    fd.append("points_win", editTemplatePointsWin);
+    fd.append("points_draw", editTemplatePointsDraw);
+    fd.append("points_loss", editTemplatePointsLoss);
+    const result = await editarTemplate(templateId, fd);
+    setSavingTemplate(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    setTemplates(prev => prev.map(t => t.id === templateId ? {
+      ...t,
+      name: editTemplateName,
+      custom_label: editTemplateCustomLabel || null,
+      half_duration_minutes: Number(editTemplateHalfDuration) || null,
+      points_win: Number(editTemplatePointsWin),
+      points_draw: Number(editTemplatePointsDraw),
+      points_loss: Number(editTemplatePointsLoss),
+    } : t));
+    setEditingTemplateId(null);
+    toast("success", "Template atualizado.");
   }
 
   async function handleDeleteTemplate(templateId: string, name: string) {
@@ -159,38 +202,92 @@ export default function NovaFasePage() {
           <div className="space-y-2">
             {templates.map(t => (
               <div key={t.id}
-                className="flex items-center justify-between rounded-lg border px-4 py-3"
-                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                <div>
-                  <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
-                    {t.custom_label ?? t.name}
-                  </p>
-                  <p className="text-xs font-mono" style={{ color: "var(--color-text-secondary)" }}>
-                    {PHASE_TYPE_LABEL[t.phase_type] ?? t.phase_type}
-                    {t.half_duration_minutes ? ` · ${t.half_duration_minutes}min` : ""}
-                    {t.phase_type === "round_robin" || t.phase_type === "group_stage"
-                      ? ` · V${t.points_win} E${t.points_draw} D${t.points_loss}`
-                      : ""}
-                  </p>
+              className="rounded-lg border"
+              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+              {editingTemplateId === t.id ? (
+                <div className="p-4 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nome</span>
+                      <input type="text" value={editTemplateName} onChange={e => setEditTemplateName(e.target.value)} className={inputClass} style={inputStyle} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido</span>
+                      <input type="text" value={editTemplateCustomLabel} onChange={e => setEditTemplateCustomLabel(e.target.value)} className={inputClass} style={inputStyle} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Tempo (min)</span>
+                      <input type="number" value={editTemplateHalfDuration} onChange={e => setEditTemplateHalfDuration(e.target.value)} className={inputClass} style={inputStyle} />
+                    </label>
+                    {(t.phase_type === "round_robin" || t.phase_type === "group_stage") && (
+                      <>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Pts Vitória</span>
+                          <input type="number" value={editTemplatePointsWin} onChange={e => setEditTemplatePointsWin(e.target.value)} className={inputClass} style={inputStyle} />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Pts Empate</span>
+                          <input type="number" value={editTemplatePointsDraw} onChange={e => setEditTemplatePointsDraw(e.target.value)} className={inputClass} style={inputStyle} />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Pts Derrota</span>
+                          <input type="number" value={editTemplatePointsLoss} onChange={e => setEditTemplatePointsLoss(e.target.value)} className={inputClass} style={inputStyle} />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => handleSaveTemplate(t.id)} disabled={savingTemplate}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      {savingTemplate ? "Salvando…" : "Salvar"}
+                    </button>
+                    <button type="button" onClick={() => setEditingTemplateId(null)}
+                      className="rounded-lg border px-3 py-1.5 text-xs"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <button type="button" onClick={() => applyTemplate(t)}
-                    className="rounded-lg border px-3 py-1.5 text-xs"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                    Preencher
-                  </button>
-                  <button type="button" onClick={() => handleUseTemplate(t)} disabled={loading}
-                    className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                    Usar
-                  </button>
-                  <button type="button" onClick={() => handleDeleteTemplate(t.id, t.name)}
-                    className="rounded-lg border p-1.5 transition-colors hover:border-[var(--color-danger)]"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                    <Trash2 size={13} strokeWidth={2} />
-                  </button>
+              ) : (
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div>
+                    <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
+                      {t.custom_label ?? t.name}
+                    </p>
+                    <p className="text-xs font-mono" style={{ color: "var(--color-text-secondary)" }}>
+                      {PHASE_TYPE_LABEL[t.phase_type] ?? t.phase_type}
+                      {t.half_duration_minutes ? ` · ${t.half_duration_minutes}min` : ""}
+                      {t.phase_type === "round_robin" || t.phase_type === "group_stage"
+                        ? ` · V${t.points_win} E${t.points_draw} D${t.points_loss}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button type="button" onClick={() => applyTemplate(t)}
+                      className="rounded-lg border px-3 py-1.5 text-xs"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                      Preencher
+                    </button>
+                    <button type="button" onClick={() => handleUseTemplate(t)} disabled={loading}
+                      className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      Usar
+                    </button>
+                    <button type="button" onClick={() => startEditTemplate(t)}
+                      className="rounded-lg border px-3 py-1.5 text-xs"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+                      Editar
+                    </button>
+                    <button type="button" onClick={() => handleDeleteTemplate(t.id, t.name)}
+                      className="rounded-lg border p-1.5 transition-colors hover:border-[var(--color-danger)]"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                      <Trash2 size={13} strokeWidth={2} />
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
             ))}
           </div>
         </div>
