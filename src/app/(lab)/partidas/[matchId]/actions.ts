@@ -266,3 +266,29 @@ export async function deletarAcao(
 
   return { success: true };
 }
+
+export async function deletarPartida(
+  matchId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  // Verifica se tem ações registradas
+  const { data: actions } = await supabase
+    .from("match_actions").select("id").eq("match_id", matchId).limit(1);
+
+  if (actions && actions.length > 0) {
+    return { error: "Esta partida possui ações registradas. Remova as ações antes de excluir." };
+  }
+
+  // Remove lineups
+  await supabase.from("match_lineups").delete().eq("match_id", matchId);
+  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
+
+  const { error } = await supabase
+    .from("matches").delete().eq("id", matchId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}

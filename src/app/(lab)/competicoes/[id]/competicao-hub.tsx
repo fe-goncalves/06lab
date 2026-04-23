@@ -6,8 +6,9 @@ import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
-import { ChevronDown, Plus, ChevronRight, Users, X, Check } from "lucide-react";
+import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
 import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao } from "./edicoes/actions";
+import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 
 type Competition = any;
 type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
@@ -24,7 +25,7 @@ type Match = {
   teams_a: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   teams_b: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   rounds: { name: string; custom_label: string | null } | null;
-  phases: { full_name: string; custom_label: string | null } | null;
+  phases: { id: string; full_name: string; custom_label: string | null; phase_type: string } | null;
 };
 
 type Phase = {
@@ -34,6 +35,13 @@ type Phase = {
   phase_type: string;
   display_order: number;
   is_current: boolean;
+};
+
+type Round = {
+  id: string;
+  name: string;
+  custom_label: string | null;
+  phase_id: string;
 };
 
 type EditionTeam = {
@@ -58,11 +66,7 @@ const PHASE_TYPE_LABEL: Record<string, string> = {
 };
 
 export default function CompeticaoHub({
-  competition,
-  editions,
-  seasons,
-  allTeams,
-  orgId,
+  competition, editions, seasons, allTeams, orgId,
 }: {
   competition: Competition;
   editions: Edition[];
@@ -78,17 +82,30 @@ export default function CompeticaoHub({
     searchParams.get("edicao") ?? editions[0]?.id ?? ""
   );
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
 
-  // Dados carregados dinamicamente
   const [matches, setMatches] = useState<Match[]>([]);
   const [phases, setPhases] = useState<Phase[]>([]);
+  const [rounds, setRounds] = useState<Round[]>([]);
   const [editionTeams, setEditionTeams] = useState<EditionTeam[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [scorers, setScorers] = useState<Scorer[]>([]);
   const [matchups, setMatchups] = useState<any[]>([]);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
+  const [venues, setVenues] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
-  const [loadingPhases, setLoadingPhases] = useState(false);
+
+  // Modal nova partida
+  const [showNewMatch, setShowNewMatch] = useState(false);
+  const [newMatchPhaseId, setNewMatchPhaseId] = useState("");
+  const [newMatchRoundId, setNewMatchRoundId] = useState("");
+  const [newMatchDate, setNewMatchDate] = useState("");
+  const [newMatchTime, setNewMatchTime] = useState("");
+  const [newMatchVenueId, setNewMatchVenueId] = useState("");
+  const [newMatchTeamA, setNewMatchTeamA] = useState("");
+  const [newMatchTeamB, setNewMatchTeamB] = useState("");
+  const [newMatchAddAnother, setNewMatchAddAnother] = useState(false);
+  const [creatingMatch, setCreatingMatch] = useState(false);
+  const [newMatchError, setNewMatchError] = useState<string | null>(null);
 
   // Elenco modal
   const [elencoModal, setElencoModal] = useState<{ editionTeamId: string; teamName: string } | null>(null);
@@ -96,7 +113,7 @@ export default function CompeticaoHub({
   const [availableAthletes, setAvailableAthletes] = useState<any[]>([]);
   const [loadingRoster, setLoadingRoster] = useState(false);
 
-  // Estados de formulário
+  // Nova edição
   const [showNewEdition, setShowNewEdition] = useState(false);
   const [newEditionSeasonId, setNewEditionSeasonId] = useState("");
   const [savingEdition, setSavingEdition] = useState(false);
@@ -109,33 +126,40 @@ export default function CompeticaoHub({
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
 
-  // Carrega dados da edição selecionada
+  async function getPhaseIds(supabase: any, editionId: string): Promise<string[]> {
+    const { data } = await supabase.from("phases").select("id").eq("edition_id", editionId);
+    return (data ?? []).map((p: any) => p.id);
+  }
+
   const loadEditionData = useCallback(async (editionId: string) => {
     if (!editionId) return;
     const supabase = createClient();
-
     setLoadingMatches(true);
-    setLoadingPhases(true);
 
     const phaseIds = await getPhaseIds(supabase, editionId);
 
     const [
       { data: matchesData },
       { data: phasesData },
+      { data: roundsData },
       { data: teamsData },
       { data: standingsData },
       { data: scorersData },
       { data: matchupsData },
+      { data: venuesData },
     ] = await Promise.all([
       phaseIds.length > 0
         ? supabase.from("matches")
-            .select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(full_name, custom_label)")
+            .select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)")
             .in("phase_id", phaseIds)
             .order("match_date", { ascending: false })
         : Promise.resolve({ data: [] }),
       supabase.from("phases")
         .select("id, full_name, custom_label, phase_type, display_order, is_current")
         .eq("edition_id", editionId).order("display_order"),
+      phaseIds.length > 0
+        ? supabase.from("rounds").select("id, name, custom_label, phase_id").in("phase_id", phaseIds).order("display_order")
+        : Promise.resolve({ data: [] }),
       supabase.from("edition_teams")
         .select("id, team_id, arrival_origin, teams(id, full_name, abbreviation, logo_url)")
         .eq("edition_id", editionId).order("display_order"),
@@ -153,9 +177,9 @@ export default function CompeticaoHub({
       phaseIds.length > 0
         ? supabase.from("matchups")
             .select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id, teams_a:teams!matchups_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(full_name, abbreviation, logo_url)")
-            .in("phase_id", phaseIds)
-            .order("display_order")
+            .in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
+      supabase.from("venues").select("id, full_name").eq("organization_id", orgId).order("full_name"),
     ]);
 
     const phasesResult = (phasesData as Phase[]) ?? [];
@@ -164,23 +188,65 @@ export default function CompeticaoHub({
 
     setMatches((matchesData as any) ?? []);
     setPhases(phasesResult);
+    setRounds((roundsData as any) ?? []);
     setEditionTeams((teamsData as any) ?? []);
     setStandings(standingsData ?? []);
     setScorers(scorersData ?? []);
     setMatchups((matchupsData as any) ?? []);
+    setVenues(venuesData ?? []);
     setLoadingMatches(false);
-    setLoadingPhases(false);
-  }, []);
+  }, [orgId]);
 
   useEffect(() => {
-    if (selectedEditionId) {
-      loadEditionData(selectedEditionId);
-    }
+    if (selectedEditionId) loadEditionData(selectedEditionId);
   }, [selectedEditionId, loadEditionData]);
 
-  async function getPhaseIds(supabase: any, editionId: string): Promise<string[]> {
-    const { data } = await supabase.from("phases").select("id").eq("edition_id", editionId);
-    return (data ?? []).map((p: any) => p.id);
+  // Fase selecionada no modal de nova partida
+  const selectedNewMatchPhase = phases.find(p => p.id === newMatchPhaseId);
+  const roundsForSelectedPhase = rounds.filter(r => r.phase_id === newMatchPhaseId);
+  const teamsForEdition = editionTeams.map(et => et.teams).filter(Boolean) as Team[];
+
+  async function handleCreateMatch() {
+    if (!newMatchPhaseId || !newMatchTeamA || !newMatchTeamB) {
+      setNewMatchError("Fase e equipes são obrigatórias.");
+      return;
+    }
+    setCreatingMatch(true);
+    setNewMatchError(null);
+    const fd = new FormData();
+    fd.append("team_a_id", newMatchTeamA);
+    fd.append("team_b_id", newMatchTeamB);
+    fd.append("team_a_is_home", "true");
+    if (newMatchDate) fd.append("match_date", newMatchDate);
+    if (newMatchTime) fd.append("match_time", newMatchTime);
+    if (newMatchVenueId) fd.append("venue_id", newMatchVenueId);
+    if (newMatchRoundId) fd.append("round_id", newMatchRoundId);
+    const result = await criarPartida(newMatchPhaseId, fd);
+    setCreatingMatch(false);
+    if ("error" in result) { setNewMatchError(result.error); return; }
+    toast("success", "Partida criada.");
+    if (newMatchAddAnother) {
+      setNewMatchTeamA("");
+      setNewMatchTeamB("");
+    } else {
+      setShowNewMatch(false);
+      setNewMatchPhaseId("");
+      setNewMatchRoundId("");
+      setNewMatchDate("");
+      setNewMatchTime("");
+      setNewMatchVenueId("");
+      setNewMatchTeamA("");
+      setNewMatchTeamB("");
+    }
+    await loadEditionData(selectedEditionId);
+  }
+
+  async function handleDeleteMatch(matchId: string) {
+    if (!confirm("Excluir esta partida?")) return;
+    const result = await deletarPartida(matchId);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Partida excluída.");
+    setMatches(prev => prev.filter(m => m.id !== matchId));
   }
 
   async function openElencoModal(editionTeamId: string, teamId: string, teamName: string) {
@@ -189,19 +255,14 @@ export default function CompeticaoHub({
     const supabase = createClient();
     const [{ data: entries }, { data: currentAthletes }] = await Promise.all([
       supabase.from("edition_roster_entries")
-        .select("id, athlete_id, status, position_id_at_inscription, athletes(id, full_name, surname, photo_url, position_id)")
-        .eq("edition_team_id", editionTeamId)
-        .eq("member_type", "athlete"),
+        .select("id, athlete_id, status, athletes(id, full_name, surname, photo_url, position_id)")
+        .eq("edition_team_id", editionTeamId).eq("member_type", "athlete"),
       supabase.from("athlete_team_stints")
         .select("athlete_id, athletes(id, full_name, surname, photo_url, position_id)")
-        .eq("team_id", teamId)
-        .eq("is_current", true),
+        .eq("team_id", teamId).eq("is_current", true),
     ]);
     const inscribedIds = new Set((entries ?? []).map((e: any) => e.athlete_id));
-    const available = (currentAthletes ?? [])
-      .map((s: any) => s.athletes)
-      .filter(Boolean)
-      .filter((a: any) => !inscribedIds.has(a.id));
+    const available = (currentAthletes ?? []).map((s: any) => s.athletes).filter(Boolean).filter((a: any) => !inscribedIds.has(a.id));
     setRosterEntries((entries as any) ?? []);
     setAvailableAthletes(available);
     setLoadingRoster(false);
@@ -230,13 +291,12 @@ export default function CompeticaoHub({
     const result = await criarEdicao(competition.id, fd);
     setSavingEdition(false);
     if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Edição criada com sucesso.");
+    toast("success", "Edição criada.");
     setShowNewEdition(false);
     setSelectedEditionId(result.id);
     router.refresh();
   }
 
-  // Agrupa partidas por rodada/fase
   const matchesByRound: Record<string, { label: string; matches: Match[] }> = {};
   matches.forEach(m => {
     const key = m.rounds?.custom_label ?? m.rounds?.name ?? m.phases?.custom_label ?? m.phases?.full_name ?? "Sem rodada";
@@ -246,16 +306,13 @@ export default function CompeticaoHub({
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
-      {/* Header da competição */}
+      {/* Header */}
       <div className="border-b" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
         <div className="px-8 pt-6 pb-0">
           <Breadcrumb items={[{ label: "Competições", href: "/competicoes" }, { label: competition.full_name ?? "Competição" }]} />
-
-          {/* Identidade + seletor de edição */}
           <div className="mb-4 flex items-center gap-4">
             {competition.logo_url ? (
-              <img src={competition.logo_url} alt="" className="h-14 w-14 rounded-xl border object-contain shrink-0"
-                style={{ borderColor: "var(--color-border)" }} />
+              <img src={competition.logo_url} alt="" className="h-14 w-14 rounded-xl border object-contain shrink-0" style={{ borderColor: "var(--color-border)" }} />
             ) : (
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border font-display text-lg font-bold"
                 style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}>
@@ -266,14 +323,10 @@ export default function CompeticaoHub({
               <h1 className="font-display text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>
                 {competition.full_name}
               </h1>
-              {/* Seletor de edição */}
               <div className="relative mt-1 inline-block">
-                <button
-                  type="button"
-                  onClick={() => setShowEditionDropdown(v => !v)}
+                <button type="button" onClick={() => setShowEditionDropdown(v => !v)}
                   className="flex items-center gap-1.5 rounded-lg border px-3 py-1 text-sm"
-                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}
-                >
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}>
                   {selectedEdition?.season_name ?? "Selecionar edição"}
                   <ChevronDown size={14} />
                 </button>
@@ -283,15 +336,14 @@ export default function CompeticaoHub({
                     {editions.map(e => (
                       <button key={e.id} type="button"
                         onClick={() => { setSelectedEditionId(e.id); setShowEditionDropdown(false); }}
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition-colors hover:bg-[rgba(255,255,255,0.05)]"
+                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[rgba(255,255,255,0.05)]"
                         style={{ color: e.id === selectedEditionId ? "var(--color-brand)" : "var(--color-text-primary)" }}>
                         {e.season_name}
                         {e.id === selectedEditionId && <span className="ml-auto text-xs" style={{ color: "var(--color-brand)" }}>✓</span>}
                       </button>
                     ))}
                     <div className="border-t" style={{ borderColor: "var(--color-border)" }}>
-                      <button type="button"
-                        onClick={() => { setShowEditionDropdown(false); setShowNewEdition(true); }}
+                      <button type="button" onClick={() => { setShowEditionDropdown(false); setShowNewEdition(true); }}
                         className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm"
                         style={{ color: "var(--color-brand)" }}>
                         <Plus size={13} /> Nova edição
@@ -326,34 +378,121 @@ export default function CompeticaoHub({
         </div>
       </div>
 
+      {/* Modal nova partida */}
+      {showNewMatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-md rounded-xl border shadow-xl"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
+              <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Nova partida</h2>
+              <button type="button" onClick={() => setShowNewMatch(false)} style={{ color: "var(--color-text-secondary)" }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              {/* Fase */}
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
+                <select value={newMatchPhaseId} onChange={e => { setNewMatchPhaseId(e.target.value); setNewMatchRoundId(""); }}
+                  className={inputClass} style={inputStyle}>
+                  <option value="">Selecione a fase…</option>
+                  {phases.map(p => <option key={p.id} value={p.id}>{p.custom_label ?? p.full_name}</option>)}
+                </select>
+              </label>
+
+              {newMatchPhaseId && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Data</span>
+                      <input type="date" value={newMatchDate} onChange={e => setNewMatchDate(e.target.value)} className={inputClass} style={inputStyle} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Horário</span>
+                      <input type="time" value={newMatchTime} onChange={e => setNewMatchTime(e.target.value)} className={inputClass} style={inputStyle} />
+                    </label>
+                  </div>
+
+                  {isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && roundsForSelectedPhase.length > 0 && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Rodada</span>
+                      <select value={newMatchRoundId} onChange={e => setNewMatchRoundId(e.target.value)} className={inputClass} style={inputStyle}>
+                        <option value="">Selecione…</option>
+                        {roundsForSelectedPhase.map(r => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Local</span>
+                    <select value={newMatchVenueId} onChange={e => setNewMatchVenueId(e.target.value)} className={inputClass} style={inputStyle}>
+                      <option value="">Nenhum</option>
+                      {venues.map((v: any) => <option key={v.id} value={v.id}>{v.full_name}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe A (mandante) *</span>
+                    <select value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)} className={inputClass} style={inputStyle}>
+                      <option value="">Selecione…</option>
+                      {teamsForEdition.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe B (visitante) *</span>
+                    <select value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)} className={inputClass} style={inputStyle}>
+                      <option value="">Selecione…</option>
+                      {teamsForEdition.filter(t => t.id !== newMatchTeamA).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                    </select>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={newMatchAddAnother} onChange={e => setNewMatchAddAnother(e.target.checked)} className="h-4 w-4" />
+                    <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>
+                      Adicionar outra com mesma data, horário e rodada
+                    </span>
+                  </label>
+                </>
+              )}
+
+              {newMatchError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{newMatchError}</p>}
+            </div>
+            <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
+              <button type="button" onClick={() => setShowNewMatch(false)}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handleCreateMatch} disabled={creatingMatch || !newMatchPhaseId}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                {creatingMatch ? "Criando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal elenco */}
       {elencoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
           <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col max-h-[80vh]"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
-              style={{ borderColor: "var(--color-border)" }}>
+            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--color-border)" }}>
               <div>
-                <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
-                  Elenco inscrito
-                </h2>
-                <p className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
-                  {elencoModal.teamName}
-                </p>
+                <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Elenco inscrito</h2>
+                <p className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>{elencoModal.teamName}</p>
               </div>
-              <button type="button" onClick={() => setElencoModal(null)}
-                style={{ color: "var(--color-text-secondary)" }}>
+              <button type="button" onClick={() => setElencoModal(null)} style={{ color: "var(--color-text-secondary)" }}>
                 <X size={18} />
               </button>
             </div>
-
             <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
               {loadingRoster ? (
                 <p className="font-mono text-sm text-center" style={{ color: "#A6A6A6" }}>Carregando…</p>
               ) : (
                 <>
-                  {/* Inscritos */}
                   <div>
                     <p className="mb-2 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
                       Inscritos ({rosterEntries.length})
@@ -363,8 +502,7 @@ export default function CompeticaoHub({
                     ) : (
                       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
                         {rosterEntries.map((entry: any, idx: number) => (
-                          <div key={entry.id}
-                            className="flex items-center gap-3 px-4 py-3"
+                          <div key={entry.id} className="flex items-center gap-3 px-4 py-3"
                             style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                             {entry.athletes?.photo_url ? (
                               <img src={entry.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
@@ -383,7 +521,7 @@ export default function CompeticaoHub({
                               </p>
                             </div>
                             <button type="button" onClick={() => handleRemoverInscricao(entry.id)}
-                              className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                              className="shrink-0 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-danger)]"
                               style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
                               Remover
                             </button>
@@ -392,17 +530,14 @@ export default function CompeticaoHub({
                       </div>
                     )}
                   </div>
-
-                  {/* Disponíveis */}
                   {availableAthletes.length > 0 && (
                     <div>
                       <p className="mb-2 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                        Disponíveis para inscrição ({availableAthletes.length})
+                        Disponíveis ({availableAthletes.length})
                       </p>
                       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
                         {availableAthletes.map((athlete: any, idx: number) => (
-                          <div key={athlete.id}
-                            className="flex items-center gap-3 px-4 py-3"
+                          <div key={athlete.id} className="flex items-center gap-3 px-4 py-3"
                             style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                             {athlete.photo_url ? (
                               <img src={athlete.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
@@ -415,9 +550,8 @@ export default function CompeticaoHub({
                             <p className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
                               {athlete.surname ?? athlete.full_name ?? "—"}
                             </p>
-                            <button type="button"
-                              onClick={() => handleInscrever(athlete.id, athlete.position_id)}
-                              className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
+                            <button type="button" onClick={() => handleInscrever(athlete.id, athlete.position_id)}
+                              className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-brand)]"
                               style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
                               <Check size={12} /> Inscrever
                             </button>
@@ -436,8 +570,7 @@ export default function CompeticaoHub({
       {/* Modal nova edição */}
       {showNewEdition && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
-          <div className="w-full max-w-sm rounded-xl border p-6"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+          <div className="w-full max-w-sm rounded-xl border p-6" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
             <h2 className="mb-4 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Nova edição</h2>
             <label className="flex flex-col gap-1 mb-4">
               <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Temporada</span>
@@ -462,18 +595,30 @@ export default function CompeticaoHub({
         </div>
       )}
 
-      {/* Conteúdo das abas */}
+      {/* Conteúdo */}
       <div className="flex-1 px-8 py-6">
 
         {/* ABA JOGOS */}
         {activeTab === "jogos" && (
           <div>
+            {/* Header com botão Nova partida */}
+            <div className="mb-4 flex items-center justify-between">
+              <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                {matches.length} {matches.length === 1 ? "partida" : "partidas"}
+              </p>
+              <button type="button" onClick={() => setShowNewMatch(true)}
+                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                <Plus size={14} strokeWidth={2.5} /> Nova partida
+              </button>
+            </div>
+
             {loadingMatches ? (
               <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
             ) : matches.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Nenhuma partida registrada nesta edição.</p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Clique em "Nova partida" para começar.</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -485,55 +630,12 @@ export default function CompeticaoHub({
                     <div className="rounded-xl border overflow-hidden"
                       style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                       {group.matches.map((m, idx) => (
-                        <Link key={m.id} href={`/partidas/${m.id}`}
-                          className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
-                          style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                          <div className="w-14 shrink-0 text-center">
-                            <p className="font-mono text-xs font-bold" style={{ color: STATUS_COLOR[m.status] ?? "#A6A6A6" }}>
-                              {STATUS_LABEL[m.status] ?? m.status.toUpperCase()}
-                            </p>
-                            {m.match_date && (
-                              <p className="font-mono text-xs" style={{ color: "#555" }}>
-                                {new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-1 flex-col gap-1.5">
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {m.teams_a?.logo_url ? (
-                                  <img src={m.teams_a.logo_url} alt="" className="h-5 w-5 rounded object-contain shrink-0" />
-                                ) : (
-                                  <div className="h-5 w-5 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                                )}
-                                <span className="truncate text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                                  {m.teams_a?.full_name ?? "A definir"}
-                                </span>
-                              </div>
-                              <span className="font-display text-lg font-bold shrink-0"
-                                style={{ color: m.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}>
-                                {m.status === "scheduled" ? "-" : m.score_a}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                {m.teams_b?.logo_url ? (
-                                  <img src={m.teams_b.logo_url} alt="" className="h-5 w-5 rounded object-contain shrink-0" />
-                                ) : (
-                                  <div className="h-5 w-5 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                                )}
-                                <span className="truncate text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                                  {m.teams_b?.full_name ?? "A definir"}
-                                </span>
-                              </div>
-                              <span className="font-display text-lg font-bold shrink-0"
-                                style={{ color: m.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}>
-                                {m.status === "scheduled" ? "-" : m.score_b}
-                              </span>
-                            </div>
-                          </div>
-                          <ChevronRight size={16} style={{ color: "#555" }} />
-                        </Link>
+                        <MatchRow
+                          key={m.id}
+                          match={m}
+                          idx={idx}
+                          onDelete={() => handleDeleteMatch(m.id)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -546,7 +648,6 @@ export default function CompeticaoHub({
         {/* ABA COMPETIÇÃO */}
         {activeTab === "competicao" && (
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Equipes */}
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
               <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
                 <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
@@ -576,10 +677,9 @@ export default function CompeticaoHub({
                         {et.arrival_origin}
                       </span>
                     )}
-                    <button
-                      type="button"
+                    <button type="button"
                       onClick={() => openElencoModal(et.id, et.team_id, et.teams?.full_name ?? "Equipe")}
-                      className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
+                      className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-brand)]"
                       style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                       <Users size={12} /> Elenco
                     </button>
@@ -588,14 +688,12 @@ export default function CompeticaoHub({
               )}
             </div>
 
-            {/* Fases */}
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
               <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
                 <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
                   Fases ({phases.length})
                 </h2>
-                <Link
-                  href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/fases/nova`}
+                <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/fases/nova`}
                   className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs"
                   style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
                   <Plus size={12} /> Nova fase
@@ -631,15 +729,13 @@ export default function CompeticaoHub({
           </div>
         )}
 
-        {/* ABA CLASSIFICAÇÃO / CHAVES */}
+        {/* ABA CLASSIFICAÇÃO */}
         {activeTab === "classificacao" && (
           <div>
-            {/* Seletor de fase */}
             {phases.length > 1 && (
               <div className="mb-4 flex gap-2 flex-wrap">
                 {phases.map(p => (
-                  <button key={p.id} type="button"
-                    onClick={() => setSelectedPhaseId(p.id)}
+                  <button key={p.id} type="button" onClick={() => setSelectedPhaseId(p.id)}
                     className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
                     style={{
                       borderColor: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)",
@@ -651,11 +747,9 @@ export default function CompeticaoHub({
                 ))}
               </div>
             )}
-
             {!selectedPhase ? (
               <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma fase disponível.</p>
             ) : isClassificatory(selectedPhase.phase_type) ? (
-              /* TABELA DE CLASSIFICAÇÃO */
               <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 {standings.length === 0 ? (
                   <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
@@ -667,30 +761,18 @@ export default function CompeticaoHub({
                       <thead>
                         <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
                           {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
-                            <th key={h} className="px-4 py-3 text-left font-mono text-xs"
-                              style={{ color: "var(--color-text-secondary)" }}>{h}</th>
+                            <th key={h} className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {standings.map((row: any, idx: number) => (
-                          <tr key={row.team_id}
-                            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
-                            className="hover:bg-[rgba(255,255,255,0.02)]">
-                            <td className="px-4 py-3 font-mono text-xs"
-                              style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                              {idx + 1}
-                            </td>
+                          <tr key={row.team_id} style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }} className="hover:bg-[rgba(255,255,255,0.02)]">
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{idx + 1}</td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                {row.teams?.logo_url ? (
-                                  <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" />
-                                ) : (
-                                  <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                                )}
-                                <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>
-                                  {row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}
-                                </span>
+                                {row.teams?.logo_url ? <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" /> : <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                                <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>{row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}</span>
                               </div>
                             </td>
                             <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
@@ -703,9 +785,7 @@ export default function CompeticaoHub({
                               {((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}
                               {(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}
                             </td>
-                            <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
-                              {row.points ?? 0}
-                            </td>
+                            <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>{row.points ?? 0}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -714,55 +794,29 @@ export default function CompeticaoHub({
                 )}
               </div>
             ) : (
-              /* CHAVE ELIMINATÓRIA */
               (() => {
                 const phaseMatchups = matchups.filter(m => m.phase_id === selectedPhaseId);
                 const byLabel: Record<string, any[]> = {};
-                phaseMatchups.forEach(m => {
-                  if (!byLabel[m.round_label]) byLabel[m.round_label] = [];
-                  byLabel[m.round_label].push(m);
-                });
+                phaseMatchups.forEach(m => { if (!byLabel[m.round_label]) byLabel[m.round_label] = []; byLabel[m.round_label].push(m); });
                 return Object.keys(byLabel).length === 0 ? (
-                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                    Nenhum confronto cadastrado nesta fase.
-                  </p>
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum confronto cadastrado nesta fase.</p>
                 ) : (
                   <div className="space-y-6">
                     {Object.entries(byLabel).map(([label, items]) => (
                       <div key={label}>
-                        <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>
-                          {label}
-                        </p>
+                        <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>{label}</p>
                         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           {items.map((m: any) => (
-                            <div key={m.id} className="rounded-xl border p-4"
-                              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                            <div key={m.id} className="rounded-xl border p-4" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                               <div className="flex items-center gap-3 mb-2">
-                                {m.teams_a?.logo_url ? (
-                                  <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" />
-                                ) : (
-                                  <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                                )}
-                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
-                                  {m.teams_a?.full_name ?? "A definir"}
-                                </span>
+                                {m.teams_a?.logo_url ? <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_a?.full_name ?? "A definir"}</span>
                               </div>
                               <div className="flex items-center gap-3">
-                                {m.teams_b?.logo_url ? (
-                                  <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" />
-                                ) : (
-                                  <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                                )}
-                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
-                                  {m.teams_b?.full_name ?? "A definir"}
-                                </span>
+                                {m.teams_b?.logo_url ? <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_b?.full_name ?? "A definir"}</span>
                               </div>
-                              {m.is_completed && (
-                                <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5"
-                                  style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-                                  Concluído
-                                </span>
-                              )}
+                              {m.is_completed && <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>Concluído</span>}
                             </div>
                           ))}
                         </div>
@@ -779,35 +833,20 @@ export default function CompeticaoHub({
         {activeTab === "artilharia" && (
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
             {scorers.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                Nenhum gol registrado nesta edição.
-              </p>
+              <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum gol registrado nesta edição.</p>
             ) : (
               scorers.map((scorer: any, idx: number) => (
-                <div key={scorer.athlete_id}
-                  className="flex items-center gap-4 px-5 py-3 hover:bg-[rgba(255,255,255,0.02)]"
+                <div key={scorer.athlete_id} className="flex items-center gap-4 px-5 py-3 hover:bg-[rgba(255,255,255,0.02)]"
                   style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                  <span className="w-6 font-mono text-xs text-right shrink-0"
-                    style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                    {idx + 1}
-                  </span>
-                  {scorer.athletes?.photo_url ? (
-                    <img src={scorer.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                      style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                  <span className="w-6 font-mono text-xs text-right shrink-0" style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{idx + 1}</span>
+                  {scorer.athletes?.photo_url ? <img src={scorer.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" /> : (
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                       {(scorer.athletes?.surname ?? scorer.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {scorer.athletes?.surname ?? scorer.athletes?.full_name ?? "—"}
-                    </p>
-                    {scorer.team?.full_name && (
-                      <p className="text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
-                        {scorer.team.abbreviation ?? scorer.team.full_name}
-                      </p>
-                    )}
+                    <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>{scorer.athletes?.surname ?? scorer.athletes?.full_name ?? "—"}</p>
+                    {scorer.team?.full_name && <p className="text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{scorer.team.abbreviation ?? scorer.team.full_name}</p>}
                   </div>
                   <div className="flex items-center gap-6 shrink-0">
                     <div className="text-center">
@@ -827,7 +866,7 @@ export default function CompeticaoHub({
           </div>
         )}
 
-        {/* ABA CONFIGURAÇÕES DA EDIÇÃO */}
+        {/* ABA CONFIGURAÇÕES */}
         {activeTab === "configuracoes" && (
           <EdicaoConfigTab
             selectedEditionId={selectedEditionId}
@@ -839,7 +878,65 @@ export default function CompeticaoHub({
   );
 }
 
-// Aba de configurações — mantém o formulário de edição existente
+// ─── Match Row com hover para deletar ────────────────────────────────────────
+
+function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelete: () => void }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+      <Link href={`/partidas/${match.id}`}
+        className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.03)]">
+        <div className="w-14 shrink-0 text-center">
+          <p className="font-mono text-xs font-bold" style={{ color: STATUS_COLOR[match.status] ?? "#A6A6A6" }}>
+            {STATUS_LABEL[match.status] ?? match.status.toUpperCase()}
+          </p>
+          {match.match_date && (
+            <p className="font-mono text-xs" style={{ color: "#555" }}>
+              {new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+            </p>
+          )}
+        </div>
+        <div className="flex flex-1 flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              {match.teams_a?.logo_url ? <img src={match.teams_a.logo_url} alt="" className="h-5 w-5 rounded object-contain shrink-0" /> : <div className="h-5 w-5 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+              <span className="truncate text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{match.teams_a?.full_name ?? "A definir"}</span>
+            </div>
+            <span className="font-display text-lg font-bold shrink-0" style={{ color: match.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}>
+              {match.status === "scheduled" ? "-" : match.score_a}
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              {match.teams_b?.logo_url ? <img src={match.teams_b.logo_url} alt="" className="h-5 w-5 rounded object-contain shrink-0" /> : <div className="h-5 w-5 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+              <span className="truncate text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{match.teams_b?.full_name ?? "A definir"}</span>
+            </div>
+            <span className="font-display text-lg font-bold shrink-0" style={{ color: match.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}>
+              {match.status === "scheduled" ? "-" : match.score_b}
+            </span>
+          </div>
+        </div>
+        <ChevronRight size={16} style={{ color: "#555" }} />
+      </Link>
+
+      {/* Botão de deletar ao hover */}
+      {hovered && (
+        <button type="button" onClick={e => { e.preventDefault(); onDelete(); }}
+          className="absolute right-12 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-lg border transition-colors hover:border-[var(--color-danger)]"
+          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+          <Trash2 size={14} strokeWidth={2} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── Aba configurações ────────────────────────────────────────────────────────
+
 function EdicaoConfigTab({ selectedEditionId, selectedEditionName }: { selectedEditionId: string; selectedEditionName: string }) {
   const [editionStatus, setEditionStatus] = useState("planned");
   const [isPublic, setIsPublic] = useState(false);
@@ -889,9 +986,7 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName }: { selectedE
   return (
     <div className="max-w-xl space-y-6">
       <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-        <h2 className="mb-1 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-          Configurações da edição
-        </h2>
+        <h2 className="mb-1 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Configurações da edição</h2>
         <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-brand)" }}>{selectedEditionName}</p>
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1">
