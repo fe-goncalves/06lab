@@ -323,19 +323,35 @@ export async function publicarResultado(
   await supabase.from("matches").update({ status: "finished" }).eq("id", matchId);
 
   const now = new Date().toISOString();
-  const { error: reportError } = await supabase
+
+  // Verifica se já existe (sem constraint unique, usa insert condicional)
+  const { data: existingReport } = await supabase
     .from("match_reports")
-    .upsert({
-      match_id: matchId,
-      submitted_by: user.id,
-      submitter_type: "admin",
-      status: "approved",
-      reviewed_by: user.id,
-      submitted_at: now,
-      reviewed_at: now,
-    }, { onConflict: "match_id" })
     .select("id")
-    .single();
+    .eq("match_id", matchId)
+    .maybeSingle();
+
+  let reportError = null;
+  if (existingReport) {
+    const { error } = await supabase
+      .from("match_reports")
+      .update({ status: "approved", reviewed_by: user.id, reviewed_at: now })
+      .eq("id", existingReport.id);
+    reportError = error;
+  } else {
+    const { error } = await supabase
+      .from("match_reports")
+      .insert({
+        match_id: matchId,
+        submitted_by: user.id,
+        submitter_type: "admin",
+        status: "approved",
+        reviewed_by: user.id,
+        submitted_at: now,
+        reviewed_at: now,
+      });
+    reportError = error;
+  }
 
   if (reportError) return { error: reportError.message };
 
