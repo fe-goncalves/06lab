@@ -85,8 +85,10 @@ export default function CompeticaoHub({
   const [editionTeams, setEditionTeams] = useState<EditionTeam[]>([]);
   const [standings, setStandings] = useState<Standing[]>([]);
   const [scorers, setScorers] = useState<Scorer[]>([]);
+  const [matchups, setMatchups] = useState<any[]>([]);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [loadingMatches, setLoadingMatches] = useState(false);
-  const [loadingPhases, setLoadingPhases] = useState(false);
+  const [loadingPhases, setLoadingPhases] = useState(false);s
 
   // Estados de formulário
   const [showNewEdition, setShowNewEdition] = useState(false);
@@ -94,6 +96,9 @@ export default function CompeticaoHub({
   const [savingEdition, setSavingEdition] = useState(false);
 
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
+  const selectedPhase = phases.find(p => p.id === selectedPhaseId);
+  const isClassificatory = (type: string) => type === "round_robin" || type === "group_stage";
+  const isKnockout = (type: string) => type === "knockout" || type === "conference";
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -106,17 +111,22 @@ export default function CompeticaoHub({
     setLoadingMatches(true);
     setLoadingPhases(true);
 
+    const phaseIds = await getPhaseIds(supabase, editionId);
+
     const [
       { data: matchesData },
       { data: phasesData },
       { data: teamsData },
       { data: standingsData },
       { data: scorersData },
+      { data: matchupsData },
     ] = await Promise.all([
-      supabase.from("matches")
-        .select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(full_name, custom_label)")
-        .in("phase_id", await getPhaseIds(supabase, editionId))
-        .order("match_date", { ascending: false }),
+      phaseIds.length > 0
+        ? supabase.from("matches")
+            .select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(full_name, custom_label)")
+            .in("phase_id", phaseIds)
+            .order("match_date", { ascending: false })
+        : Promise.resolve({ data: [] }),
       supabase.from("phases")
         .select("id, full_name, custom_label, phase_type, display_order, is_current")
         .eq("edition_id", editionId).order("display_order"),
@@ -134,13 +144,24 @@ export default function CompeticaoHub({
         .gt("goals", 0)
         .order("goals", { ascending: false })
         .limit(15),
+      phaseIds.length > 0
+        ? supabase.from("matchups")
+            .select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id, teams_a:teams!matchups_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(full_name, abbreviation, logo_url)")
+            .in("phase_id", phaseIds)
+            .order("display_order")
+        : Promise.resolve({ data: [] }),
     ]);
 
+    const phasesResult = (phasesData as Phase[]) ?? [];
+    const currentPhase = phasesResult.find(p => p.is_current) ?? phasesResult[0];
+    if (currentPhase) setSelectedPhaseId(currentPhase.id);
+
     setMatches((matchesData as any) ?? []);
-    setPhases((phasesData as any) ?? []);
+    setPhases(phasesResult);
     setEditionTeams((teamsData as any) ?? []);
     setStandings(standingsData ?? []);
     setScorers(scorersData ?? []);
+    setMatchups((matchupsData as any) ?? []);
     setLoadingMatches(false);
     setLoadingPhases(false);
   }, []);
@@ -451,63 +472,146 @@ export default function CompeticaoHub({
           </div>
         )}
 
-        {/* ABA CLASSIFICAÇÃO */}
+        {/* ABA CLASSIFICAÇÃO / CHAVES */}
         {activeTab === "classificacao" && (
-          <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            {standings.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                Nenhum dado de classificação disponível.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                      {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
-                        <th key={h} className="px-4 py-3 text-left font-mono text-xs"
-                          style={{ color: "var(--color-text-secondary)" }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {standings.map((row: any, idx: number) => (
-                      <tr key={row.team_id}
-                        style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
-                        className="hover:bg-[rgba(255,255,255,0.02)]">
-                        <td className="px-4 py-3 font-mono text-xs"
-                          style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                          {idx + 1}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            {row.teams?.logo_url ? (
-                              <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" />
-                            ) : (
-                              <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />
-                            )}
-                            <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>
-                              {row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_scored ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_conceded ?? 0}</td>
-                        <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                          {((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}
-                          {(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
-                          {row.points ?? 0}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          <div>
+            {/* Seletor de fase */}
+            {phases.length > 1 && (
+              <div className="mb-4 flex gap-2 flex-wrap">
+                {phases.map(p => (
+                  <button key={p.id} type="button"
+                    onClick={() => setSelectedPhaseId(p.id)}
+                    className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
+                    style={{
+                      borderColor: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)",
+                      backgroundColor: selectedPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent",
+                      color: selectedPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6",
+                    }}>
+                    {p.custom_label ?? p.full_name}
+                  </button>
+                ))}
               </div>
+            )}
+
+            {!selectedPhase ? (
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma fase disponível.</p>
+            ) : isClassificatory(selectedPhase.phase_type) ? (
+              /* TABELA DE CLASSIFICAÇÃO */
+              <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                {standings.length === 0 ? (
+                  <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    Nenhum dado de classificação disponível.
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+                          {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
+                            <th key={h} className="px-4 py-3 text-left font-mono text-xs"
+                              style={{ color: "var(--color-text-secondary)" }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {standings.map((row: any, idx: number) => (
+                          <tr key={row.team_id}
+                            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
+                            className="hover:bg-[rgba(255,255,255,0.02)]">
+                            <td className="px-4 py-3 font-mono text-xs"
+                              style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+                              {idx + 1}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                {row.teams?.logo_url ? (
+                                  <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" />
+                                ) : (
+                                  <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />
+                                )}
+                                <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>
+                                  {row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_scored ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_conceded ?? 0}</td>
+                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                              {((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}
+                              {(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}
+                            </td>
+                            <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
+                              {row.points ?? 0}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* CHAVE ELIMINATÓRIA */
+              (() => {
+                const phaseMatchups = matchups.filter(m => m.phase_id === selectedPhaseId);
+                const byLabel: Record<string, any[]> = {};
+                phaseMatchups.forEach(m => {
+                  if (!byLabel[m.round_label]) byLabel[m.round_label] = [];
+                  byLabel[m.round_label].push(m);
+                });
+                return Object.keys(byLabel).length === 0 ? (
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    Nenhum confronto cadastrado nesta fase.
+                  </p>
+                ) : (
+                  <div className="space-y-6">
+                    {Object.entries(byLabel).map(([label, items]) => (
+                      <div key={label}>
+                        <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>
+                          {label}
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {items.map((m: any) => (
+                            <div key={m.id} className="rounded-xl border p-4"
+                              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                              <div className="flex items-center gap-3 mb-2">
+                                {m.teams_a?.logo_url ? (
+                                  <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" />
+                                ) : (
+                                  <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
+                                )}
+                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                                  {m.teams_a?.full_name ?? "A definir"}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                {m.teams_b?.logo_url ? (
+                                  <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" />
+                                ) : (
+                                  <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />
+                                )}
+                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                                  {m.teams_b?.full_name ?? "A definir"}
+                                </span>
+                              </div>
+                              {m.is_completed && (
+                                <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5"
+                                  style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
+                                  Concluído
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()
             )}
           </div>
         )}
