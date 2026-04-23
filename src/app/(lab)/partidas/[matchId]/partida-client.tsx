@@ -1,6 +1,6 @@
 "use client";
 
-import { adicionarAcao, deletarAcao, editarPartida, salvarFormacoes } from "./actions";
+import { adicionarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado } from "./actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
@@ -110,6 +110,8 @@ export default function PartidaClient({
   const [isOwnGoal, setIsOwnGoal] = useState(false);
   const [missResult, setMissResult] = useState("goalkeeper_save");
   const [addingAction, setAddingAction] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [published, setPublished] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
   // Formações
@@ -188,6 +190,15 @@ export default function PartidaClient({
     setSaving(false);
     if ("error" in r) { toast("error", r.error); return; }
     toast("success", "Informações salvas.");
+  }
+
+  async function handlePublish() {
+    setPublishing(true);
+    const r = await publicarResultado(match.id);
+    setPublishing(false);
+    if ("error" in r) { toast("error", r.error); return; }
+    setPublished(true);
+    toast("success", "Resultado publicado. Stats atualizadas.");
   }
 
   async function handleSaveLineups() {
@@ -535,16 +546,43 @@ export default function PartidaClient({
         {/* ABA PÓS-JOGO */}
         {activeTab === "posjogo" && (
           <div>
+            {/* Placar + publicação */}
+            <div className="mb-6 rounded-xl border p-5"
+              style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-4">
+                    {teamA?.logo_url && <img src={teamA.logo_url} alt="" className="h-10 w-10 object-contain" />}
+                    <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreA}</span>
+                  </div>
+                  <span className="font-display text-2xl" style={{ color: "var(--color-text-secondary)" }}>—</span>
+                  <div className="flex items-center gap-4">
+                    <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreB}</span>
+                    {teamB?.logo_url && <img src={teamB.logo_url} alt="" className="h-10 w-10 object-contain" />}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={publishing}
+                  className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+                  style={{
+                    backgroundColor: published ? "rgba(191,242,5,0.15)" : "var(--color-brand)",
+                    color: published ? "var(--color-brand)" : "var(--color-background)",
+                    border: published ? "1px solid var(--color-brand)" : "none",
+                  }}>
+                  {publishing ? "Publicando…" : published ? "✓ Publicado" : "Publicar resultado"}
+                </button>
+              </div>
+            </div>
+
             {/* Botões de ação rápida */}
             <div className="mb-6 grid grid-cols-4 gap-3 sm:grid-cols-8">
               {Object.entries(ACTION_LABELS).map(([key, label]) => (
                 <button key={key} type="button"
                   onClick={() => { setActionType(key); setShowActionModal(true); setActionError(null); }}
-                  className="flex flex-col items-center gap-2 rounded-xl border p-3 transition-all hover:scale-105"
-                  style={{
-                    borderColor: "var(--color-border)",
-                    backgroundColor: "var(--color-surface)",
-                  }}>
+                  className="flex flex-col items-center gap-2 rounded-xl border p-3 transition-all hover:scale-105 active:scale-95"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                   <span className="text-2xl">{ACTION_EMOJI[key]}</span>
                   <span className="font-mono text-xs text-center leading-tight"
                     style={{ color: ACTION_COLORS[key] ?? "var(--color-text-secondary)" }}>
@@ -592,6 +630,8 @@ export default function PartidaClient({
             )}
           </div>
         )}
+
+        
       {/* ABA MÍDIA */}
       {activeTab === "midia" && (
           <div className="flex flex-col items-center justify-center py-20 text-center">

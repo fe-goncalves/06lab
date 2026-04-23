@@ -292,3 +292,66 @@ export async function deletarPartida(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function publicarResultado(
+  matchId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: existing } = await supabase
+    .from("match_reports")
+    .select("id, status")
+    .eq("match_id", matchId)
+    .maybeSingle();
+
+  if (existing?.status === "approved") {
+    const { data: match } = await supabase
+      .from("matches").select("phase_id, team_a_id, team_b_id").eq("id", matchId).maybeSingle();
+    if (match?.phase_id) {
+      const { data: phase } = await supabase
+        .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
+      if (phase?.edition_id) {
+        await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
+        await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
+      }
+    }
+    return { success: true };
+  }
+
+  await supabase.from("matches").update({ status: "finished" }).eq("id", matchId);
+
+  const now = new Date().toISOString();
+  const { error: reportError } = await supabase
+    .from("match_reports")
+    .upsert({
+      match_id: matchId,
+      submitted_by: user.id,
+      submitter_type: "admin",
+      status: "approved",
+      reviewed_by: user.id,
+      submitted_at: now,
+      reviewed_at: now,
+    }, { onConflict: "match_id" })
+    .select("id")
+    .single();
+
+  if (reportError) return { error: reportError.message };
+
+  const { data: match } = await supabase
+    .from("matches").select("phase_id, team_a_id, team_b_id").eq("id", matchId).maybeSingle();
+
+  if (match?.phase_id) {
+    const { data: phase } = await supabase
+      .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
+    if (phase?.edition_id) {
+      await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
+      await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
+      if (match.team_a_id) await supabase.rpc("recalculate_team_career_stats", { p_team_id: match.team_a_id });
+      if (match.team_b_id) await supabase.rpc("recalculate_team_career_stats", { p_team_id: match.team_b_id });
+    }
+  }
+
+  return { success: true };
+}
