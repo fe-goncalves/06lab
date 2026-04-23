@@ -324,14 +324,17 @@ export async function publicarResultado(
 
   const now = new Date().toISOString();
 
-  // Busca o role do usuário para usar como submitter_type
+  // Busca o perfil para pegar id e role
   const { data: profile } = await supabase
     .from("user_profiles")
-    .select("role")
+    .select("id, role")
     .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  const submitterType = profile?.role === "main" ? "main" : "supporter";
+  if (!profile) return { error: "Perfil de usuário não encontrado." };
+
+  const submitterType = profile.role === "main" ? "main" : "supporter";
+  const profileId = profile.id;
 
   const { data: existingReport } = await supabase
     .from("match_reports")
@@ -339,27 +342,27 @@ export async function publicarResultado(
     .eq("match_id", matchId)
     .maybeSingle();
 
-  let reportError = null;
-  if (existingReport) {
-    const { error } = await supabase
-      .from("match_reports")
-      .update({ status: "approved", reviewed_by: user.id, reviewed_at: now })
-      .eq("id", existingReport.id);
-    reportError = error;
-  } else {
-    const { error } = await supabase
-      .from("match_reports")
-      .insert({
-        match_id: matchId,
-        submitted_by: user.id,
-        submitter_type: submitterType,
-        status: "approved",
-        reviewed_by: user.id,
-        submitted_at: now,
-        reviewed_at: now,
-      });
-    reportError = error;
-  }
+    let reportError = null;
+    if (existingReport) {
+      const { error } = await supabase
+        .from("match_reports")
+        .update({ status: "approved", reviewed_by: profileId, reviewed_at: now })
+        .eq("id", existingReport.id);
+      reportError = error;
+    } else {
+      const { error } = await supabase
+        .from("match_reports")
+        .insert({
+          match_id: matchId,
+          submitted_by: profileId,
+          submitter_type: submitterType,
+          status: "approved",
+          reviewed_by: profileId,
+          submitted_at: now,
+          reviewed_at: now,
+        });
+      reportError = error;
+    }
 
   if (reportError) return { error: reportError.message };
 
