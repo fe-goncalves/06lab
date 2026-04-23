@@ -51,30 +51,31 @@ export async function editarPartida(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
-  const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
-  const team_a_is_home = formData.get("team_a_is_home") === "true";
+  const status = String(formData.get("status") ?? "scheduled");
+  const finish_type = String(formData.get("finish_type") ?? "").trim() || null;
+  const score_a = Number(formData.get("score_a") ?? 0);
+  const score_b = Number(formData.get("score_b") ?? 0);
   const match_date = String(formData.get("match_date") ?? "").trim() || null;
   const match_time = String(formData.get("match_time") ?? "").trim() || null;
   const venue_id = String(formData.get("venue_id") ?? "").trim() || null;
-  const status = String(formData.get("status") ?? "scheduled");
-  const finish_type = String(formData.get("finish_type") ?? "").trim() || null;
-  const result_only_mode = formData.get("result_only_mode") === "true";
-  const score_a = Number(formData.get("score_a") ?? 0);
-  const score_b = Number(formData.get("score_b") ?? 0);
   const motm_athlete_id = String(formData.get("motm_athlete_id") ?? "").trim() || null;
   const highlights_url = String(formData.get("highlights_url") ?? "").trim() || null;
   const photos_url = String(formData.get("photos_url") ?? "").trim() || null;
 
+  // Nunca sobrescreve team_a_id e team_b_id — esses são definidos na criação
+  const updateData: Record<string, any> = {
+    status, finish_type, score_a, score_b,
+    motm_athlete_id, highlights_url, photos_url,
+  };
+
+  // Só atualiza data/hora/local se foram passados
+  if (match_date) updateData.match_date = match_date;
+  if (match_time) updateData.match_time = match_time;
+  if (formData.has("venue_id")) updateData.venue_id = venue_id;
+
   const { error } = await supabase
     .from("matches")
-    .update({
-      team_a_id, team_b_id, team_a_is_home,
-      match_date, match_time, venue_id,
-      status, finish_type, result_only_mode,
-      score_a, score_b,
-      motm_athlete_id, highlights_url, photos_url,
-    })
+    .update(updateData)
     .eq("id", matchId);
 
   if (error) return { error: error.message };
@@ -83,27 +84,73 @@ export async function editarPartida(
 
 export async function salvarFormacoes(
   matchId: string,
-  lineups: { athlete_id: string; edition_team_id: string; is_present: boolean; played_as_goalkeeper: boolean; is_captain: boolean }[],
-  staffLineups: { staff_member_id: string; edition_team_id: string; is_present: boolean }[],
+  lineups: { athlete_id: string; is_present: boolean; is_starter: boolean; is_captain: boolean }[],
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Delete e reinsere lineups
-  await supabase.from("match_lineups").delete().eq("match_id", matchId);
-  if (lineups.length > 0) {
-    const { error } = await supabase.from("match_lineups").insert(
-      lineups.map(l => ({ match_id: matchId, ...l }))
-    );
-    if (error) return { error: error.message };
-  }
+  // Busca a partida para pegar team_a_id e team_b_id
+  const { data: match } = await supabase
+    .from("matches")
+    .select("team_a_id, team_b_id, phase_id")
+    .eq("id", matchId)
+    .maybeSingle();
 
-  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
-  if (staffLineups.length > 0) {
-    const { error } = await supabase.from("match_staff_lineups").insert(
-      staffLineups.map(s => ({ match_id: matchId, ...s }))
-    );
+  if (!match) return { error: "Partida não encontrada." };
+
+  // Busca edition_id a partir da fase
+  const { data: phase } = await supabase
+    .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
+
+  if (!phase) return { error: "Fase não encontrada." };
+
+  // Busca edition_teams para mapear team_id → edition_team_id
+  const { data: editionTeams } = await supabase
+    .from("edition_teams")
+    .select("id, team_id")
+    .eq("edition_id", phase.edition_id)
+    .in("team_id", [match.team_a_id, match.team_b_id].filter(Boolean));
+
+  const teamToEditionTeam: Record<string, string> = {};
+  (editionTeams ?? []).forEach((et: any) => {
+    teamToEditionTeam[et.team_id] = et.id;
+  });
+
+  // Busca atletas para mapear athlete_id → team_id via stints atuais
+  const athleteIds = lineups.map(l => l.athlete_id);
+  const { data: stints } = await supabase
+    .from("athlete_team_stints")
+    .select("athlete_id, team_id")
+    .in("athlete_id", athleteIds)
+    .in("team_id", [match.team_a_id, match.team_b_id].filter(Boolean))
+    .eq("is_current", true);
+
+  const athleteToTeam: Record<string, string> = {};
+  (stints ?? []).forEach((s: any) => {
+    athleteToTeam[s.athlete_id] = s.team_id;
+  });
+
+  // Monta os registros com edition_team_id correto
+  const records = lineups
+    .map(l => {
+      const teamId = athleteToTeam[l.athlete_id];
+      const editionTeamId = teamId ? teamToEditionTeam[teamId] : null;
+      if (!editionTeamId) return null;
+      return {
+        match_id: matchId,
+        athlete_id: l.athlete_id,
+        edition_team_id: editionTeamId,
+        is_present: l.is_present,
+        played_as_goalkeeper: false,
+        is_captain: l.is_captain,
+      };
+    })
+    .filter(Boolean);
+
+  await supabase.from("match_lineups").delete().eq("match_id", matchId);
+  if (records.length > 0) {
+    const { error } = await supabase.from("match_lineups").insert(records);
     if (error) return { error: error.message };
   }
 
