@@ -592,6 +592,15 @@ export default function PartidaClient({
             )}
           </div>
         )}
+      {/* ABA MÍDIA */}
+      {activeTab === "midia" && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Mídia</p>
+            <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
+              Em construção — links de vídeos e fotos serão adicionados aqui.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Modal de ação */}
