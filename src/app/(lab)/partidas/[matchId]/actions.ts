@@ -117,25 +117,26 @@ export async function salvarFormacoes(
     teamToEditionTeam[et.team_id] = et.id;
   });
 
-  // Busca atletas para mapear athlete_id → team_id via stints atuais
+  // Busca atletas via edition_roster_entries — mais confiável que stints
   const athleteIds = lineups.map(l => l.athlete_id);
-  const { data: stints } = await supabase
-    .from("athlete_team_stints")
-    .select("athlete_id, team_id")
+  const { data: rosterEntries } = await supabase
+    .from("edition_roster_entries")
+    .select("athlete_id, edition_team_id")
     .in("athlete_id", athleteIds)
-    .in("team_id", [match.team_a_id, match.team_b_id].filter(Boolean))
-    .eq("is_current", true);
+    .eq("member_type", "athlete");
 
-  const athleteToTeam: Record<string, string> = {};
-  (stints ?? []).forEach((s: any) => {
-    athleteToTeam[s.athlete_id] = s.team_id;
+  const athleteToEditionTeam: Record<string, string> = {};
+  (rosterEntries ?? []).forEach((r: any) => {
+    // Filtra apenas os edition_teams da partida
+    if (Object.values(teamToEditionTeam).includes(r.edition_team_id)) {
+      athleteToEditionTeam[r.athlete_id] = r.edition_team_id;
+    }
   });
 
   // Monta os registros com edition_team_id correto
   const records = lineups
     .map(l => {
-      const teamId = athleteToTeam[l.athlete_id];
-      const editionTeamId = teamId ? teamToEditionTeam[teamId] : null;
+      const editionTeamId = athleteToEditionTeam[l.athlete_id];
       if (!editionTeamId) return null;
       return {
         match_id: matchId,

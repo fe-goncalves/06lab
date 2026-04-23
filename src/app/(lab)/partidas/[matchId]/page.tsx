@@ -46,6 +46,9 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     .eq("organization_id", orgId)
     .order("full_name");
 
+  // Injeta venues_list no match para o client acessar no select de local
+  if (match) (match as any).venues_list = venues ?? [];
+
   const editionId = match.phases?.edition_id;
   let editionTeamsWithAthletes: any[] = [];
 
