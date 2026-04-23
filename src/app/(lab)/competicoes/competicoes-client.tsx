@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { NovaCompeticaoModal } from "./nova-competicao-modal";
-import { Plus, SquarePen, Eye, Trophy } from "lucide-react";
+import { Plus, SquarePen, Eye, Trophy, Settings } from "lucide-react";
 
 type Competition = {
   id: string;
@@ -180,13 +180,13 @@ function CompetitionRow({ competition, isFirst }: { competition: Competition; is
             </span>
           )}
           <Link
-            href={`/competicoes/${competition.id}`}
-            title="Editar competição"
+            href={`/competicoes/${competition.id}/configuracoes`}
+            title="Configurações da competição"
             className="transition-colors hover:text-[var(--color-brand)]"
             style={{ color: "var(--color-text-secondary)" }}
             onClick={e => e.stopPropagation()}
           >
-            <SquarePen size={17} strokeWidth={1.8} />
+            <Settings size={17} strokeWidth={1.8} />
           </Link>
           <Link
             href="#"

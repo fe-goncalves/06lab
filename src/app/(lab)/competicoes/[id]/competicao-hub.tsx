@@ -1,17 +1,13 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
-import {
-  ChevronDown, Plus, SquarePen, Eye, Trophy,
-  ChevronRight, Settings, Users, BarChart2, Swords
-} from "lucide-react";
-import { criarEdicao, editarCompeticao } from "./actions";
-import { criarFase } from "./edicoes/[edicaoId]/fases/actions";
+import { ChevronDown, Plus, ChevronRight } from "lucide-react";
+import { criarEdicao, editarEdicao } from "./edicoes/actions";
 
 type Competition = any;
 type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
@@ -63,23 +59,18 @@ const PHASE_TYPE_LABEL: Record<string, string> = {
 
 export default function CompeticaoHub({
   competition,
-  allCompetitions,
   editions,
   seasons,
   allTeams,
-  roundLabels,
   orgId,
 }: {
   competition: Competition;
-  allCompetitions: any[];
   editions: Edition[];
   seasons: Season[];
   allTeams: Team[];
-  roundLabels: any[];
   orgId: string;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<"jogos" | "competicao" | "classificacao" | "artilharia" | "configuracoes">("jogos");
@@ -573,14 +564,11 @@ export default function CompeticaoHub({
           </div>
         )}
 
-        {/* ABA CONFIGURAÇÕES */}
+        {/* ABA CONFIGURAÇÕES DA EDIÇÃO */}
         {activeTab === "configuracoes" && (
-          <ConfiguracoesTab
-            competition={competition}
-            allCompetitions={allCompetitions}
+          <EdicaoConfigTab
             selectedEditionId={selectedEditionId}
-            seasons={seasons}
-            orgId={orgId}
+            selectedEditionName={selectedEdition?.season_name ?? ""}
           />
         )}
       </div>
@@ -589,60 +577,91 @@ export default function CompeticaoHub({
 }
 
 // Aba de configurações — mantém o formulário de edição existente
-function ConfiguracoesTab({ competition, allCompetitions, selectedEditionId, seasons, orgId }: any) {
-  const [fullName, setFullName] = useState(competition.full_name ?? "");
-  const [shortName, setShortName] = useState(competition.short_name ?? "");
-  const [gender, setGender] = useState(competition.gender ?? "");
-  const [pinned, setPinned] = useState(competition.pinned_in_sidebar ?? false);
+function EdicaoConfigTab({ selectedEditionId, selectedEditionName }: { selectedEditionId: string; selectedEditionName: string }) {
+  const [editionStatus, setEditionStatus] = useState("planned");
+  const [isPublic, setIsPublic] = useState(false);
+  const [minAthletes, setMinAthletes] = useState("");
+  const [maxAthletes, setMaxAthletes] = useState("");
+  const [yellowThreshold, setYellowThreshold] = useState("");
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
 
+  useEffect(() => {
+    if (!selectedEditionId) return;
+    async function load() {
+      const supabase = createClient();
+      const [{ data: ed }, { data: settings }] = await Promise.all([
+        supabase.from("competition_editions").select("status").eq("id", selectedEditionId).maybeSingle(),
+        supabase.from("edition_settings").select("*").eq("edition_id", selectedEditionId).maybeSingle(),
+      ]);
+      setEditionStatus(ed?.status ?? "planned");
+      setIsPublic(settings?.is_public ?? false);
+      setMinAthletes(String(settings?.min_athletes ?? ""));
+      setMaxAthletes(String(settings?.max_athletes ?? ""));
+      setYellowThreshold(String(settings?.yellow_card_suspension_threshold ?? ""));
+      setLoaded(true);
+    }
+    void load();
+  }, [selectedEditionId]);
+
   async function handleSave() {
     setSaving(true);
     const fd = new FormData();
-    fd.append("full_name", fullName.trim());
-    fd.append("short_name", shortName.trim());
-    fd.append("gender", gender);
-    fd.append("pinned_in_sidebar", String(pinned));
-    const result = await editarCompeticao(competition.id, fd);
+    fd.append("status", editionStatus);
+    fd.append("is_public", String(isPublic));
+    fd.append("min_athletes", minAthletes);
+    fd.append("max_athletes", maxAthletes);
+    fd.append("yellow_card_threshold", yellowThreshold);
+    const result = await editarEdicao(selectedEditionId, fd);
     setSaving(false);
     if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Competição salva com sucesso.");
+    toast("success", "Configurações salvas.");
   }
+
+  if (!loaded) return <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>;
 
   return (
     <div className="max-w-xl space-y-6">
       <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-        <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Dados gerais</h2>
+        <h2 className="mb-1 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+          Configurações da edição
+        </h2>
+        <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-brand)" }}>{selectedEditionName}</p>
         <div className="flex flex-col gap-4">
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo</span>
-            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome curto</span>
-            <input type="text" value={shortName} onChange={e => setShortName(e.target.value)} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Gênero</span>
-            <select value={gender} onChange={e => setGender(e.target.value)} className={inputClass} style={inputStyle}>
-              <option value="">Selecione…</option>
-              <option value="male">Masculino</option>
-              <option value="female">Feminino</option>
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Status</span>
+            <select value={editionStatus} onChange={e => setEditionStatus(e.target.value)} className={inputClass} style={inputStyle}>
+              <option value="planned">Planejada</option>
+              <option value="ongoing">Em andamento</option>
+              <option value="finished">Finalizada</option>
+              <option value="cancelled">Cancelada</option>
             </select>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={pinned} onChange={e => setPinned(e.target.checked)} className="h-4 w-4" />
-            <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Fixar na sidebar</span>
+            <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="h-4 w-4" />
+            <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Visível no 06.score</span>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Mínimo de atletas por equipe</span>
+            <input type="number" value={minAthletes} onChange={e => setMinAthletes(e.target.value)} className={inputClass} style={inputStyle} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Máximo de atletas por equipe</span>
+            <input type="number" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)} className={inputClass} style={inputStyle} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Limite de amarelos para suspensão</span>
+            <input type="number" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value)} className={inputClass} style={inputStyle} />
           </label>
         </div>
       </div>
       <button type="button" onClick={handleSave} disabled={saving}
         className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
         style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-        {saving ? "Salvando…" : "Salvar alterações"}
+        {saving ? "Salvando…" : "Salvar configurações"}
       </button>
     </div>
   );

@@ -21,15 +21,11 @@ export default async function CompeticaoPage({
 
   const [
     { data: comp, error },
-    { data: others },
     { data: editions },
     { data: seasons },
     { data: allTeams },
-    { data: roundLabels },
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
-    supabase.from("competitions").select("id, full_name")
-      .eq("organization_id", orgId).neq("id", id).order("full_name"),
     supabase.from("competition_editions")
       .select("id, season_id, status, seasons(name, years(value))")
       .eq("competition_id", id)
@@ -41,10 +37,6 @@ export default async function CompeticaoPage({
     supabase.from("teams")
       .select("id, full_name, abbreviation, logo_url")
       .eq("organization_id", orgId).order("full_name"),
-    supabase.from("phase_round_labels")
-      .select("id, label, display_order")
-      .eq("phase_type_code", "knockout")
-      .order("display_order"),
   ]);
 
   if (error || !comp) redirect("/competicoes");
@@ -66,11 +58,9 @@ export default async function CompeticaoPage({
   return (
     <CompeticaoHub
       competition={comp}
-      allCompetitions={others ?? []}
       editions={editionsList}
       seasons={seasonsList}
       allTeams={allTeams ?? []}
-      roundLabels={roundLabels ?? []}
       orgId={orgId}
     />
   );
