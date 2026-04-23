@@ -6,8 +6,8 @@ import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
-import { ChevronDown, Plus, ChevronRight } from "lucide-react";
-import { criarEdicao, editarEdicao } from "./edicoes/actions";
+import { ChevronDown, Plus, ChevronRight, Users, X, Check } from "lucide-react";
+import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao } from "./edicoes/actions";
 
 type Competition = any;
 type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
@@ -88,7 +88,13 @@ export default function CompeticaoHub({
   const [matchups, setMatchups] = useState<any[]>([]);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [loadingMatches, setLoadingMatches] = useState(false);
-  const [loadingPhases, setLoadingPhases] = useState(false);s
+  const [loadingPhases, setLoadingPhases] = useState(false);
+
+  // Elenco modal
+  const [elencoModal, setElencoModal] = useState<{ editionTeamId: string; teamName: string } | null>(null);
+  const [rosterEntries, setRosterEntries] = useState<any[]>([]);
+  const [availableAthletes, setAvailableAthletes] = useState<any[]>([]);
+  const [loadingRoster, setLoadingRoster] = useState(false);
 
   // Estados de formulário
   const [showNewEdition, setShowNewEdition] = useState(false);
@@ -175,6 +181,45 @@ export default function CompeticaoHub({
   async function getPhaseIds(supabase: any, editionId: string): Promise<string[]> {
     const { data } = await supabase.from("phases").select("id").eq("edition_id", editionId);
     return (data ?? []).map((p: any) => p.id);
+  }
+
+  async function openElencoModal(editionTeamId: string, teamId: string, teamName: string) {
+    setElencoModal({ editionTeamId, teamName });
+    setLoadingRoster(true);
+    const supabase = createClient();
+    const [{ data: entries }, { data: currentAthletes }] = await Promise.all([
+      supabase.from("edition_roster_entries")
+        .select("id, athlete_id, status, position_id_at_inscription, athletes(id, full_name, surname, photo_url, position_id)")
+        .eq("edition_team_id", editionTeamId)
+        .eq("member_type", "athlete"),
+      supabase.from("athlete_team_stints")
+        .select("athlete_id, athletes(id, full_name, surname, photo_url, position_id)")
+        .eq("team_id", teamId)
+        .eq("is_current", true),
+    ]);
+    const inscribedIds = new Set((entries ?? []).map((e: any) => e.athlete_id));
+    const available = (currentAthletes ?? [])
+      .map((s: any) => s.athletes)
+      .filter(Boolean)
+      .filter((a: any) => !inscribedIds.has(a.id));
+    setRosterEntries((entries as any) ?? []);
+    setAvailableAthletes(available);
+    setLoadingRoster(false);
+  }
+
+  async function handleInscrever(athleteId: string, positionId: string | null) {
+    if (!elencoModal) return;
+    const result = await inscreverAtleta(elencoModal.editionTeamId, athleteId, positionId);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Atleta inscrito.");
+    await openElencoModal(elencoModal.editionTeamId, "", elencoModal.teamName);
+  }
+
+  async function handleRemoverInscricao(entryId: string) {
+    const result = await removerAtletaEdicao(entryId);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Inscrição removida.");
+    setRosterEntries(prev => prev.filter((e: any) => e.id !== entryId));
   }
 
   async function handleCreateEdition() {
@@ -280,6 +325,113 @@ export default function CompeticaoHub({
           </div>
         </div>
       </div>
+
+      {/* Modal elenco */}
+      {elencoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
+          <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col max-h-[80vh]"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
+              style={{ borderColor: "var(--color-border)" }}>
+              <div>
+                <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
+                  Elenco inscrito
+                </h2>
+                <p className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
+                  {elencoModal.teamName}
+                </p>
+              </div>
+              <button type="button" onClick={() => setElencoModal(null)}
+                style={{ color: "var(--color-text-secondary)" }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
+              {loadingRoster ? (
+                <p className="font-mono text-sm text-center" style={{ color: "#A6A6A6" }}>Carregando…</p>
+              ) : (
+                <>
+                  {/* Inscritos */}
+                  <div>
+                    <p className="mb-2 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                      Inscritos ({rosterEntries.length})
+                    </p>
+                    {rosterEntries.length === 0 ? (
+                      <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum atleta inscrito.</p>
+                    ) : (
+                      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
+                        {rosterEntries.map((entry: any, idx: number) => (
+                          <div key={entry.id}
+                            className="flex items-center gap-3 px-4 py-3"
+                            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                            {entry.athletes?.photo_url ? (
+                              <img src={entry.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                                style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                                {(entry.athletes?.surname ?? entry.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                                {entry.athletes?.surname ?? entry.athletes?.full_name ?? "—"}
+                              </p>
+                              <p className="font-mono text-xs" style={{ color: entry.status === "approved" ? "var(--color-brand)" : "#A6A6A6" }}>
+                                {entry.status === "approved" ? "Aprovado" : "Pendente"}
+                              </p>
+                            </div>
+                            <button type="button" onClick={() => handleRemoverInscricao(entry.id)}
+                              className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                              Remover
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Disponíveis */}
+                  {availableAthletes.length > 0 && (
+                    <div>
+                      <p className="mb-2 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                        Disponíveis para inscrição ({availableAthletes.length})
+                      </p>
+                      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
+                        {availableAthletes.map((athlete: any, idx: number) => (
+                          <div key={athlete.id}
+                            className="flex items-center gap-3 px-4 py-3"
+                            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                            {athlete.photo_url ? (
+                              <img src={athlete.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
+                            ) : (
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                                style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                                {(athlete.surname ?? athlete.full_name ?? "?").slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
+                            <p className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                              {athlete.surname ?? athlete.full_name ?? "—"}
+                            </p>
+                            <button type="button"
+                              onClick={() => handleInscrever(athlete.id, athlete.position_id)}
+                              className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+                              <Check size={12} /> Inscrever
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal nova edição */}
       {showNewEdition && (
@@ -424,6 +576,13 @@ export default function CompeticaoHub({
                         {et.arrival_origin}
                       </span>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => openElencoModal(et.id, et.team_id, et.teams?.full_name ?? "Equipe")}
+                      className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                      <Users size={12} /> Elenco
+                    </button>
                   </div>
                 ))
               )}

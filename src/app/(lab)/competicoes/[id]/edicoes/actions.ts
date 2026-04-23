@@ -141,3 +141,52 @@ export async function removerEquipeEdicao(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function inscreverAtleta(
+  editionTeamId: string,
+  athleteId: string,
+  positionId: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: existing } = await supabase
+    .from("edition_roster_entries")
+    .select("id")
+    .eq("edition_team_id", editionTeamId)
+    .eq("athlete_id", athleteId)
+    .maybeSingle();
+
+  if (existing) return { error: "Atleta já inscrito nesta edição." };
+
+  const { error } = await supabase
+    .from("edition_roster_entries")
+    .insert({
+      edition_team_id: editionTeamId,
+      athlete_id: athleteId,
+      member_type: "athlete",
+      position_id_at_inscription: positionId,
+      status: "approved",
+      submitter_type: "admin",
+    });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerAtletaEdicao(
+  rosterEntryId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("edition_roster_entries")
+    .delete()
+    .eq("id", rosterEntryId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
