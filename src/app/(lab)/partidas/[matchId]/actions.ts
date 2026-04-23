@@ -324,7 +324,15 @@ export async function publicarResultado(
 
   const now = new Date().toISOString();
 
-  // Verifica se já existe (sem constraint unique, usa insert condicional)
+  // Busca o role do usuário para usar como submitter_type
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("role")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  const submitterType = profile?.role === "main" ? "main" : "supporter";
+
   const { data: existingReport } = await supabase
     .from("match_reports")
     .select("id")
@@ -344,7 +352,7 @@ export async function publicarResultado(
       .insert({
         match_id: matchId,
         submitted_by: user.id,
-        submitter_type: "admin",
+        submitter_type: submitterType,
         status: "approved",
         reviewed_by: user.id,
         submitted_at: now,
