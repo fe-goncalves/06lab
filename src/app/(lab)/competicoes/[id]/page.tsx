@@ -1,8 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
-import Breadcrumb from "@/app/(lab)/components/breadcrumb";
-import CompeticaoEditForm from "./competicao-edit-form";
-import EdicoesSection from "./edicoes-section";
+import CompeticaoHub from "./competicao-hub";
 
 export default async function CompeticaoPage({
   params,
@@ -26,6 +24,8 @@ export default async function CompeticaoPage({
     { data: others },
     { data: editions },
     { data: seasons },
+    { data: allTeams },
+    { data: roundLabels },
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competitions").select("id, full_name")
@@ -37,6 +37,13 @@ export default async function CompeticaoPage({
     supabase.from("seasons")
       .select("id, name, years(value)")
       .eq("organization_id", orgId)
+      .order("display_order"),
+    supabase.from("teams")
+      .select("id, full_name, abbreviation, logo_url")
+      .eq("organization_id", orgId).order("full_name"),
+    supabase.from("phase_round_labels")
+      .select("id, label, display_order")
+      .eq("phase_type_code", "knockout")
       .order("display_order"),
   ]);
 
@@ -57,22 +64,14 @@ export default async function CompeticaoPage({
   }));
 
   return (
-    <div className="p-6 md:p-8">
-      <Breadcrumb
-        items={[
-          { label: "Competições", href: "/competicoes" },
-          { label: comp.full_name ?? "Competição" },
-        ]}
-      />
-      <CompeticaoEditForm
-        competition={comp}
-        allCompetitions={others ?? []}
-      />
-      <EdicoesSection
-        competitionId={id}
-        seasons={seasonsList}
-        editions={editionsList}
-      />
-    </div>
+    <CompeticaoHub
+      competition={comp}
+      allCompetitions={others ?? []}
+      editions={editionsList}
+      seasons={seasonsList}
+      allTeams={allTeams ?? []}
+      roundLabels={roundLabels ?? []}
+      orgId={orgId}
+    />
   );
 }

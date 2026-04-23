@@ -48,6 +48,9 @@ export default async function EdicaoPage({
 
   if (error || !edition) redirect(`/competicoes/${competitionId}`);
 
+  // Redireciona para o hub da competição com a edição selecionada
+  redirect(`/competicoes/${competitionId}?edicao=${edicaoId}`);
+
   return (
     <EdicaoClient
       edition={edition as any}
