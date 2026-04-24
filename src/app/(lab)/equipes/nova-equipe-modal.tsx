@@ -24,10 +24,10 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
+export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeModalProps & { defaultGender?: string }) {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
-  const [gender, setGender] = useState("");
+  const [gender, setGender] = useState(defaultGender ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [hexColors, setHexColors] = useState<string[]>([]);
@@ -38,7 +38,7 @@ export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
     if (isOpen) return;
 
     setFullName("");
-    setGender("");
+    setGender(defaultGender ?? "");
     setFile(null);
     setHexColors([]);
     setLoading(false);
@@ -47,7 +47,11 @@ export function NovaEquipeModal({ isOpen, onClose }: NovaEquipeModalProps) {
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
-  }, [isOpen]);
+  }, [isOpen, defaultGender]);
+
+  useEffect(() => {
+    if (defaultGender) setGender(defaultGender);
+  }, [defaultGender]);
 
   useEffect(() => {
     if (!isOpen) return;

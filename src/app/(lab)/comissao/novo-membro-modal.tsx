@@ -7,13 +7,21 @@ import { createClient } from "@/lib/supabase";
 
 type StaffRole = { id: string; full_name: string };
 
-export function NovoMembroModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function NovoMembroModal({
+  isOpen,
+  onClose,
+  defaultRoleId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  defaultRoleId?: string;
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [surname, setSurname] = useState("");
   const [gender, setGender] = useState("");
-  const [staffRoleId, setStaffRoleId] = useState("");
+  const [staffRoleId, setStaffRoleId] = useState(defaultRoleId ?? "");
   const [rg, setRg] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [roles, setRoles] = useState<StaffRole[]>([]);
@@ -30,11 +38,17 @@ export function NovoMembroModal({ isOpen, onClose }: { isOpen: boolean; onClose:
   }, []);
 
   useEffect(() => {
-    if (isOpen) return;
-    setFullName(""); setSurname(""); setGender(""); setStaffRoleId("");
-    setRg(""); setBirthDate(""); setFile(null); setError(null); setLoading(false);
-    setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-  }, [isOpen]);
+    if (!isOpen) {
+      setFullName(""); setSurname(""); setGender("");
+      setRg(""); setBirthDate(""); setFile(null); setError(null); setLoading(false);
+      setStaffRoleId(defaultRoleId ?? "");
+      setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+    }
+  }, [isOpen, defaultRoleId]);
+
+  useEffect(() => {
+    if (defaultRoleId) setStaffRoleId(defaultRoleId);
+  }, [defaultRoleId]);
 
   function applyDateMask(v: string) {
     const d = v.replace(/\D/g, "").slice(0, 8);
@@ -86,6 +100,13 @@ export function NovoMembroModal({ isOpen, onClose }: { isOpen: boolean; onClose:
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Função</span>
+            <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} className={inputClass} style={inputStyle}>
+              <option value="">Selecione…</option>
+              {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo *</span>
             <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
           </label>
@@ -99,13 +120,6 @@ export function NovoMembroModal({ isOpen, onClose }: { isOpen: boolean; onClose:
               <option value="">Selecione…</option>
               <option value="male">Masculino</option>
               <option value="female">Feminino</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Função</span>
-            <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} className={inputClass} style={inputStyle}>
-              <option value="">Selecione…</option>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1">

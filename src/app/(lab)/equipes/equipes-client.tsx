@@ -151,7 +151,7 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
         )}
       </div>
 
-      <NovaEquipeModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <NovaEquipeModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultGender={activeTab === "male" ? "male" : "female"} />
     </div>
   );
 }

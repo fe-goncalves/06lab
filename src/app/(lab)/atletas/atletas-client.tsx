@@ -235,7 +235,7 @@ export default function AtletasClient({
         )}
       </div>
 
-      <NovoAtletaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <NovoAtletaModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultGender={activeTab === "male" ? "male" : "female"} />
     </div>
   );
 }

@@ -157,7 +157,7 @@ export default function ComissaoClient({ members: initialMembers, roles }: { mem
         )}
       </div>
 
-      <NovoMembroModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <NovoMembroModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultRoleId={activeTab} />
     </div>
   );
 }

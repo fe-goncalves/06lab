@@ -4,7 +4,22 @@ import { criarArbitro } from "./actions";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-export function NovoArbitroModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+const REFEREE_ROLES = [
+  { id: "e9bd3156-58b3-4758-8c6e-5d48e53228e0", label: "Árbitro" },
+  { id: "556252c8-8365-466b-9a8e-464364a09902", label: "Assistente" },
+  { id: "4dba8c5a-025f-4487-b4e8-60a16c104b2d", label: "Mesário" },
+  { id: "0833c834-6548-4775-affb-48bd095d8cde", label: "Staff" },
+];
+
+export function NovoArbitroModal({
+  isOpen,
+  onClose,
+  defaultRoleId,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  defaultRoleId?: string;
+}) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
@@ -12,17 +27,25 @@ export function NovoArbitroModal({ isOpen, onClose }: { isOpen: boolean; onClose
   const [rg, setRg] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [profilePublic, setProfilePublic] = useState(false);
+  const [refereeRoleId, setRefereeRoleId] = useState(defaultRoleId ?? REFEREE_ROLES[0].id);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) return;
-    setFullName(""); setSurname(""); setRg(""); setBirthDate("");
-    setProfilePublic(false); setFile(null); setError(null); setLoading(false);
-    setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-  }, [isOpen]);
+    if (!isOpen) {
+      setFullName(""); setSurname(""); setRg(""); setBirthDate("");
+      setProfilePublic(false); setFile(null); setError(null); setLoading(false);
+      setRefereeRoleId(defaultRoleId ?? REFEREE_ROLES[0].id);
+      setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
+    }
+  }, [isOpen, defaultRoleId]);
+
+  // Quando a aba muda enquanto o modal está aberto
+  useEffect(() => {
+    if (defaultRoleId) setRefereeRoleId(defaultRoleId);
+  }, [defaultRoleId]);
 
   function applyDateMask(value: string): string {
     const d = value.replace(/\D/g, "").slice(0, 8);
@@ -48,6 +71,7 @@ export function NovoArbitroModal({ isOpen, onClose }: { isOpen: boolean; onClose
       fd.append("rg", rg);
       fd.append("birth_date", birthDate);
       fd.append("profile_public", String(profilePublic));
+      fd.append("referee_role_id", refereeRoleId);
       if (file) fd.append("photo", file);
       const result = await criarArbitro(fd);
       if ("error" in result) { setError(result.error); return; }
@@ -72,6 +96,12 @@ export function NovoArbitroModal({ isOpen, onClose }: { isOpen: boolean; onClose
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>✕</button>
         </div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Função *</span>
+            <select value={refereeRoleId} onChange={e => setRefereeRoleId(e.target.value)} className={inputClass} style={inputStyle}>
+              {REFEREE_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+          </label>
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo *</span>
             <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />

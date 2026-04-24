@@ -154,7 +154,7 @@ export default function ArbitrosClient({ referees: initialReferees }: { referees
         )}
       </div>
 
-      <NovoArbitroModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
+      <NovoArbitroModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultRoleId={activeTab} />
     </div>
   );
 }

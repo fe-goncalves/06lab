@@ -17,9 +17,11 @@ function applyDateMask(value: string): string {
 export function NovoAtletaModal({
   isOpen,
   onClose,
+  defaultGender,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  defaultGender?: string;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -27,7 +29,7 @@ export function NovoAtletaModal({
   const [positions, setPositions] = useState<Position[]>([]);
   const [fullName, setFullName] = useState("");
   const [surname, setSurname] = useState("");
-  const [gender, setGender] = useState("");
+  const [gender, setGender] = useState(defaultGender ?? "");
   const [positionId, setPositionId] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [rg, setRg] = useState("");
@@ -49,11 +51,16 @@ export function NovoAtletaModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setFullName(""); setSurname(""); setGender(""); setPositionId("");
+      setFullName(""); setSurname(""); setPositionId("");
       setBirthDate(""); setRg(""); setFile(null); setError(null);
+      setGender(defaultGender ?? "");
       setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return null; });
     }
-  }, [isOpen]);
+  }, [isOpen, defaultGender]);
+
+  useEffect(() => {
+    if (defaultGender) setGender(defaultGender);
+  }, [defaultGender]);
 
   useEffect(() => {
     if (!isOpen) return;
