@@ -38,9 +38,9 @@ export async function criarMembro(
     const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
     const path = `staff/${Date.now()}-${safe}`;
     const { error: uploadError } = await supabase.storage
-      .from("photos").upload(path, file, { contentType: file.type, cacheControl: "3600" });
+      .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
-    const { data: pub } = supabase.storage.from("photos").getPublicUrl(path);
+    const { data: pub } = supabase.storage.from("photo").getPublicUrl(path);
     photo_url = pub.publicUrl;
   }
 
@@ -90,9 +90,9 @@ export async function editarMembro(
     const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
     const path = `staff/${Date.now()}-${safe}`;
     const { error: uploadError } = await supabase.storage
-      .from("photos").upload(path, file, { contentType: file.type, cacheControl: "3600" });
+      .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
-    const { data: pub } = supabase.storage.from("photos").getPublicUrl(path);
+    const { data: pub } = supabase.storage.from("photo").getPublicUrl(path);
     photo_url = pub.publicUrl;
   }
 
@@ -127,6 +127,79 @@ export async function vincularMembroEquipe(
       started_at: new Date().toISOString().split("T")[0],
       is_current: true,
     });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function adicionarStintMembro(
+  staffMemberId: string,
+  teamId: string,
+  movementType: string,
+  startedAt: string,
+  endedAt: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("staff_team_stints")
+    .insert({
+      staff_member_id: staffMemberId,
+      team_id: teamId,
+      movement_type: movementType,
+      started_at: startedAt,
+      ended_at: endedAt,
+      is_current: false,
+    });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerStintMembro(
+  stintId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: stint } = await supabase
+    .from("staff_team_stints")
+    .select("is_current")
+    .eq("id", stintId)
+    .maybeSingle();
+
+  if (stint?.is_current) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
+
+  const { error } = await supabase
+    .from("staff_team_stints")
+    .delete()
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarStintMembro(
+  stintId: string,
+  movementType: string,
+  startedAt: string,
+  endedAt: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("staff_team_stints")
+    .update({
+      movement_type: movementType,
+      started_at: startedAt,
+      ended_at: endedAt ?? null,
+    })
+    .eq("id", stintId);
 
   if (error) return { error: error.message };
   return { success: true };

@@ -52,10 +52,10 @@ export async function criarAtleta(formData: FormData) {
     const safeName = file.name.replace(/[^\w.\-]/g, "_") || "photo";
     const path = `athletes/${Date.now()}-${safeName}`;
     const { error: uploadError } = await supabase.storage
-      .from("photos")
+      .from("photo")
       .upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
-    const { data: pub } = supabase.storage.from("photos").getPublicUrl(path);
+    const { data: pub } = supabase.storage.from("photo").getPublicUrl(path);
     photo_url = pub.publicUrl;
   }
 
@@ -102,10 +102,10 @@ export async function editarAtleta(id: string, formData: FormData) {
     const safeName = file.name.replace(/[^\w.\-]/g, "_") || "photo";
     const path = `athletes/${Date.now()}-${safeName}`;
     const { error: uploadError } = await supabase.storage
-      .from("photos")
+      .from("photo")
       .upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
-    const { data: pub } = supabase.storage.from("photos").getPublicUrl(path);
+    const { data: pub } = supabase.storage.from("photo").getPublicUrl(path);
     photo_url = pub.publicUrl;
   }
 
@@ -158,5 +158,79 @@ export async function vincularAtleta(
 
   if (error) return { error: error.message };
 
+  return { success: true };
+}
+
+export async function adicionarStint(
+  athleteId: string,
+  teamId: string,
+  movementType: string,
+  startedAt: string,
+  endedAt: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .insert({
+      athlete_id: athleteId,
+      team_id: teamId,
+      movement_type: movementType,
+      started_at: startedAt,
+      ended_at: endedAt,
+      is_current: false,
+    });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerStint(
+  stintId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  // Nunca remove o stint is_current — protege o vínculo atual
+  const { data: stint } = await supabase
+    .from("athlete_team_stints")
+    .select("is_current")
+    .eq("id", stintId)
+    .maybeSingle();
+
+  if (stint?.is_current) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o atleta." };
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .delete()
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarStint(
+  stintId: string,
+  movementType: string,
+  startedAt: string,
+  endedAt: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .update({
+      movement_type: movementType,
+      started_at: startedAt,
+      ended_at: endedAt ?? null,
+    })
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
   return { success: true };
 }

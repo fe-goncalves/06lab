@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
-import { editarAtleta, vincularAtleta } from "../actions";
+import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint } from "../actions";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -176,6 +176,12 @@ export default function AtletaPage() {
   const [editStintStarted, setEditStintStarted] = useState("");
   const [editStintEnded, setEditStintEnded] = useState("");
   const [savingStint, setSavingStint] = useState(false);
+  const [showAddStint, setShowAddStint] = useState(false);
+  const [addStintTeamId, setAddStintTeamId] = useState("");
+  const [addStintMovement, setAddStintMovement] = useState("arrival");
+  const [addStintStarted, setAddStintStarted] = useState("");
+  const [addStintEnded, setAddStintEnded] = useState("");
+  const [addingStint, setAddingStint] = useState(false);
 
   // Busca de torneios
   const [tournamentSearch, setTournamentSearch] = useState("");
@@ -270,6 +276,10 @@ export default function AtletaPage() {
       if ("error" in result) { toast("error", result.error); return; }
       toast("success", "Alterações salvas.");
       setPendingPhoto(null);
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        setPreviewUrl(null);
+      }
       await load();
     } finally { setSaving(false); }
   }
@@ -308,6 +318,48 @@ export default function AtletaPage() {
       .eq("id", stintId);
     setSavingStint(false);
     if (error) { toast("error", error.message); return; }
+    toast("success", "Vínculo atualizado.");
+    setEditingStintId(null);
+    await load();
+  }
+
+  async function handleAddStint() {
+    if (!addStintTeamId || !addStintStarted) {
+      toast("error", "Equipe e data de início são obrigatórios.");
+      return;
+    }
+    const started = parseDateToISO(addStintStarted);
+    if (!started) { toast("error", "Data de início inválida."); return; }
+    const ended = addStintEnded ? parseDateToISO(addStintEnded) : null;
+    setAddingStint(true);
+    const result = await adicionarStint(id, addStintTeamId, addStintMovement, started, ended);
+    setAddingStint(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Vínculo adicionado.");
+    setShowAddStint(false);
+    setAddStintTeamId("");
+    setAddStintMovement("arrival");
+    setAddStintStarted("");
+    setAddStintEnded("");
+    await load();
+  }
+
+  async function handleRemoveStint(stintId: string) {
+    if (!confirm("Remover este vínculo da linha do tempo?")) return;
+    const result = await removerStint(stintId);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Vínculo removido.");
+    await load();
+  }
+
+  async function handleSaveStint(stintId: string) {
+    setSavingStint(true);
+    const started = parseDateToISO(editStintStarted);
+    const ended = editStintEnded ? parseDateToISO(editStintEnded) : null;
+    if (!started) { toast("error", "Data de início inválida."); setSavingStint(false); return; }
+    const result = await editarStint(stintId, editStintMovement, started, ended);
+    setSavingStint(false);
+    if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Vínculo atualizado.");
     setEditingStintId(null);
     await load();
@@ -517,24 +569,74 @@ export default function AtletaPage() {
         {/* ABA HISTÓRICO */}
         {activeTab === "historico" && (
           <div className="space-y-6">
-            {/* Linha do tempo de equipes */}
+            {/* Linha do tempo */}
             <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-              <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+              <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
                 <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
                   Linha do tempo
                 </h2>
+                <button type="button" onClick={() => setShowAddStint(v => !v)}
+                  className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs"
+                  style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+                  + Adicionar
+                </button>
               </div>
+
+              {/* Form de adicionar */}
+              {showAddStint && (
+                <div className="px-5 py-4 border-b space-y-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe *</span>
+                      <select value={addStintTeamId} onChange={e => setAddStintTeamId(e.target.value)} className={inputClass} style={inputStyle}>
+                        <option value="">Selecione…</option>
+                        {teams.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo</span>
+                      <select value={addStintMovement} onChange={e => setAddStintMovement(e.target.value)} className={inputClass} style={inputStyle}>
+                        {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Início *</span>
+                      <input type="text" placeholder="DD/MM/AAAA" value={addStintStarted}
+                        onChange={e => setAddStintStarted(applyDateMask(e.target.value))}
+                        maxLength={10} className={inputClass} style={inputStyle} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Fim</span>
+                      <input type="text" placeholder="DD/MM/AAAA" value={addStintEnded}
+                        onChange={e => setAddStintEnded(applyDateMask(e.target.value))}
+                        maxLength={10} className={inputClass} style={inputStyle} />
+                    </label>
+                  </div>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={handleAddStint} disabled={addingStint}
+                      className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      {addingStint ? "Adicionando…" : "Confirmar"}
+                    </button>
+                    <button type="button" onClick={() => setShowAddStint(false)}
+                      className="rounded-lg border px-3 py-1.5 text-sm"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {stintHistory.length === 0 ? (
                 <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum vínculo registrado.</p>
               ) : (
                 stintHistory.map((stint, idx) => (
                   <div key={stint.id} style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                     {editingStintId === stint.id ? (
-                      /* Modo edição */
                       <div className="px-5 py-4 space-y-3">
                         <div className="flex items-center gap-3 mb-2">
                           {stint.teams?.logo_url ? (
-                            <img src={stint.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain shrink-0" style={{ borderColor: "var(--color-border)" }} />
+                            <img src={stint.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain shrink-0" />
                           ) : (
                             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded border text-xs font-bold"
                               style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
@@ -548,11 +650,8 @@ export default function AtletaPage() {
                         <div className="grid grid-cols-3 gap-3">
                           <label className="flex flex-col gap-1">
                             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo</span>
-                            <select value={editStintMovement} onChange={e => setEditStintMovement(e.target.value)}
-                              className={inputClass} style={inputStyle}>
-                              {Object.entries(MOVEMENT_LABELS).map(([k, v]) => (
-                                <option key={k} value={k}>{v}</option>
-                              ))}
+                            <select value={editStintMovement} onChange={e => setEditStintMovement(e.target.value)} className={inputClass} style={inputStyle}>
+                              {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </select>
                           </label>
                           <label className="flex flex-col gap-1">
@@ -582,9 +681,8 @@ export default function AtletaPage() {
                         </div>
                       </div>
                     ) : (
-                      /* Modo visualização */
                       <div className="flex items-center gap-4 px-5 py-3 group">
-                        <div className="flex flex-col items-center gap-1 shrink-0 w-20">
+                        <div className="shrink-0 w-24">
                           <span className="font-mono text-xs font-bold rounded px-2 py-0.5"
                             style={{
                               backgroundColor: `${MOVEMENT_COLORS[stint.movement_type ?? "arrival"]}22`,
@@ -620,16 +718,63 @@ export default function AtletaPage() {
                             atual
                           </span>
                         )}
-                        <button type="button" onClick={() => openEditStint(stint)}
-                          className="shrink-0 rounded border px-2 py-1 font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                          Editar
-                        </button>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                          <button type="button" onClick={() => openEditStint(stint)}
+                            className="rounded border px-2 py-1 font-mono text-xs"
+                            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                            Editar
+                          </button>
+                          {!stint.is_current && (
+                            <button type="button" onClick={() => handleRemoveStint(stint.id)}
+                              className="rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                              Remover
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
                 ))
               )}
+            </div>
+
+            {/* Torneios inscritos */}
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+              <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+                <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                  Torneios inscritos ({rosterEntries.length})
+                </h2>
+                <input type="text" placeholder="Buscar…" value={tournamentSearch}
+                  onChange={e => setTournamentSearch(e.target.value)}
+                  className="rounded-lg border px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-[var(--color-brand)]"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)", width: 160 }} />
+              </div>
+              {tournaments.length === 0 ? (
+                <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                  {tournamentSearch ? "Nenhum resultado." : "Nenhum torneio registrado."}
+                </p>
+              ) : (
+                tournaments.map((t, idx) => (
+                  <div key={t.editionId} className="flex items-center gap-4 px-5 py-3"
+                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>{t.competition}</p>
+                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{t.season}</p>
+                    </div>
+                    <span className="shrink-0 font-mono text-xs rounded px-2 py-0.5"
+                      style={{
+                        backgroundColor: t.status === "approved" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
+                        color: t.status === "approved" ? "var(--color-brand)" : "#A6A6A6",
+                      }}>
+                      {t.status === "approved" ? "Aprovado" : "Pendente"}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
             </div>
 
             {/* Torneios inscritos */}
