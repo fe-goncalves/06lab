@@ -16,6 +16,13 @@ type Member = {
 
 type Role = { id: string; full_name: string };
 
+const ROLE_TABS = [
+  { id: "04ccaa97-71ed-4060-946a-b1dc995c1652", label: "TÉCNICO" },
+  { id: "a1071e25-462a-4c62-b81c-c144f4d0594a", label: "AUXILIAR" },
+  { id: "eaeb900a-14ce-4d78-9ba5-e689f51ef8d6", label: "DIRETORIA" },
+  { id: "f683bc09-1397-406d-bcf8-bb541d991974", label: "REPRESENTANTE" },
+];
+
 function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Record<string, string>; isFirst: boolean }) {
   const [hovered, setHovered] = useState(false);
   const currentStint = member.staff_team_stints?.find(s => s.is_current);
@@ -30,7 +37,6 @@ function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Reco
         transition: "opacity 0.15s ease",
       }}>
       <Link href={`/comissao/${member.id}`} className="flex items-center gap-6 py-4 pr-4">
-        {/* Foto */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full overflow-hidden border"
           style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
           {member.photo_url ? (
@@ -41,25 +47,13 @@ function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Reco
             </span>
           )}
         </div>
-
-        {/* Apelido / nome curto */}
         <span className="w-24 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
           {(member.surname ?? member.full_name.split(" ")[0]).toUpperCase().slice(0, 10)}
         </span>
-
-        {/* Nome completo */}
         <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>
           {member.full_name.toUpperCase()}
         </span>
-
-        {/* Badges e ações */}
         <div className="flex items-center gap-4 shrink-0" onClick={e => e.preventDefault()}>
-          {member.staff_role_id && (
-            <span className="font-mono text-xs rounded px-2 py-0.5"
-              style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-              {roleMap[member.staff_role_id] ?? "—"}
-            </span>
-          )}
           {currentStint?.teams && (
             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
               {currentStint.teams.abbreviation ?? currentStint.teams.full_name}
@@ -86,7 +80,7 @@ function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Reco
 export default function ComissaoClient({ members: initialMembers, roles }: { members: Member[]; roles: Role[] }) {
   const [members] = useState(initialMembers);
   const [search, setSearch] = useState("");
-  const [roleFilter, setRoleFilter] = useState("");
+  const [activeTab, setActiveTab] = useState<string>(ROLE_TABS[0].id);
   const [modalOpen, setModalOpen] = useState(false);
 
   const roleMap = Object.fromEntries(roles.map(r => [r.id, r.full_name]));
@@ -94,9 +88,13 @@ export default function ComissaoClient({ members: initialMembers, roles }: { mem
   const filtered = members.filter(m => {
     const name = `${m.full_name} ${m.surname ?? ""}`.toLowerCase();
     const matchSearch = !search || name.includes(search.toLowerCase());
-    const matchRole = !roleFilter || m.staff_role_id === roleFilter;
+    const matchRole = m.staff_role_id === activeTab;
     return matchSearch && matchRole;
   });
+
+  const countByRole = Object.fromEntries(
+    ROLE_TABS.map(tab => [tab.id, members.filter(m => m.staff_role_id === tab.id).length])
+  );
 
   const ic = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--color-brand)]";
   const is = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -104,11 +102,25 @@ export default function ComissaoClient({ members: initialMembers, roles }: { mem
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
       {/* Header bar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b px-8"
+      <div className="flex h-14 shrink-0 items-center border-b px-8"
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-          {filtered.length} {filtered.length === 1 ? "membro" : "membros"}
-        </p>
+        <div className="flex flex-1 items-center justify-center gap-6">
+          {ROLE_TABS.map(tab => (
+            <button key={tab.id} type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-2 font-mono text-sm transition-opacity"
+              style={{ color: activeTab === tab.id ? "var(--color-brand)" : "#A6A6A6" }}>
+              {tab.label}
+              <span className="font-mono text-xs rounded px-1.5 py-0.5"
+                style={{
+                  backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
+                  color: activeTab === tab.id ? "var(--color-brand)" : "#555",
+                }}>
+                {countByRole[tab.id] ?? 0}
+              </span>
+            </button>
+          ))}
+        </div>
         <button type="button" onClick={() => setModalOpen(true)}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
           style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
@@ -119,21 +131,21 @@ export default function ComissaoClient({ members: initialMembers, roles }: { mem
 
       {/* Conteúdo */}
       <div className="flex-1 p-6 md:p-8">
-        <div className="mb-6 flex flex-wrap gap-3">
+        <div className="mb-6">
           <input type="text" placeholder="Buscar membro…" value={search}
             onChange={e => setSearch(e.target.value)}
-            className={`${ic} flex-1 min-w-[200px]`} style={is} />
-          <select value={roleFilter} onChange={e => setRoleFilter(e.target.value)} className={ic} style={is}>
-            <option value="">Todas as funções</option>
-            {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
-          </select>
+            className={`${ic} w-full max-w-md`} style={is} />
         </div>
+
+        <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          {filtered.length} {filtered.length === 1 ? "membro" : "membros"}
+        </p>
 
         {filtered.length === 0 ? (
           <div className="flex items-center justify-center rounded-xl border py-16"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
             <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
-              {search ? "Nenhum membro encontrado." : "Nenhum membro cadastrado ainda."}
+              {search ? "Nenhum membro encontrado." : "Nenhum membro cadastrado nesta função."}
             </p>
           </div>
         ) : (

@@ -13,7 +13,7 @@ export default async function ArbitrosPage() {
 
   const { data: referees } = await supabase
     .from("referees")
-    .select("id, full_name, surname, photo_url, profile_public, birth_date")
+    .select("id, full_name, surname, photo_url, profile_public, birth_date, referee_role_id")
     .eq("organization_id", profile?.organization_id ?? "")
     .order("full_name");
 
