@@ -47,8 +47,8 @@ function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Reco
             </span>
           )}
         </div>
-        <span className="w-24 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
-          {(member.surname ?? member.full_name.split(" ")[0]).toUpperCase().slice(0, 10)}
+        <span className="min-w-[4rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+          {(member.surname ?? member.full_name.split(" ")[0]).toUpperCase()}
         </span>
         <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>
           {member.full_name.toUpperCase()}

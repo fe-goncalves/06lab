@@ -38,8 +38,8 @@ function VenueRow({ venue, isFirst }: { venue: Venue; isFirst: boolean }) {
           )}
         </div>
 
-        <span className="w-24 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
-          {(venue.short_name ?? venue.full_name).toUpperCase().slice(0, 8)}
+        <span className="min-w-[4rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+          {(venue.short_name ?? venue.full_name).toUpperCase()}
         </span>
 
         <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>

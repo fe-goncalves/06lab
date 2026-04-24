@@ -48,11 +48,11 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
       {/* Header bar — igual ao dashboard */}
       <div
-        className="flex h-14 shrink-0 items-center justify-center border-b px-8"
+        className="flex h-14 shrink-0 items-center border-b px-8"
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
       >
         {/* Abas centralizadas */}
-        <div className="flex items-center justify-center gap-8">
+        <div className="flex flex-1 items-center justify-center gap-8">
           <button
             type="button"
             onClick={() => setActiveTab("male")}
@@ -100,29 +100,30 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
           </button>
         </div>
 
+        {/* Direita — nova equipe */}
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+        >
+          <Plus size={15} strokeWidth={2.5} />
+          Nova equipe
+        </button>
       </div>
 
       {/* Conteúdo */}
       <div className="flex-1 p-6 md:p-8">
         {/* Search */}
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-6">
           <input
             type="text"
             placeholder="Buscar equipe..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className={`${ic} w-full max-w-md flex-1`}
+            className={`${ic} w-full max-w-md`}
             style={is}
           />
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
-          >
-            <Plus size={15} strokeWidth={2.5} />
-            Nova equipe
-          </button>
         </div>
 
         {/* Contagem */}
@@ -201,7 +202,7 @@ function TeamRow({ team, isFirst }: { team: Team; isFirst: boolean }) {
         </div>
 
         {/* Sigla */}
-        <span className="w-16 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+        <span className="min-w-[3rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
           {team.abbreviation?.toUpperCase() ?? team.full_name.slice(0, 3).toUpperCase()}
         </span>
 

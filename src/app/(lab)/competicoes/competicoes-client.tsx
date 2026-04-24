@@ -162,9 +162,9 @@ function CompetitionRow({ competition, isFirst }: { competition: Competition; is
         </div>
 
         {/* Nome curto */}
-        <span className="w-20 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
-          {(competition.short_name ?? competition.full_name).toUpperCase().slice(0, 8)}
-        </span>
+        <span className="min-w-[4rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+              {(competition.short_name ?? competition.full_name).toUpperCase()}
+            </span>
 
         {/* Nome completo */}
         <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>

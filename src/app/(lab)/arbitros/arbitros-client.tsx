@@ -45,8 +45,8 @@ function RefereeRow({ referee, isFirst }: { referee: Referee; isFirst: boolean }
             </span>
           )}
         </div>
-        <span className="w-24 shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
-          {(referee.surname ?? referee.full_name.split(" ")[0]).toUpperCase().slice(0, 10)}
+        <span className="min-w-[4rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+          {(referee.surname ?? referee.full_name.split(" ")[0]).toUpperCase()}
         </span>
         <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>
           {referee.full_name.toUpperCase()}
