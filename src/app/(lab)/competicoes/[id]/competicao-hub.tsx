@@ -7,7 +7,7 @@ import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
-import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao } from "./edicoes/actions";
+import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 
 type Competition = any;
@@ -77,7 +77,7 @@ export default function CompeticaoHub({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"jogos" | "competicao" | "classificacao" | "artilharia" | "configuracoes">("jogos");
+  const [activeTab, setActiveTab] = useState<"jogos" | "competicao" | "classificacao" | "artilharia" | "premiacoes" | "configuracoes">("jogos");
   const [selectedEditionId, setSelectedEditionId] = useState<string>(
     searchParams.get("edicao") ?? editions[0]?.id ?? ""
   );
@@ -125,6 +125,15 @@ export default function CompeticaoHub({
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
+
+  // Premiações
+  const [awards, setAwards] = useState<any[]>([]);
+  const [loadingAwards, setLoadingAwards] = useState(false);
+  const [awardType, setAwardType] = useState("");
+  const [awardAthleteId, setAwardAthleteId] = useState("");
+  const [awardTeamId, setAwardTeamId] = useState("");
+  const [savingAward, setSavingAward] = useState(false);
+
 
   async function getPhaseIds(supabase: any, editionId: string): Promise<string[]> {
     const { data } = await supabase.from("phases").select("id").eq("edition_id", editionId);
@@ -182,6 +191,22 @@ export default function CompeticaoHub({
       supabase.from("venues").select("id, full_name").eq("organization_id", orgId).order("full_name"),
     ]);
 
+
+    const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
+
+  async function loadEditionAthletes(editionId: string) {
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("edition_roster_entries")
+      .select("athlete_id, edition_team_id, athletes(id, full_name, surname), edition_teams(team_id, teams(full_name))")
+      .eq("member_type", "athlete")
+      .eq("status", "approved")
+      .in("edition_team_id",
+        (await supabase.from("edition_teams").select("id").eq("edition_id", editionId)).data?.map((e: any) => e.id) ?? []
+      );
+    setEditionAthletes(data ?? []);
+  }
+
     const phasesResult = (phasesData as Phase[]) ?? [];
     const currentPhase = phasesResult.find(p => p.is_current) ?? phasesResult[0];
     if (currentPhase) setSelectedPhaseId(currentPhase.id);
@@ -198,7 +223,11 @@ export default function CompeticaoHub({
   }, [orgId]);
 
   useEffect(() => {
-    if (selectedEditionId) loadEditionData(selectedEditionId);
+    if (selectedEditionId) {
+      loadEditionData(selectedEditionId);
+      loadAwards(selectedEditionId);
+      loadEditionAthletes(selectedEditionId);
+    }
   }, [selectedEditionId, loadEditionData]);
 
   // Fase selecionada no modal de nova partida
@@ -239,6 +268,18 @@ export default function CompeticaoHub({
       setNewMatchTeamB("");
     }
     await loadEditionData(selectedEditionId);
+  }
+
+  async function loadAwards(editionId: string) {
+    setLoadingAwards(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("edition_awards")
+      .select("id, award_type, athlete_id, winning_team_id, athletes(id, full_name, surname, photo_url), teams:teams!edition_awards_winning_team_id_fkey(id, full_name, abbreviation, logo_url)")
+      .eq("edition_id", editionId)
+      .order("award_type");
+    setAwards(data ?? []);
+    setLoadingAwards(false);
   }
 
   async function handleDeleteMatch(matchId: string) {
@@ -357,11 +398,12 @@ export default function CompeticaoHub({
 
           {/* Abas */}
           <div className="flex gap-6">
-            {[
+          {[
               { key: "jogos", label: "JOGOS" },
               { key: "competicao", label: "COMPETIÇÃO" },
               { key: "classificacao", label: "CLASSIFICAÇÃO" },
               { key: "artilharia", label: "ARTILHARIA" },
+              { key: "premiacoes", label: "PREMIAÇÕES" },
               { key: "configuracoes", label: "CONFIGURAÇÕES" },
             ].map(tab => (
               <button key={tab.key} type="button"
@@ -866,6 +908,142 @@ export default function CompeticaoHub({
           </div>
         )}
 
+        {/* ABA PREMIAÇÕES */}
+        {activeTab === "premiacoes" && (
+          <div className="space-y-6">
+            {/* Formulário de atribuição */}
+            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                Atribuir premiação
+              </h2>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo</span>
+                  <select value={awardType} onChange={e => { setAwardType(e.target.value); setAwardAthleteId(""); setAwardTeamId(""); }}
+                    className={inputClass} style={inputStyle}>
+                    <option value="">Selecione…</option>
+                    <optgroup label="Individual">
+                      <option value="top_scorer">Artilheiro</option>
+                      <option value="top_assists">Garçom</option>
+                      <option value="mvp">MVP</option>
+                      <option value="best_goalkeeper">Melhor Goleiro</option>
+                      <option value="revelation">Revelação</option>
+                      <option value="best_defense">Melhor Defesa</option>
+                      <option value="best_performance">Melhor Desempenho</option>
+                    </optgroup>
+                    <optgroup label="Coletiva">
+                      <option value="champion">Campeão</option>
+                      <option value="runner_up">Vice-campeão</option>
+                      <option value="third_place">Terceiro Lugar</option>
+                    </optgroup>
+                  </select>
+                </label>
+
+                {awardType && !["champion", "runner_up", "third_place"].includes(awardType) && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Atleta</span>
+                    <select value={awardAthleteId} onChange={e => setAwardAthleteId(e.target.value)}
+                      className={inputClass} style={inputStyle}>
+                      <option value="">Selecione…</option>
+                      {editionTeams.map((et: any) => {
+                        const athletes = editionAthletes.filter((a: any) => a.edition_teams?.team_id === et.team_id);
+                        if (athletes.length === 0) return null;
+                        return (
+                          <optgroup key={et.id} label={et.teams?.full_name ?? "Equipe"}>
+                            {athletes.map((a: any) => (
+                              <option key={a.athlete_id} value={a.athlete_id}>
+                                {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      })}
+                    </select>
+                  </label>
+                )}
+
+                {awardType && ["champion", "runner_up", "third_place"].includes(awardType) && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe</span>
+                    <select value={awardTeamId} onChange={e => setAwardTeamId(e.target.value)}
+                      className={inputClass} style={inputStyle}>
+                      <option value="">Selecione…</option>
+                      {editionTeams.map((et: any) => (
+                        <option key={et.team_id} value={et.team_id}>
+                          {et.teams?.full_name ?? "—"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                <div className="flex items-end">
+                  <button type="button" onClick={handleAtribuirPremiacao} disabled={savingAward || !awardType}
+                    className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                    {savingAward ? "Salvando…" : "Atribuir"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de premiações */}
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+              <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+                <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                  Premiações atribuídas ({awards.length})
+                </h2>
+              </div>
+              {loadingAwards ? (
+                <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Carregando…</p>
+              ) : awards.length === 0 ? (
+                <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma premiação atribuída.</p>
+              ) : (
+                awards.map((award: any, idx: number) => {
+                  const AWARD_LABELS: Record<string, string> = {
+                    top_scorer: "Artilheiro", top_assists: "Garçom", mvp: "MVP",
+                    best_goalkeeper: "Melhor Goleiro", revelation: "Revelação",
+                    best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
+                    champion: "Campeão", runner_up: "Vice-campeão", third_place: "Terceiro Lugar",
+                  };
+                  const isColetiva = ["champion", "runner_up", "third_place"].includes(award.award_type);
+                  const name = isColetiva
+                    ? (award.teams?.full_name ?? "—")
+                    : (award.athletes?.surname ?? award.athletes?.full_name ?? "—");
+                  const photo = isColetiva ? award.teams?.logo_url : award.athletes?.photo_url;
+
+                  return (
+                    <div key={award.id} className="flex items-center gap-4 px-5 py-3"
+                      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                        style={{ backgroundColor: "rgba(191,242,5,0.1)" }}>
+                        {photo ? (
+                          <img src={photo} alt="" className="h-8 w-8 rounded object-contain" />
+                        ) : (
+                          <span className="text-base">🏆</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>
+                          {AWARD_LABELS[award.award_type] ?? award.award_type}
+                        </p>
+                        <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                          {name}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => handleRemoverPremiacao(award.id)}
+                        className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                        Remover
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ABA CONFIGURAÇÕES */}
         {activeTab === "configuracoes" && (
           <EdicaoConfigTab
@@ -1023,4 +1201,29 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName }: { selectedE
       </button>
     </div>
   );
+}
+
+async function handleAtribuirPremiacao() {
+  if (!awardType) { toast("error", "Selecione o tipo de premiação."); return; }
+  const isColetiva = ["champion", "runner_up", "third_place"].includes(awardType);
+  if (isColetiva && !awardTeamId) { toast("error", "Selecione a equipe."); return; }
+  if (!isColetiva && !awardAthleteId) { toast("error", "Selecione o atleta."); return; }
+  setSavingAward(true);
+  const fd = new FormData();
+  fd.append("award_type", awardType);
+  if (isColetiva) fd.append("winning_team_id", awardTeamId);
+  else fd.append("athlete_id", awardAthleteId);
+  const result = await atribuirPremiacao(selectedEditionId, fd);
+  setSavingAward(false);
+  if ("error" in result) { toast("error", result.error); return; }
+  toast("success", "Premiação atribuída.");
+  setAwardType(""); setAwardAthleteId(""); setAwardTeamId("");
+  await loadAwards(selectedEditionId);
+}
+
+async function handleRemoverPremiacao(awardId: string) {
+  const result = await removerPremiacao(awardId);
+  if ("error" in result) { toast("error", result.error); return; }
+  toast("success", "Premiação removida.");
+  setAwards(prev => prev.filter((a: any) => a.id !== awardId));
 }

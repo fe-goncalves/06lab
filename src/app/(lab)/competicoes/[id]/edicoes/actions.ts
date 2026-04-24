@@ -190,3 +190,74 @@ export async function removerAtletaEdicao(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function atribuirPremiacao(
+  editionId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id, organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+  if (!profile) return { error: "Perfil não encontrado." };
+
+  const award_type = String(formData.get("award_type") ?? "").trim();
+  const athlete_id = String(formData.get("athlete_id") ?? "").trim() || null;
+  const winning_team_id = String(formData.get("winning_team_id") ?? "").trim() || null;
+
+  if (!award_type) return { error: "Tipo de premiação obrigatório." };
+  if (!athlete_id && !winning_team_id) return { error: "Atleta ou equipe é obrigatório." };
+
+  // Busca season_id e year_id da edição
+  const { data: edition } = await supabase
+    .from("competition_editions")
+    .select("season_id, seasons(year_id)")
+    .eq("id", editionId)
+    .maybeSingle();
+
+  const season_id = edition?.season_id ?? null;
+  const year_id = (edition?.seasons as any)?.year_id ?? null;
+
+  // Remove premiação anterior do mesmo tipo na edição (uma por tipo)
+  await supabase
+    .from("edition_awards")
+    .delete()
+    .eq("edition_id", editionId)
+    .eq("award_type", award_type);
+
+  const { error } = await supabase
+    .from("edition_awards")
+    .insert({
+      edition_id: editionId,
+      organization_id: profile.organization_id,
+      season_id,
+      year_id,
+      award_type,
+      athlete_id,
+      winning_team_id,
+      assigned_by: profile.id,
+      assigned_at: new Date().toISOString(),
+    });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerPremiacao(
+  awardId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("edition_awards")
+    .delete()
+    .eq("id", awardId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}

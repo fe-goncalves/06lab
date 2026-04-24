@@ -55,7 +55,7 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
   if (editionId && match.team_a_id && match.team_b_id) {
     const { data: etData } = await supabase
       .from("edition_teams")
-      .select("id, team_id, edition_roster_entries(id, athlete_id, member_type, status, athletes(id, full_name, surname, position_id, player_positions(full_name, abbreviation, is_goalkeeper)))")
+      .select("id, team_id, edition_roster_entries(id, athlete_id, member_type, status, athletes(id, full_name, surname, position_id, player_positions(full_name, abbreviation, display_order)))")
       .eq("edition_id", editionId)
       .in("team_id", [match.team_a_id, match.team_b_id]);
     editionTeamsWithAthletes = etData ?? [];
