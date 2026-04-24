@@ -23,11 +23,9 @@ export function NovoArbitroModal({
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
-  const [surname, setSurname] = useState("");
-  const [rg, setRg] = useState("");
-  const [birthDate, setBirthDate] = useState("");
-  const [profilePublic, setProfilePublic] = useState(false);
   const [refereeRoleId, setRefereeRoleId] = useState(defaultRoleId ?? REFEREE_ROLES[0].id);
+  const [phone, setPhone] = useState("");
+  const [pixKey, setPixKey] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,24 +33,16 @@ export function NovoArbitroModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setFullName(""); setSurname(""); setRg(""); setBirthDate("");
-      setProfilePublic(false); setFile(null); setError(null); setLoading(false);
+      setFullName(""); setPhone(""); setPixKey("");
+      setFile(null); setError(null); setLoading(false);
       setRefereeRoleId(defaultRoleId ?? REFEREE_ROLES[0].id);
       setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
     }
   }, [isOpen, defaultRoleId]);
 
-  // Quando a aba muda enquanto o modal está aberto
   useEffect(() => {
     if (defaultRoleId) setRefereeRoleId(defaultRoleId);
   }, [defaultRoleId]);
-
-  function applyDateMask(value: string): string {
-    const d = value.replace(/\D/g, "").slice(0, 8);
-    if (d.length <= 2) return d;
-    if (d.length <= 4) return `${d.slice(0, 2)}/${d.slice(2)}`;
-    return `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`;
-  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -67,11 +57,9 @@ export function NovoArbitroModal({
     try {
       const fd = new FormData();
       fd.append("full_name", fullName.trim());
-      fd.append("surname", surname.trim());
-      fd.append("rg", rg);
-      fd.append("birth_date", birthDate);
-      fd.append("profile_public", String(profilePublic));
       fd.append("referee_role_id", refereeRoleId);
+      fd.append("phone", phone.trim());
+      fd.append("pix_key", pixKey.trim());
       if (file) fd.append("photo", file);
       const result = await criarArbitro(fd);
       if ("error" in result) { setError(result.error); return; }
@@ -107,19 +95,12 @@ export function NovoArbitroModal({
             <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Apelido</span>
-            <input type="text" value={surname} onChange={e => setSurname(e.target.value)} className={inputClass} style={inputStyle} />
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Telefone</span>
+            <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" className={inputClass} style={inputStyle} />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>RG</span>
-            <input type="text" value={rg} onChange={e => setRg(e.target.value.replace(/[^\d.\-]/g, ""))} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Data de nascimento</span>
-            <input type="text" placeholder="DD/MM/AAAA" value={birthDate}
-              onChange={e => setBirthDate(applyDateMask(e.target.value))}
-              onPaste={e => { e.preventDefault(); setBirthDate(applyDateMask(e.clipboardData.getData("text"))); }}
-              maxLength={10} className={inputClass} style={inputStyle} />
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Chave Pix</span>
+            <input type="text" value={pixKey} onChange={e => setPixKey(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" className={inputClass} style={inputStyle} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Foto</span>
@@ -130,10 +111,6 @@ export function NovoArbitroModal({
               {file ? file.name : "Escolher foto…"}
             </button>
             {previewUrl && <img src={previewUrl} alt="" className="mt-2 mx-auto h-24 w-24 rounded-full object-cover border" style={{ borderColor: "var(--color-border)" }} />}
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={profilePublic} onChange={e => setProfilePublic(e.target.checked)} className="h-4 w-4" />
-            <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Exibir perfil público no 06.score</span>
           </label>
           {error && <p className="text-sm" style={{ color: "var(--color-danger)" }} role="alert">{error}</p>}
           <button type="submit" disabled={loading}
