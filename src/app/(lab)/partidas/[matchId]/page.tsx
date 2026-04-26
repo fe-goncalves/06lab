@@ -20,33 +20,33 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     .eq("id", matchId)
     .maybeSingle();
 
-  if (error) {
-    console.error("MATCH ERROR:", error);
-    return <div style={{ padding: 32, color: "red" }}>Erro ao carregar partida: {error.message}</div>;
-  }
+  if (error) return <div style={{ padding: 32, color: "red" }}>Erro ao carregar partida: {error.message}</div>;
+  if (!match) return <div style={{ padding: 32, color: "white" }}>Partida não encontrada. ID: {matchId}</div>;
 
-  if (!match) {
-    return <div style={{ padding: 32, color: "white" }}>Partida não encontrada. ID: {matchId}</div>;
-  }
+  const [
+    { data: actions },
+    { data: lineups },
+    { data: venues },
+    { data: matchReferees },
+    { data: allReferees },
+  ] = await Promise.all([
+    supabase.from("match_actions")
+      .select("*, primary_athlete:athletes!match_actions_primary_athlete_id_fkey(id, full_name, surname), secondary_athlete:athletes!match_actions_secondary_athlete_id_fkey(id, full_name, surname)")
+      .eq("match_id", matchId).order("created_at"),
+    supabase.from("match_lineups")
+      .select("*, athletes(id, full_name, surname, position_id, player_positions(abbreviation))")
+      .eq("match_id", matchId),
+    supabase.from("venues")
+      .select("id, full_name")
+      .eq("organization_id", orgId).order("full_name"),
+    supabase.from("match_referees")
+      .select("id, referee_id, referee_role_id, referees(id, full_name, surname), referee_roles(id, full_name)")
+      .eq("match_id", matchId),
+    supabase.from("referees")
+      .select("id, full_name, surname, referee_role_id")
+      .eq("organization_id", orgId).order("full_name"),
+  ]);
 
-  const { data: actions } = await supabase
-    .from("match_actions")
-    .select("*, primary_athlete:athletes!match_actions_primary_athlete_id_fkey(id, full_name, surname), secondary_athlete:athletes!match_actions_secondary_athlete_id_fkey(id, full_name, surname)")
-    .eq("match_id", matchId)
-    .order("created_at");
-
-  const { data: lineups } = await supabase
-    .from("match_lineups")
-    .select("*, athletes(id, full_name, surname, position_id, player_positions(abbreviation))")
-    .eq("match_id", matchId);
-
-  const { data: venues } = await supabase
-    .from("venues")
-    .select("id, full_name")
-    .eq("organization_id", orgId)
-    .order("full_name");
-
-  // Injeta venues_list no match para o client acessar no select de local
   if (match) (match as any).venues_list = venues ?? [];
 
   const editionId = match.phases?.edition_id;
@@ -61,10 +61,6 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     editionTeamsWithAthletes = etData ?? [];
   }
 
-  const competitionId = match.phases?.competition_editions?.competition_id ?? "";
-  const edicaoId = match.phases?.edition_id ?? "";
-  const faseId = match.phases?.id ?? "";
-
   return (
     <PartidaClient
       match={match}
@@ -72,9 +68,11 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       lineups={lineups ?? []}
       editionTeamsWithAthletes={editionTeamsWithAthletes}
       venues={venues ?? []}
-      competitionId={competitionId}
-      edicaoId={edicaoId}
-      faseId={faseId}
+      competitionId={match.phases?.competition_editions?.competition_id ?? ""}
+      edicaoId={match.phases?.edition_id ?? ""}
+      faseId={match.phases?.id ?? ""}
+      matchReferees={matchReferees ?? []}
+      allReferees={allReferees ?? []}
     />
   );
 }

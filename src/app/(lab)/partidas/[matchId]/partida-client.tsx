@@ -1,9 +1,8 @@
 "use client";
 
-import { adicionarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado } from "./actions";
+import { adicionarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida } from "./actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
-import Link from "next/link";
 import { useState } from "react";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -24,7 +23,29 @@ type LineupEntry = {
   is_captain: boolean;
 };
 
+type MatchReferee = {
+  id: string;
+  referee_id: string;
+  referee_role_id: string;
+  referees: { id: string; full_name: string; surname: string | null } | null;
+  referee_roles: { id: string; full_name: string } | null;
+};
+
+type Referee = {
+  id: string;
+  full_name: string;
+  surname: string | null;
+  referee_role_id: string | null;
+};
+
 // ─── Constantes ──────────────────────────────────────────────────────────────
+
+const REFEREE_ROLES = [
+  { id: "e9bd3156-58b3-4758-8c6e-5d48e53228e0", label: "Árbitro" },
+  { id: "556252c8-8365-466b-9a8e-464364a09902", label: "Assistente" },
+  { id: "4dba8c5a-025f-4487-b4e8-60a16c104b2d", label: "Mesário" },
+  { id: "0833c834-6548-4775-affb-48bd095d8cde", label: "Staff" },
+];
 
 const ACTION_LABELS: Record<string, string> = {
   goal: "Gol",
@@ -76,18 +97,21 @@ export default function PartidaClient({
   competitionId,
   edicaoId,
   faseId,
+  matchReferees: initialMatchReferees,
+  allReferees,
 }: {
   match: any;
   actions: any[];
   lineups: any[];
   editionTeamsWithAthletes: any[];
-  venues: any[];
   competitionId: string;
   edicaoId: string;
   faseId: string;
+  matchReferees?: MatchReferee[];
+  allReferees?: Referee[];
 }) {
   const [activeTab, setActiveTab] = useState<"informacao" | "formacoes" | "posjogo" | "midia">("posjogo");
-  const [actions, setActions] = useState<any[]>(initialActions);
+  const [actions, setActions] = useState<any[]>(initialActions ?? []);
   const [scoreA, setScoreA] = useState<number>(match.score_a ?? 0);
   const [scoreB, setScoreB] = useState<number>(match.score_b ?? 0);
   const [status, setStatus] = useState<string>(match.status ?? "scheduled");
@@ -97,6 +121,12 @@ export default function PartidaClient({
   const [matchTime, setMatchTime] = useState<string>(match.match_time?.slice(0, 5) ?? "");
   const [venueId, setVenueId] = useState<string>(match.venue_id ?? "");
   const [motmAthleteId, setMotmAthleteId] = useState<string>(match.motm_athlete_id ?? "");
+
+  // Árbitros
+  const [matchReferees, setMatchReferees] = useState<MatchReferee[]>(initialMatchReferees ?? []);
+  const [savingReferees, setSavingReferees] = useState(false);
+  const [addRefereeId, setAddRefereeId] = useState("");
+  const [addRefereeRoleId, setAddRefereeRoleId] = useState("");
 
   // Ação
   const [showActionModal, setShowActionModal] = useState(false);
@@ -117,7 +147,7 @@ export default function PartidaClient({
   // Formações
   const [lineups, setLineups] = useState<Record<string, LineupEntry>>(() => {
     const map: Record<string, LineupEntry> = {};
-    initialLineups.forEach((l: any) => {
+    (initialLineups ?? []).forEach((l: any) => {
       map[l.athlete_id] = {
         athlete_id: l.athlete_id,
         is_present: l.is_present ?? false,
@@ -128,9 +158,8 @@ export default function PartidaClient({
     return map;
   });
 
-  // Capitões por equipe
   const [captainA, setCaptainA] = useState<string>(() => {
-    return initialLineups.find((l: any) => l.is_captain && true)?.athlete_id ?? "";
+    return (initialLineups ?? []).find((l: any) => l.is_captain)?.athlete_id ?? "";
   });
   const [captainB, setCaptainB] = useState<string>("");
   const [savingLineups, setSavingLineups] = useState(false);
@@ -143,9 +172,10 @@ export default function PartidaClient({
   const halfDuration: number = match.phases?.half_duration_minutes ?? 25;
   const roundName: string = match.rounds?.custom_label ?? match.rounds?.name ?? "Rodada";
   const competitionName: string = match.phases?.competition_editions?.competitions?.full_name ?? "Competição";
+  const safeAllReferees: Referee[] = allReferees ?? [];
 
   function getEditionTeam(teamId: string) {
-    return editionTeamsWithAthletes.find((e: any) => e.team_id === teamId);
+    return (editionTeamsWithAthletes ?? []).find((e: any) => e.team_id === teamId);
   }
 
   function getAthletes(teamId: string): Athlete[] {
@@ -170,7 +200,7 @@ export default function PartidaClient({
 
   function toggleLineup(athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) {
     setLineups(prev => {
-      const current = prev[athleteId] ?? { athlete_id: athleteId, is_present: false, is_captain: false, played_as_goalkeeper: false };
+      const current = prev[athleteId] ?? { athlete_id: athleteId, is_present: false, is_captain: false, is_starter: false };
       return { ...prev, [athleteId]: { ...current, [field]: !current[field] } };
     });
   }
@@ -190,6 +220,34 @@ export default function PartidaClient({
     setSaving(false);
     if ("error" in r) { toast("error", r.error); return; }
     toast("success", "Informações salvas.");
+  }
+
+  async function handleSaveReferees() {
+    setSavingReferees(true);
+    const entries = matchReferees.map(r => ({ referee_id: r.referee_id, referee_role_id: r.referee_role_id }));
+    const result = await salvarArbitrosPartida(match.id, entries);
+    setSavingReferees(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Árbitros salvos.");
+  }
+
+  function handleAddReferee() {
+    if (!addRefereeId || !addRefereeRoleId) { toast("error", "Selecione árbitro e função."); return; }
+    const already = matchReferees.find(r => r.referee_id === addRefereeId);
+    if (already) { toast("error", "Árbitro já adicionado."); return; }
+    const referee = safeAllReferees.find(r => r.id === addRefereeId);
+    setMatchReferees(prev => [...prev, {
+      id: crypto.randomUUID(),
+      referee_id: addRefereeId,
+      referee_role_id: addRefereeRoleId,
+      referees: referee ? { id: referee.id, full_name: referee.full_name, surname: referee.surname } : null,
+      referee_roles: null,
+    }]);
+    setAddRefereeId(""); setAddRefereeRoleId("");
+  }
+
+  function handleRemoveReferee(refereeId: string) {
+    setMatchReferees(prev => prev.filter(r => r.referee_id !== refereeId));
   }
 
   async function handlePublish() {
@@ -277,9 +335,7 @@ export default function PartidaClient({
             { label: roundName },
           ]} />
 
-          {/* Placar */}
           <div className="mb-4 flex items-center justify-between gap-4">
-            {/* Time A */}
             <div className="flex items-center gap-3 min-w-0">
               {teamA?.logo_url ? (
                 <img src={teamA.logo_url} alt="" className="h-10 w-10 shrink-0 object-contain" />
@@ -290,15 +346,11 @@ export default function PartidaClient({
                 {teamA?.full_name ?? "A definir"}
               </span>
             </div>
-
-            {/* Placar central */}
             <div className="flex items-center gap-3 shrink-0">
               <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreA}</span>
               <span className="font-display text-2xl" style={{ color: "var(--color-text-secondary)" }}>—</span>
               <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreB}</span>
             </div>
-
-            {/* Time B */}
             <div className="flex items-center gap-3 min-w-0 justify-end">
               <span className="font-display text-lg font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
                 {teamB?.full_name ?? "A definir"}
@@ -311,7 +363,6 @@ export default function PartidaClient({
             </div>
           </div>
 
-          {/* Info da partida */}
           <div className="mb-3 flex items-center justify-center gap-3 flex-wrap">
             <span className="font-mono text-xs rounded px-2 py-0.5"
               style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
@@ -330,9 +381,8 @@ export default function PartidaClient({
             )}
           </div>
 
-          {/* Abas */}
           <div className="flex gap-6">
-          {[
+            {[
               { key: "informacao", label: "INFORMAÇÃO" },
               { key: "formacoes", label: "FORMAÇÕES" },
               { key: "posjogo", label: "PÓS-JOGO" },
@@ -423,6 +473,66 @@ export default function PartidaClient({
               </select>
             </div>
 
+            {/* Árbitros */}
+            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                Árbitros
+              </h2>
+
+              {matchReferees.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  {matchReferees.map(r => (
+                    <div key={r.referee_id} className="flex items-center gap-3 rounded-lg border px-3 py-2"
+                      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                          {r.referees?.surname ?? r.referees?.full_name ?? "—"}
+                        </p>
+                        <p className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
+                          {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? r.referee_roles?.full_name ?? "—"}
+                        </p>
+                      </div>
+                      <button type="button" onClick={() => handleRemoveReferee(r.referee_id)}
+                        className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                        Remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2 flex-wrap">
+                <select value={addRefereeId} onChange={e => setAddRefereeId(e.target.value)}
+                  className={`${inputClass} flex-1 min-w-[140px]`} style={inputStyle}>
+                  <option value="">Selecione árbitro…</option>
+                  {safeAllReferees.map(r => (
+                    <option key={r.id} value={r.id}>{r.surname ?? r.full_name}</option>
+                  ))}
+                </select>
+                <select value={addRefereeRoleId} onChange={e => setAddRefereeRoleId(e.target.value)}
+                  className={`${inputClass} flex-1 min-w-[120px]`} style={inputStyle}>
+                  <option value="">Função…</option>
+                  {REFEREE_ROLES.map(r => (
+                    <option key={r.id} value={r.id}>{r.label}</option>
+                  ))}
+                </select>
+                <button type="button" onClick={handleAddReferee}
+                  className="rounded-lg border px-3 py-2 text-sm font-medium"
+                  style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                  + Adicionar
+                </button>
+              </div>
+
+              {matchReferees.length > 0 && (
+                <button type="button" onClick={handleSaveReferees} disabled={savingReferees}
+                  className="mt-4 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                  {savingReferees ? "Salvando…" : "Salvar árbitros"}
+                </button>
+              )}
+            </div>
+
             <button type="button" onClick={handleSaveInfo} disabled={saving}
               className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
               style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
@@ -444,15 +554,12 @@ export default function PartidaClient({
                 return (
                   <div key={teamId} className="rounded-xl border overflow-hidden"
                     style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                    {/* Header equipe */}
                     <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
                       {team?.logo_url && <img src={team.logo_url} alt="" className="h-7 w-7 object-contain" />}
                       <h2 className="font-mono text-xs uppercase tracking-widest flex-1" style={{ color: "var(--color-text-secondary)" }}>
                         {team?.full_name ?? "Equipe"}
                       </h2>
                     </div>
-
-                    {/* Capitão */}
                     <div className="px-5 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
                       <label className="flex flex-col gap-1">
                         <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Capitão</span>
@@ -466,20 +573,14 @@ export default function PartidaClient({
                         </select>
                       </label>
                     </div>
-
-                    {/* Header colunas */}
                     <div className="flex items-center px-5 py-2 gap-2 border-b" style={{ borderColor: "var(--color-border)" }}>
                       <span className="flex-1 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Atleta</span>
                       <span className="w-16 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Presente</span>
                       <span className="w-16 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Titular</span>
                     </div>
-
-                    {/* Atletas por posição */}
                     <div className="px-2 py-1">
                       {posGroups.length === 0 ? (
-                        <p className="px-3 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                          Nenhum atleta inscrito.
-                        </p>
+                        <p className="px-3 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum atleta inscrito.</p>
                       ) : (
                         posGroups.map(group => (
                           <div key={group.label}>
@@ -546,7 +647,6 @@ export default function PartidaClient({
         {/* ABA PÓS-JOGO */}
         {activeTab === "posjogo" && (
           <div>
-            {/* Placar + publicação */}
             <div className="mb-6 rounded-xl border p-5"
               style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -561,10 +661,7 @@ export default function PartidaClient({
                     {teamB?.logo_url && <img src={teamB.logo_url} alt="" className="h-10 w-10 object-contain" />}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handlePublish}
-                  disabled={publishing}
+                <button type="button" onClick={handlePublish} disabled={publishing}
                   className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
                   style={{
                     backgroundColor: published ? "rgba(191,242,5,0.15)" : "var(--color-brand)",
@@ -576,7 +673,6 @@ export default function PartidaClient({
               </div>
             </div>
 
-            {/* Botões de ação rápida */}
             <div className="mb-6 grid grid-cols-4 gap-3 sm:grid-cols-8">
               {Object.entries(ACTION_LABELS).map(([key, label]) => (
                 <button key={key} type="button"
@@ -592,7 +688,6 @@ export default function PartidaClient({
               ))}
             </div>
 
-            {/* Linha do tempo */}
             {actions.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem ações</p>
@@ -631,9 +726,8 @@ export default function PartidaClient({
           </div>
         )}
 
-        
-      {/* ABA MÍDIA */}
-      {activeTab === "midia" && (
+        {/* ABA MÍDIA */}
+        {activeTab === "midia" && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Mídia</p>
             <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
@@ -648,8 +742,7 @@ export default function PartidaClient({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-md rounded-xl border shadow-xl"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            <div className="flex items-center justify-between border-b px-6 py-4"
-              style={{ borderColor: "var(--color-border)" }}>
+            <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
               <div className="flex items-center gap-3">
                 <span className="text-2xl">{ACTION_EMOJI[actionType]}</span>
                 <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
@@ -659,16 +752,13 @@ export default function PartidaClient({
               <button type="button" onClick={() => setShowActionModal(false)}
                 style={{ color: "var(--color-text-secondary)" }}>✕</button>
             </div>
-
             <div className="px-6 py-4 space-y-4">
-              {/* Seletor de tipo */}
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo de ação</span>
                 <select value={actionType} onChange={e => { setActionType(e.target.value); setIsOwnGoal(false); }} className={inputClass} style={inputStyle}>
                   {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </label>
-
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe</span>
                 <select value={actionTeamId} onChange={e => { setActionTeamId(e.target.value); setActionAthleteId(""); setActionAssistId(""); }} className={inputClass} style={inputStyle}>
@@ -676,7 +766,6 @@ export default function PartidaClient({
                   {teamB && <option value={teamB.id}>{teamB.full_name}</option>}
                 </select>
               </label>
-
               <label className="flex flex-col gap-1">
                 <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Período</span>
                 <select value={actionPeriod} onChange={e => setActionPeriod(e.target.value)} className={inputClass} style={inputStyle}>
@@ -684,7 +773,6 @@ export default function PartidaClient({
                   <option value="second">2º Tempo</option>
                 </select>
               </label>
-
               {needsMinute && (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Minuto</span>
@@ -692,7 +780,6 @@ export default function PartidaClient({
                     onChange={e => setActionMinute(e.target.value)} className={inputClass} style={inputStyle} />
                 </label>
               )}
-
               {needsAthlete && (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Atleta</span>
@@ -704,7 +791,6 @@ export default function PartidaClient({
                   </select>
                 </label>
               )}
-
               {isGoal && (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo de gol</span>
@@ -717,7 +803,6 @@ export default function PartidaClient({
                   </select>
                 </label>
               )}
-
               {isGoal && !isOwnGoal && (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Assistência</span>
@@ -729,7 +814,6 @@ export default function PartidaClient({
                   </select>
                 </label>
               )}
-
               {needsMiss && (
                 <label className="flex flex-col gap-1">
                   <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Resultado</span>
@@ -741,10 +825,8 @@ export default function PartidaClient({
                   </select>
                 </label>
               )}
-
               {actionError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
             </div>
-
             <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
               <button type="button" onClick={() => setShowActionModal(false)}
                 className="rounded-lg border px-4 py-2 text-sm"

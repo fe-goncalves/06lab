@@ -382,3 +382,29 @@ export async function publicarResultado(
 
   return { success: true };
 }
+
+export async function salvarArbitrosPartida(
+  matchId: string,
+  entries: { referee_id: string; referee_role_id: string }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  // Remove todos e reinserge
+  const { error: deleteError } = await supabase
+    .from("match_referees")
+    .delete()
+    .eq("match_id", matchId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  if (entries.length === 0) return { success: true };
+
+  const { error } = await supabase
+    .from("match_referees")
+    .insert(entries.map(e => ({ match_id: matchId, referee_id: e.referee_id, referee_role_id: e.referee_role_id })));
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
