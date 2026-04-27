@@ -18,7 +18,7 @@ export default async function EquipeEdicaoPage({
 
   const orgId = profile?.organization_id ?? "";
 
-  // Busca edition_team
+  // Busca edition_team da equipe atual
   const { data: editionTeam } = await supabase
     .from("edition_teams")
     .select("id, team_id, arrival_origin, teams(id, full_name, abbreviation, logo_url, primary_color, secondary_color)")
@@ -28,55 +28,74 @@ export default async function EquipeEdicaoPage({
 
   if (!editionTeam) redirect(`/competicoes/${competitionId}`);
 
-  // Busca competição e edição para breadcrumb
-  const [{ data: competition }, { data: edition }] = await Promise.all([
-    supabase.from("competitions").select("id, full_name, short_name").eq("id", competitionId).maybeSingle(),
+  const [
+    { data: competition },
+    { data: edition },
+    { data: rosterEntries },
+    { data: allAthletes },
+    { data: currentStaff },
+    { data: allEditionTeams },
+    { data: freeAgentPool },
+    { data: positions },
+  ] = await Promise.all([
+    supabase.from("competitions")
+      .select("id, full_name, short_name")
+      .eq("id", competitionId).maybeSingle(),
+
     supabase.from("competition_editions")
       .select("id, seasons(name)")
       .eq("id", edicaoId).maybeSingle(),
+
+    supabase.from("edition_roster_entries")
+      .select("id, member_type, status, submitted_at, reviewed_at, athlete_id, staff_member_id, position_id_at_inscription, position_label_at_inscription, athletes(id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
+      .eq("edition_team_id", editionTeam.id)
+      .order("member_type")
+      .order("submitted_at"),
+
+    // Todos os atletas da organização para o modal de adicionar
+    supabase.from("athletes")
+      .select("id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation)")
+      .eq("organization_id", orgId)
+      .order("full_name"),
+
+    // Comissão com vínculo atual na equipe
+    supabase.from("staff_team_stints")
+      .select("staff_member_id, staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
+      .eq("team_id", teamId)
+      .eq("is_current", true),
+
+    // Todas as edition_teams desta edição exceto a atual e sem clube (para transferência)
+    supabase.from("edition_teams")
+      .select("id, team_id, is_free_agent_pool, teams(id, full_name, abbreviation, logo_url)")
+      .eq("edition_id", edicaoId)
+      .eq("is_free_agent_pool", false)
+      .neq("team_id", teamId),
+
+    // Pool sem clube desta edição
+    supabase.from("edition_teams")
+      .select("id, team_id")
+      .eq("edition_id", edicaoId)
+      .eq("is_free_agent_pool", true)
+      .maybeSingle(),
+
+    supabase.from("player_positions")
+      .select("id, full_name, abbreviation")
+      .eq("sport_slug", "football7")
+      .order("display_order"),
   ]);
 
-  // Busca atletas e comissão inscritos
-  const { data: rosterEntries } = await supabase
-    .from("edition_roster_entries")
-    .select("id, member_type, status, submitted_at, reviewed_at, athlete_id, staff_member_id, position_id_at_inscription, position_label_at_inscription, athletes(id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
-    .eq("edition_team_id", editionTeam.id)
-    .order("member_type")
-    .order("submitted_at");
-
-  // Busca atletas disponíveis (vínculo atual com a equipe, não inscritos ainda)
-  const { data: currentStints } = await supabase
-    .from("athlete_team_stints")
-    .select("athlete_id, athletes(id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation))")
-    .eq("team_id", teamId)
-    .eq("is_current", true);
-
-  // Busca comissão disponível
-  const { data: currentStaff } = await supabase
-    .from("staff_team_stints")
-    .select("staff_member_id, staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
-    .eq("team_id", teamId)
-    .eq("is_current", true);
-
-  // Busca posições
-  const { data: positions } = await supabase
-    .from("player_positions")
-    .select("id, full_name, abbreviation")
-    .eq("sport_slug", "football7")
-    .order("display_order");
-
   const inscribedAthleteIds = new Set(
-    (rosterEntries ?? []).filter(e => e.member_type === "athlete").map(e => e.athlete_id)
+    (rosterEntries ?? []).filter((e: any) => e.member_type === "athlete").map((e: any) => e.athlete_id)
   );
   const inscribedStaffIds = new Set(
-    (rosterEntries ?? []).filter(e => e.member_type === "staff").map(e => e.staff_member_id)
+    (rosterEntries ?? []).filter((e: any) => e.member_type === "staff").map((e: any) => e.staff_member_id)
   );
 
-  const availableAthletes = (currentStints ?? [])
-    .map((s: any) => s.athletes)
-    .filter(Boolean)
+  // Atletas disponíveis = todos da org que ainda não estão inscritos nesta edition_team
+  const availableAthletes = (allAthletes ?? [])
     .filter((a: any) => !inscribedAthleteIds.has(a.id));
 
+  // Comissão disponível = vínculo atual na equipe, não inscritos ainda
   const availableStaff = (currentStaff ?? [])
     .map((s: any) => s.staff_members)
     .filter(Boolean)
@@ -92,6 +111,8 @@ export default async function EquipeEdicaoPage({
       rosterEntries={rosterEntries ?? []}
       availableAthletes={availableAthletes}
       availableStaff={availableStaff}
+      allEditionTeams={allEditionTeams ?? []}
+      freeAgentPoolId={freeAgentPool?.id ?? null}
       positions={positions ?? []}
     />
   );
