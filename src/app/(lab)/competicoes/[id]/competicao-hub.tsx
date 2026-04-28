@@ -615,7 +615,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               )}
 
               {/* Filtro por rodada (só aparece se uma fase classificatória estiver selecionada) */}
-              {matchFilterPhaseId && isClassificatory(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") && (
+              {matchFilterPhaseId && rounds.filter(r => r.phase_id === matchFilterPhaseId).length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Rodada:</span>
                   <button type="button"
@@ -1035,9 +1035,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     {idx + 1}
                   </span>
                   {row.athletes?.photo_url ? (
-                    <img src={row.athletes.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                    <img src={row.athletes.photo_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />
                   ) : (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold"
                       style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                       {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
@@ -1145,7 +1145,7 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
         transition: "opacity 0.15s ease",
       }}>
       <Link href={`/partidas/${match.id}`}
-        className="flex items-center gap-4 px-5 py-3 transition-colors hover:bg-[rgba(255,255,255,0.02)]">
+        className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-[rgba(255,255,255,0.02)]">
 
         {/* Status + data */}
         <div className="shrink-0 w-12 text-center">
@@ -1170,20 +1170,20 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
             {match.teams_a?.abbreviation?.toUpperCase() ?? match.teams_a?.full_name ?? "—"}
           </span>
           {match.teams_a?.logo_url ? (
-            <img src={match.teams_a.logo_url} alt="" className="h-7 w-7 shrink-0 object-contain" />
+            <img src={match.teams_a.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" />
           ) : (
-            <div className="h-7 w-7 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
+            <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
           )}
         </div>
 
         {/* Placar */}
         <div className="shrink-0 flex items-center gap-2 px-3">
-          <span className="font-display text-xl font-bold w-6 text-center"
+          <span className="font-display text-lg font-bold w-6 text-center"
             style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>
             {isScheduled ? "–" : match.score_a}
           </span>
           <span className="font-mono text-xs" style={{ color: "#333" }}>:</span>
-          <span className="font-display text-xl font-bold w-6 text-center"
+          <span className="font-display text-lg font-bold w-6 text-center"
             style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>
             {isScheduled ? "–" : match.score_b}
           </span>
@@ -1192,9 +1192,9 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
         {/* Equipe B */}
         <div className="flex flex-1 items-center gap-2 min-w-0">
           {match.teams_b?.logo_url ? (
-            <img src={match.teams_b.logo_url} alt="" className="h-7 w-7 shrink-0 object-contain" />
+            <img src={match.teams_b.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" />
           ) : (
-            <div className="h-7 w-7 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
+            <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
           )}
           <span className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
             {match.teams_b?.abbreviation?.toUpperCase() ?? match.teams_b?.full_name ?? "—"}
@@ -1213,7 +1213,7 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
       {hovered && (
         <button type="button"
           onClick={e => { e.preventDefault(); onDelete(); }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-lg border transition-colors hover:border-[var(--color-danger)]"
+          className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-lg border transition-colors hover:border-[var(--color-danger)]"
           style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
           <Trash2 size={13} strokeWidth={2} />
         </button>
@@ -1286,16 +1286,10 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
             <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} className="h-4 w-4" />
             <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Visível no 06.score</span>
           </label>
-          <div className="grid grid-cols-2 gap-4">
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Mín. atletas por equipe</span>
-              <input type="number" value={minAthletes} onChange={e => setMinAthletes(e.target.value)} className={inputClass} style={inputStyle} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Máx. atletas por equipe</span>
-              <input type="number" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)} className={inputClass} style={inputStyle} />
-            </label>
-          </div>
+          <label className="flex flex-col gap-1">
+            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Máx. atletas por equipe</span>
+            <input type="number" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)} className={inputClass} style={inputStyle} />
+          </label>
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Limite de amarelos para suspensão</span>
             <input type="number" value={yellowThreshold} onChange={e => setYellowThreshold(e.target.value)} className={inputClass} style={inputStyle} />
@@ -1324,38 +1318,74 @@ function PremiacoesTab({
   onAtribuir: () => void; onRemover: (id: string) => void;
   inputClass: string; inputStyle: any;
 }) {
+  const [activeSub, setActiveSub] = useState<"individuais" | "coletivas">("individuais");
+
   const AWARD_LABELS: Record<string, string> = {
-    top_scorer: "Artilheiro", top_assists: "Garçom", mvp: "MVP", best_goalkeeper: "Melhor Goleiro",
-    revelation: "Revelação", best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
+    top_scorer: "Artilheiro", top_assists: "Garçom", mvp: "MVP",
+    best_goalkeeper: "Melhor Goleiro", revelation: "Revelação",
+    best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
     champion: "Campeão", runner_up: "Vice-campeão", third_place: "Terceiro Lugar",
   };
 
+  const INDIVIDUAL_TYPES = ["top_scorer", "top_assists", "mvp", "best_goalkeeper", "revelation", "best_defense", "best_performance"];
+  const COLLECTIVE_TYPES = ["champion", "runner_up", "third_place"];
+
+  const isColetiva = COLLECTIVE_TYPES.includes(awardType);
+  const filteredAwards = awards.filter(a =>
+    activeSub === "individuais" ? INDIVIDUAL_TYPES.includes(a.award_type) : COLLECTIVE_TYPES.includes(a.award_type)
+  );
+
   return (
     <div className="max-w-2xl space-y-4">
+      {/* Sub-abas */}
+      <div className="flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
+        {[
+          { key: "individuais", label: "INDIVIDUAIS" },
+          { key: "coletivas", label: "COLETIVAS" },
+        ].map(sub => (
+          <button key={sub.key} type="button" onClick={() => { setActiveSub(sub.key as any); setAwardType(""); setAwardAthleteId(""); setAwardTeamId(""); }}
+            className="border-b-2 pb-3 font-mono text-xs transition-colors"
+            style={{
+              borderColor: activeSub === sub.key ? "var(--color-brand)" : "transparent",
+              color: activeSub === sub.key ? "var(--color-brand)" : "#A6A6A6",
+            }}>
+            {sub.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Atribuir */}
       <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-        <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Atribuir premiação</h2>
+        <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+          Atribuir premiação {activeSub === "individuais" ? "individual" : "coletiva"}
+        </h2>
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo</span>
-            <select value={awardType} onChange={e => { setAwardType(e.target.value); setAwardAthleteId(""); setAwardTeamId(""); }} className={inputClass} style={inputStyle}>
+            <select value={awardType} onChange={e => { setAwardType(e.target.value); setAwardAthleteId(""); setAwardTeamId(""); }}
+              className={inputClass} style={inputStyle}>
               <option value="">Selecione…</option>
-              <optgroup label="Individual">
-                <option value="top_scorer">Artilheiro</option>
-                <option value="top_assists">Garçom</option>
-                <option value="mvp">MVP</option>
-                <option value="best_goalkeeper">Melhor Goleiro</option>
-                <option value="revelation">Revelação</option>
-                <option value="best_defense">Melhor Defesa</option>
-                <option value="best_performance">Melhor Desempenho</option>
-              </optgroup>
-              <optgroup label="Coletiva">
-                <option value="champion">Campeão</option>
-                <option value="runner_up">Vice-campeão</option>
-                <option value="third_place">Terceiro Lugar</option>
-              </optgroup>
+              {activeSub === "individuais" ? (
+                <>
+                  <option value="top_scorer">Artilheiro</option>
+                  <option value="top_assists">Garçom</option>
+                  <option value="mvp">MVP</option>
+                  <option value="best_goalkeeper">Melhor Goleiro</option>
+                  <option value="revelation">Revelação</option>
+                  <option value="best_defense">Melhor Defesa</option>
+                  <option value="best_performance">Melhor Desempenho</option>
+                </>
+              ) : (
+                <>
+                  <option value="champion">Campeão</option>
+                  <option value="runner_up">Vice-campeão</option>
+                  <option value="third_place">Terceiro Lugar</option>
+                </>
+              )}
             </select>
           </label>
-          {awardType && !["champion", "runner_up", "third_place"].includes(awardType) && (
+
+          {awardType && !isColetiva && (
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Atleta</span>
               <select value={awardAthleteId} onChange={e => setAwardAthleteId(e.target.value)} className={inputClass} style={inputStyle}>
@@ -1366,7 +1396,9 @@ function PremiacoesTab({
                   return (
                     <optgroup key={et.id} label={et.teams?.full_name ?? "Equipe"}>
                       {athletes.map((a: any) => (
-                        <option key={a.athlete_id} value={a.athlete_id}>{a.athletes?.surname ?? a.athletes?.full_name ?? "—"}</option>
+                        <option key={a.athlete_id} value={a.athlete_id}>
+                          {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
+                        </option>
                       ))}
                     </optgroup>
                   );
@@ -1374,15 +1406,19 @@ function PremiacoesTab({
               </select>
             </label>
           )}
-          {awardType && ["champion", "runner_up", "third_place"].includes(awardType) && (
+
+          {awardType && isColetiva && (
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe</span>
               <select value={awardTeamId} onChange={e => setAwardTeamId(e.target.value)} className={inputClass} style={inputStyle}>
                 <option value="">Selecione…</option>
-                {editionTeams.map((et: any) => <option key={et.team_id} value={et.team_id}>{et.teams?.full_name ?? "—"}</option>)}
+                {editionTeams.map((et: any) => (
+                  <option key={et.team_id} value={et.team_id}>{et.teams?.full_name ?? "—"}</option>
+                ))}
               </select>
             </label>
           )}
+
           <div className="flex items-end">
             <button type="button" onClick={onAtribuir} disabled={savingAward || !awardType}
               className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
@@ -1393,33 +1429,37 @@ function PremiacoesTab({
         </div>
       </div>
 
+      {/* Lista */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
         <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
           <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-            Premiações atribuídas ({awards.length})
+            {activeSub === "individuais" ? "Premiações individuais" : "Premiações coletivas"} ({filteredAwards.length})
           </h2>
         </div>
         {loadingAwards ? (
           <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Carregando…</p>
-        ) : awards.length === 0 ? (
+        ) : filteredAwards.length === 0 ? (
           <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma premiação atribuída.</p>
         ) : (
-          awards.map((award: any, idx: number) => {
-            const isColetiva = ["champion", "runner_up", "third_place"].includes(award.award_type);
-            const name = isColetiva ? (award.teams?.full_name ?? "—") : (award.athletes?.surname ?? award.athletes?.full_name ?? "—");
-            const photo = isColetiva ? award.teams?.logo_url : award.athletes?.photo_url;
+          filteredAwards.map((award: any, idx: number) => {
+            const col = COLLECTIVE_TYPES.includes(award.award_type);
+            const name = col ? (award.teams?.full_name ?? "—") : (award.athletes?.surname ?? award.athletes?.full_name ?? "—");
+            const photo = col ? award.teams?.logo_url : award.athletes?.photo_url;
             return (
               <div key={award.id} className="flex items-center gap-4 px-5 py-3"
                 style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(191,242,5,0.1)" }}>
-                  {photo ? <img src={photo} alt="" className="h-8 w-8 rounded object-contain" /> : <span className="text-base">🏆</span>}
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: "rgba(191,242,5,0.1)" }}>
+                  {photo ? <img src={photo} alt="" className="h-8 w-8 rounded object-contain" /> : <span>🏆</span>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>{AWARD_LABELS[award.award_type] ?? award.award_type}</p>
+                  <p className="font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>
+                    {AWARD_LABELS[award.award_type] ?? award.award_type}
+                  </p>
                   <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{name}</p>
                 </div>
                 <button type="button" onClick={() => onRemover(award.id)}
-                  className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
+                  className="shrink-0 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-danger)]"
                   style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
                   Remover
                 </button>
