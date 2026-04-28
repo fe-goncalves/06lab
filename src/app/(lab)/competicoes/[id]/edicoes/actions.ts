@@ -426,3 +426,196 @@ export async function inscreverAtletaQualquer(
   if (error) return { error: error.message };
   return { id: inserted.id };
 }
+
+export async function criarOuAtualizarTOTW(
+  editionId: string,
+  roundId: string,
+  members: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id, organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+  if (!profile) return { error: "Perfil não encontrado." };
+
+  const { data: season } = await supabase
+    .from("competition_editions").select("season_id, seasons(year_id)")
+    .eq("id", editionId).maybeSingle();
+
+  // Busca ou cria o squad
+  let squadId: string;
+  const { data: existing } = await supabase
+    .from("selection_squads")
+    .select("id").eq("edition_id", editionId).eq("round_id", roundId).eq("squad_type", "totw")
+    .maybeSingle();
+
+  if (existing) {
+    squadId = existing.id;
+    await supabase.from("selection_squad_members").delete().eq("squad_id", squadId);
+  } else {
+    const { data: inserted, error } = await supabase
+      .from("selection_squads")
+      .insert({
+        organization_id: profile.organization_id,
+        edition_id: editionId,
+        season_id: season?.season_id ?? null,
+        year_id: (season?.seasons as any)?.year_id ?? null,
+        squad_type: "totw",
+        round_id: roundId,
+        created_by: profile.id,
+      })
+      .select("id").single();
+    if (error) return { error: error.message };
+    squadId = inserted.id;
+  }
+
+  if (members.length > 0) {
+    const { error } = await supabase.from("selection_squad_members").insert(
+      members.map(m => ({
+        squad_id: squadId,
+        athlete_id: m.athleteId ?? null,
+        staff_member_id: m.staffMemberId ?? null,
+        team_id: m.teamId,
+        display_order: m.displayOrder,
+      }))
+    );
+    if (error) return { error: error.message };
+  }
+
+  // Recalcula totw_count para todos os atletas da edição
+  await recalcularSelectionStats(supabase, editionId);
+
+  return { success: true };
+}
+
+export async function criarOuAtualizarMOTW(
+  editionId: string,
+  roundId: string,
+  athleteId: string,
+  teamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id, organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+  if (!profile) return { error: "Perfil não encontrado." };
+
+  const { data: season } = await supabase
+    .from("competition_editions").select("season_id, seasons(year_id)")
+    .eq("id", editionId).maybeSingle();
+
+  const { data: existing } = await supabase
+    .from("selection_squads")
+    .select("id").eq("edition_id", editionId).eq("round_id", roundId).eq("squad_type", "motw")
+    .maybeSingle();
+
+  if (existing) {
+    await supabase.from("selection_squad_members").delete().eq("squad_id", existing.id);
+    await supabase.from("selection_squads").delete().eq("id", existing.id);
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("selection_squads")
+    .insert({
+      organization_id: profile.organization_id,
+      edition_id: editionId,
+      season_id: season?.season_id ?? null,
+      year_id: (season?.seasons as any)?.year_id ?? null,
+      squad_type: "motw",
+      round_id: roundId,
+      created_by: profile.id,
+    })
+    .select("id").single();
+
+  if (error) return { error: error.message };
+
+  const { error: memberError } = await supabase
+    .from("selection_squad_members")
+    .insert({ squad_id: inserted.id, athlete_id: athleteId, team_id: teamId, display_order: 1 });
+
+  if (memberError) return { error: memberError.message };
+
+  // Recalcula motw_count para todos os atletas da edição
+  await recalcularSelectionStats(supabase, editionId);
+
+  return { success: true };
+}
+
+// Recalcula totw_count e motw_count do zero para todos os atletas da edição
+async function recalcularSelectionStats(supabase: any, editionId: string) {
+  // Busca todos os squads da edição
+  const { data: squads } = await supabase
+    .from("selection_squads")
+    .select("id, squad_type")
+    .eq("edition_id", editionId);
+
+  if (!squads || squads.length === 0) return;
+
+  const squadIds = squads.map((s: any) => s.id);
+  const totwSquadIds = squads.filter((s: any) => s.squad_type === "totw").map((s: any) => s.id);
+  const motwSquadIds = squads.filter((s: any) => s.squad_type === "motw").map((s: any) => s.id);
+
+  // Busca todos os membros atletas desses squads
+  const { data: allMembers } = await supabase
+    .from("selection_squad_members")
+    .select("athlete_id, squad_id")
+    .in("squad_id", squadIds)
+    .not("athlete_id", "is", null);
+
+  if (!allMembers) return;
+
+  // Agrupa contagens por athlete_id
+  const totwCounts: Record<string, number> = {};
+  const motwCounts: Record<string, number> = {};
+
+  allMembers.forEach((m: any) => {
+    if (!m.athlete_id) return;
+    if (totwSquadIds.includes(m.squad_id)) {
+      totwCounts[m.athlete_id] = (totwCounts[m.athlete_id] ?? 0) + 1;
+    }
+    if (motwSquadIds.includes(m.squad_id)) {
+      motwCounts[m.athlete_id] = (motwCounts[m.athlete_id] ?? 0) + 1;
+    }
+  });
+
+  // Busca todos os athlete_edition_stats da edição
+  const { data: stats } = await supabase
+    .from("athlete_edition_stats")
+    .select("id, athlete_id")
+    .eq("edition_id", editionId);
+
+  if (!stats) return;
+
+  // Atualiza cada stat com os novos counts
+  const updates = stats.map((s: any) => ({
+    id: s.id,
+    totw_count: totwCounts[s.athlete_id] ?? 0,
+    motw_count: motwCounts[s.athlete_id] ?? 0,
+  }));
+
+  // Upsert em lote
+  if (updates.length > 0) {
+    await supabase
+      .from("athlete_edition_stats")
+      .upsert(updates, { onConflict: "id" });
+  }
+}
+
+export async function deletarSquad(
+  squadId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  await supabase.from("selection_squad_members").delete().eq("squad_id", squadId);
+  const { error } = await supabase.from("selection_squads").delete().eq("id", squadId);
+  if (error) return { error: error.message };
+  return { success: true };
+}

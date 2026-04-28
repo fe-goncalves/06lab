@@ -9,6 +9,8 @@ import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
 import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
+import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad } from "./edicoes/actions";
+import { Star, Search } from "lucide-react";
 
 type Competition = any;
 type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
@@ -817,11 +819,13 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" emptyMessage="Nenhum cartão vermelho registrado." />
               </div>
             )}
+            {/* Sub-aba SEMANAL */}
             {activeStatsTab === "semanal" && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Premiações Semanais</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — MOTW e TOTW serão atribuídos aqui.</p>
-              </div>
+              <SemanasTab
+                selectedEditionId={selectedEditionId}
+                rounds={rounds}
+                editionTeams={editionTeams}
+              />
             )}
           </div>
         )}
@@ -955,6 +959,514 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── SemanasTab ───────────────────────────────────────────────────────────────
+// Drop-in replacement for the SemanasTab function in competicao-hub.tsx
+
+function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
+  selectedEditionId: string;
+  rounds: any[];
+  editionTeams: any[];
+}) {
+  // Formations: col = horizontal zone (0=GK, 1=DEF, 2=MED, 3=ATK)
+  // row = vertical position within the zone (0=top, 1=mid, 2=bottom)
+  // The field is 700 wide x 420 tall (horizontal)
+  // Zones: GK=col0, DEF=col1, MED=col2, ATK=col3
+  const FORMATIONS: Record<string, { label: string; slots: { col: number; row: number; total: number; label: string }[] }> = {
+    "2-3-1": {
+      label: "2-3-1",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 2, label: "DEF" }, { col: 1, row: 1, total: 2, label: "DEF" },
+        { col: 2, row: 0, total: 3, label: "MED" }, { col: 2, row: 1, total: 3, label: "MED" }, { col: 2, row: 2, total: 3, label: "MED" },
+        { col: 3, row: 0, total: 1, label: "ATK" },
+      ],
+    },
+    "1-3-2": {
+      label: "1-3-2",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 1, label: "DEF" },
+        { col: 2, row: 0, total: 3, label: "MED" }, { col: 2, row: 1, total: 3, label: "MED" }, { col: 2, row: 2, total: 3, label: "MED" },
+        { col: 3, row: 0, total: 2, label: "ATK" }, { col: 3, row: 1, total: 2, label: "ATK" },
+      ],
+    },
+    "2-2-2": {
+      label: "2-2-2",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 2, label: "DEF" }, { col: 1, row: 1, total: 2, label: "DEF" },
+        { col: 2, row: 0, total: 2, label: "MED" }, { col: 2, row: 1, total: 2, label: "MED" },
+        { col: 3, row: 0, total: 2, label: "ATK" }, { col: 3, row: 1, total: 2, label: "ATK" },
+      ],
+    },
+    "3-3": {
+      label: "3-3",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 3, label: "DEF" }, { col: 1, row: 1, total: 3, label: "DEF" }, { col: 1, row: 2, total: 3, label: "DEF" },
+        { col: 3, row: 0, total: 3, label: "ATK" }, { col: 3, row: 1, total: 3, label: "ATK" }, { col: 3, row: 2, total: 3, label: "ATK" },
+      ],
+    },
+  };
+
+  // Field dimensions (the SVG coordinate space)
+  const FW = 700; // field width
+  const FH = 380; // field height
+  // Padding inside the field border
+  const PAD_X = 50;
+  const PAD_Y = 40;
+  const INNER_W = FW - PAD_X * 2; // 600
+  const INNER_H = FH - PAD_Y * 2; // 300
+
+  // Zone x-centers (4 zones, evenly spaced inside field)
+  // GK near left goal, DEF at ~25%, MED at ~55%, ATK near right penalty
+  const ZONE_X: Record<number, number> = {
+    0: PAD_X + INNER_W * 0.08,  // GK
+    1: PAD_X + INNER_W * 0.30,  // DEF
+    2: PAD_X + INNER_W * 0.58,  // MED
+    3: PAD_X + INNER_W * 0.80,  // ATK
+  };
+
+  // Vertical center of field
+  const CY = FH / 2;
+
+  const AVATAR_R = 20; // reduced to prevent overlap
+
+  // Given a slot (col, row, total), compute its cx/cy on the field
+  function slotPosition(col: number, row: number, total: number): { cx: number; cy: number } {
+    const cx = ZONE_X[col];
+    // Minimum spacing: diameter + 20px gap
+    const minSpacing = AVATAR_R * 2 + 20;
+    const maxSpacing = INNER_H / (total + 0.5);
+    const spacing = Math.max(minSpacing, Math.min(maxSpacing, 80));
+    const startY = CY - spacing * (total - 1) / 2;
+    const cy = startY + row * spacing;
+    return { cx, cy };
+  }
+
+  const [selectedRoundId, setSelectedRoundId] = useState<string>(rounds[0]?.id ?? "");
+  const [formation, setFormation] = useState<string>("2-3-1");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [totwSquadId, setTotwSquadId] = useState<string | null>(null);
+  const [motwSquadId, setMotwSquadId] = useState<string | null>(null);
+  const [slots, setSlots] = useState<(any | null)[]>(Array(7).fill(null));
+  const [motwIndex, setMotwIndex] = useState<number | null>(null);
+  const [coach, setCoach] = useState<any | null>(null);
+
+  // Search modal
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchSlotIndex, setSearchSlotIndex] = useState<number | null>(null);
+  const [searchIsCoach, setSearchIsCoach] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchType, setSearchType] = useState<"athlete" | "staff">("athlete");
+  const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
+  const [editionStaff, setEditionStaff] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!selectedEditionId) return;
+    async function loadRoster() {
+      const supabase = createClient();
+      const { data: etData } = await supabase
+        .from("edition_teams").select("id, team_id")
+        .eq("edition_id", selectedEditionId).eq("is_free_agent_pool", false);
+      const etIds = (etData ?? []).map((e: any) => e.id);
+      if (etIds.length === 0) return;
+      const [{ data: athletes }, { data: staff }] = await Promise.all([
+        supabase.from("edition_roster_entries")
+          .select("athlete_id, edition_team_id, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), edition_teams(team_id, teams(id, full_name, abbreviation, logo_url, primary_color))")
+          .eq("member_type", "athlete").eq("status", "approved").in("edition_team_id", etIds),
+        supabase.from("edition_roster_entries")
+          .select("staff_member_id, edition_team_id, staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), edition_teams(team_id, teams(id, full_name, abbreviation, logo_url, primary_color))")
+          .eq("member_type", "staff").eq("status", "approved").in("edition_team_id", etIds),
+      ]);
+      setEditionAthletes(athletes ?? []);
+      setEditionStaff(staff ?? []);
+    }
+    void loadRoster();
+  }, [selectedEditionId]);
+
+  useEffect(() => {
+    if (!selectedRoundId || !selectedEditionId) return;
+    async function loadSquads() {
+      setLoading(true);
+      const supabase = createClient();
+      const { data: squads } = await supabase
+        .from("selection_squads")
+        .select("id, squad_type, selection_squad_members(id, athlete_id, staff_member_id, team_id, display_order, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), teams(id, full_name, abbreviation, logo_url, primary_color))")
+        .eq("edition_id", selectedEditionId).eq("round_id", selectedRoundId);
+
+      const totw = (squads ?? []).find((s: any) => s.squad_type === "totw");
+      const motw = (squads ?? []).find((s: any) => s.squad_type === "motw");
+      setTotwSquadId(totw?.id ?? null);
+      setMotwSquadId(motw?.id ?? null);
+
+      if (totw?.selection_squad_members) {
+        const members = [...totw.selection_squad_members].sort((a: any, b: any) => a.display_order - b.display_order);
+        const playerSlots = members.filter((m: any) => m.display_order <= 7);
+        const coachSlot = members.find((m: any) => m.display_order === 8);
+        const newSlots: (any | null)[] = Array(7).fill(null);
+        playerSlots.forEach((m: any, i: number) => { if (i < 7) newSlots[i] = buildSlotData(m); });
+        setSlots(newSlots);
+        setCoach(coachSlot ? buildSlotData(coachSlot) : null);
+
+        if (motw?.selection_squad_members?.[0]) {
+          const motwAthleteId = motw.selection_squad_members[0].athlete_id;
+          const idx = newSlots.findIndex((s: any) => s?.athleteId === motwAthleteId);
+          setMotwIndex(idx >= 0 ? idx : null);
+        } else {
+          setMotwIndex(null);
+        }
+      } else {
+        setSlots(Array(7).fill(null));
+        setCoach(null);
+        setMotwIndex(null);
+      }
+      setLoading(false);
+    }
+    void loadSquads();
+  }, [selectedRoundId, selectedEditionId]);
+
+  function buildSlotData(m: any) {
+    const isAthlete = !!m.athlete_id;
+    return {
+      athleteId: m.athlete_id ?? null,
+      staffMemberId: m.staff_member_id ?? null,
+      teamId: m.team_id,
+      name: isAthlete ? (m.athletes?.surname ?? m.athletes?.full_name ?? "—") : (m.staff_members?.surname ?? m.staff_members?.full_name ?? "—"),
+      photo: isAthlete ? m.athletes?.photo_url : m.staff_members?.photo_url,
+      role: isAthlete ? (m.athletes?.player_positions?.abbreviation ?? m.athletes?.player_positions?.full_name ?? "") : (m.staff_members?.staff_roles?.full_name ?? "Comissão"),
+      teamName: m.teams?.abbreviation ?? m.teams?.full_name ?? "",
+      teamLogo: m.teams?.logo_url ?? null,
+      teamColor: m.teams?.primary_color ?? null,
+      isStaff: !isAthlete,
+    };
+  }
+
+  function buildFromEntry(entry: any, isAthlete: boolean): any {
+    const et = entry.edition_teams as any;
+    const person = isAthlete ? entry.athletes : entry.staff_members;
+    return {
+      athleteId: isAthlete ? entry.athlete_id : null,
+      staffMemberId: isAthlete ? null : entry.staff_member_id,
+      teamId: et?.team_id ?? "",
+      name: person?.surname ?? person?.full_name ?? "—",
+      photo: person?.photo_url ?? null,
+      role: isAthlete ? (person?.player_positions?.abbreviation ?? person?.player_positions?.full_name ?? "") : (person?.staff_roles?.full_name ?? "Comissão"),
+      teamName: et?.teams?.abbreviation ?? et?.teams?.full_name ?? "",
+      teamLogo: et?.teams?.logo_url ?? null,
+      teamColor: et?.teams?.primary_color ?? null,
+      isStaff: !isAthlete,
+    };
+  }
+
+  async function handleSave() {
+    if (!selectedRoundId) return;
+    setSaving(true);
+    const allMembers: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[] = [];
+    slots.forEach((s, i) => {
+      if (s) allMembers.push({ athleteId: s.athleteId ?? undefined, staffMemberId: s.staffMemberId ?? undefined, teamId: s.teamId, displayOrder: i + 1 });
+    });
+    if (coach) allMembers.push({ staffMemberId: coach.staffMemberId ?? undefined, athleteId: coach.athleteId ?? undefined, teamId: coach.teamId, displayOrder: 8 });
+    const totwResult = await criarOuAtualizarTOTW(selectedEditionId, selectedRoundId, allMembers);
+    if ("error" in totwResult) { toast("error", totwResult.error); setSaving(false); return; }
+    if (motwIndex !== null && slots[motwIndex]?.athleteId) {
+      const m = slots[motwIndex]!;
+      await criarOuAtualizarMOTW(selectedEditionId, selectedRoundId, m.athleteId, m.teamId);
+    } else if (motwSquadId) {
+      await deletarSquad(motwSquadId);
+    }
+    setSaving(false);
+    toast("success", "Premiações semanais salvas.");
+  }
+
+  const formationSlots = FORMATIONS[formation].slots;
+  const selectedRound = rounds.find((r: any) => r.id === selectedRoundId);
+
+  // IDs already in slots or coach — prevent duplicates
+  const usedAthleteIds = new Set(slots.filter(Boolean).map((s: any) => s.athleteId).filter(Boolean));
+  const usedStaffIds = new Set([
+    ...slots.filter(Boolean).map((s: any) => s.staffMemberId).filter(Boolean),
+    ...(coach ? [coach.staffMemberId] : []),
+  ]);
+
+  const searchResults = (() => {
+    const pool = searchType === "athlete" ? editionAthletes : editionStaff;
+    // Filter out already-used members
+    const available = pool.filter((e: any) => {
+      if (searchType === "athlete") return !usedAthleteIds.has(e.athlete_id);
+      return !usedStaffIds.has(e.staff_member_id);
+    });
+    if (searchQuery.trim().length === 0) return available.slice(0, 10);
+    const q = searchQuery.toLowerCase();
+    return available.filter((e: any) => {
+      const person = searchType === "athlete" ? e.athletes : e.staff_members;
+      return (person?.surname ?? "").toLowerCase().includes(q) ||
+             (person?.full_name ?? "").toLowerCase().includes(q) ||
+             ((e.edition_teams as any)?.teams?.full_name ?? "").toLowerCase().includes(q);
+    }).slice(0, 10);
+  })();
+
+  if (rounds.length === 0) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", textAlign: "center" }}>
+        <p style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--color-text-primary)" }}>Sem rodadas</p>
+        <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Crie rodadas na fase para atribuir premiações semanais.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Search modal */}
+      {searchOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
+                {searchIsCoach ? "Selecionar técnico" : `Posição: ${formationSlots[searchSlotIndex ?? 0]?.label}`}
+              </p>
+              <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); }} style={{ color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
+                <X size={18} />
+              </button>
+            </div>
+            {searchIsCoach && (
+              <div style={{ padding: "10px 20px 0", display: "flex", gap: 8 }}>
+                {[{ key: "staff", label: "Comissão" }, { key: "athlete", label: "Atleta" }].map(t => (
+                  <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
+                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+                      borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
+                      backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
+                      color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 10 }}>
+              <Search size={14} color="var(--color-text-secondary)" />
+              <input autoFocus type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nome ou equipe…"
+                style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }} />
+            </div>
+            <div style={{ maxHeight: 380, overflowY: "auto" }}>
+              {searchResults.length === 0 ? (
+                <p style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Nenhum resultado.</p>
+              ) : searchResults.map((entry: any, idx: number) => {
+                const isAth = searchType === "athlete";
+                const person = isAth ? entry.athletes : entry.staff_members;
+                const team = (entry.edition_teams as any)?.teams;
+                const name = person?.surname ?? person?.full_name ?? "—";
+                const role = isAth ? (person?.player_positions?.abbreviation ?? "") : (person?.staff_roles?.full_name ?? "");
+                return (
+                  <button key={idx} type="button"
+                    onClick={() => {
+                      const sd = buildFromEntry(entry, isAth);
+                      if (searchIsCoach) { setCoach(sd); }
+                      else if (searchSlotIndex !== null) {
+                        setSlots(prev => { const n = [...prev]; n[searchSlotIndex] = sd; return n; });
+                        if (motwIndex === searchSlotIndex) setMotwIndex(null);
+                      }
+                      setSearchOpen(false); setSearchQuery("");
+                    }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                    {person?.photo_url ? (
+                      <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+                        {name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {name}{role && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-brand)", fontWeight: 400 }}>{role}</span>}
+                      </p>
+                      {team && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                          {team.logo_url && <img src={team.logo_url} alt="" style={{ width: 13, height: 13, objectFit: "contain" }} />}
+                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{team.abbreviation ?? team.full_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Controls row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Rodada</span>
+          <select value={selectedRoundId} onChange={e => setSelectedRoundId(e.target.value)}
+            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)", fontSize: 12, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer" }}>
+            {rounds.map((r: any) => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
+          </select>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Formação</span>
+          {Object.keys(FORMATIONS).map(f => (
+            <button key={f} type="button"
+              onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); setMotwIndex(null); }}
+              style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+                borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
+                backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
+                color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
+              {FORMATIONS[f].label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading ? (
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
+      ) : (
+        <>
+          {/* Field SVG with player slots */}
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--color-border)" }}>
+            <svg
+              viewBox={`0 0 ${FW} ${FH}`}
+              style={{ width: "100%", display: "block" }}
+              xmlns="http://www.w3.org/2000/svg">
+
+              {/* Background */}
+              <rect width={FW} height={FH} fill="var(--color-surface)" />
+
+              {/* Field lines */}
+              {/* Outer border */}
+              <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+
+              {/* Center line */}
+              <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+
+              {/* Center circle */}
+              <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
+
+              {/* Left penalty area */}
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              {/* Left goal area */}
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              {/* Left goal */}
+              <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+              {/* Left penalty spot */}
+              <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+
+              {/* Right penalty area */}
+              <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              {/* Right goal area */}
+              <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              {/* Right goal */}
+              <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+              {/* Right penalty spot */}
+              <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+
+              {/* Substitution marks */}
+              <line x1={FW/2 - 20} y1={PAD_Y} x2={FW/2 - 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
+              <line x1={FW/2 + 20} y1={PAD_Y} x2={FW/2 + 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
+
+              {/* Player slots */}
+              {formationSlots.map((slot, i) => {
+                const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
+                const data = slots[i];
+                const isMotw = motwIndex === i;
+                const teamColor = data?.teamColor ?? null;
+                const foSize = AVATAR_R * 2;
+
+                return (
+                  <g key={i}>
+                    {!data && (
+                      <>
+                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
+                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
+                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
+                          onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
+                      </>
+                    )}
+                    {data && (
+                      <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
+                          <style>{`.sa${i}:hover .sg${i}{opacity:1}.sa${i}:hover .sr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
+                          <div className={`sa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
+                            onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
+                            <div className={`sg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
+                              background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
+                            <div className={`sr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
+                              border: `2px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.3)"}`, backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
+                              {data.photo
+                                ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
+                              }
+                            </div>
+                            {!data.isStaff && (
+                              <div onClick={e => { e.stopPropagation(); setMotwIndex(isMotw ? null : i); }}
+                                style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, transition: "all 0.15s",
+                                  backgroundColor: isMotw ? "#BFF205" : "rgba(0,0,0,0.85)", border: `1px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.2)"}`, color: isMotw ? "#0D0D0D" : "rgba(255,255,255,0.4)" }}>★</div>
+                            )}
+                            <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); if (motwIndex === i) setMotwIndex(null); }}
+                              style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
+                          </div>
+                          <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: isMotw ? "#BFF205" : "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
+                          {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
+                        </div>
+                      </foreignObject>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          {/* Coach row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap", minWidth: 52 }}>Técnico</span>
+            {coach ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                {coach.photo ? (
+                  <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+                    {coach.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)" }}>{coach.role} · {coach.teamName}</p>
+                </div>
+                <button type="button" onClick={() => setCoach(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)" }}><X size={14} /></button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setSearchIsCoach(true); setSearchType("staff"); setSearchQuery(""); setSearchOpen(true); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>
+                <Plus size={12} /> Adicionar técnico
+              </button>
+            )}
+          </div>
+
+          {/* Footer row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)" }}>
+              {selectedRound?.custom_label ?? selectedRound?.name}
+              {motwIndex !== null && slots[motwIndex] && (
+                <span style={{ marginLeft: 12, color: "#BFF205" }}>★ MOTW: {slots[motwIndex]!.name}</span>
+              )}
+            </p>
+            <button type="button" onClick={handleSave} disabled={saving}
+              style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+              {saving ? "Salvando…" : "Salvar premiações"}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
