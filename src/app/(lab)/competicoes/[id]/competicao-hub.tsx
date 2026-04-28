@@ -30,7 +30,12 @@ type Scorer = any;
 
 const STATUS_LABEL: Record<string, string> = { scheduled: "AG", ongoing: "AO VIVO", finished: "FT", postponed: "AD" };
 const STATUS_COLOR: Record<string, string> = { scheduled: "#A6A6A6", ongoing: "#BFF205", finished: "#A6A6A6", postponed: "#FF4444" };
-const PHASE_TYPE_LABEL: Record<string, string> = { round_robin: "Pontos Corridos", group_stage: "Fase de Grupos", knockout: "Mata-mata", conference: "Conferência" };
+const PHASE_TYPE_LABEL: Record<string, string> = {
+  round_robin: "Pontos Corridos",
+  group_stage: "Fase de Grupos",
+  knockout: "Mata-mata",
+  conference: "Conferência",
+};
 const AWARD_LABELS: Record<string, string> = {
   top_scorer: "Artilheiro", top_assists: "Garçom", mvp: "MVP", best_goalkeeper: "Melhor Goleiro",
   revelation: "Revelação", best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
@@ -186,7 +191,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if (!newMatchPhaseId || !newMatchTeamA || !newMatchTeamB) { setNewMatchError("Fase e equipes são obrigatórias."); return; }
     setCreatingMatch(true); setNewMatchError(null);
     const fd = new FormData();
-    fd.append("team_a_id", newMatchTeamA); fd.append("team_b_id", newMatchTeamB); fd.append("team_a_is_home", "true");
+    fd.append("team_a_id", newMatchTeamA);
+    fd.append("team_b_id", newMatchTeamB);
+    fd.append("team_a_is_home", "true");
     if (newMatchDate) fd.append("match_date", newMatchDate);
     if (newMatchTime) fd.append("match_time", newMatchTime);
     if (newMatchVenueId) fd.append("venue_id", newMatchVenueId);
@@ -195,8 +202,14 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setCreatingMatch(false);
     if ("error" in result) { setNewMatchError(result.error); return; }
     toast("success", "Partida criada.");
-    if (newMatchAddAnother) { setNewMatchTeamA(""); setNewMatchTeamB(""); }
-    else { setShowNewMatch(false); setNewMatchPhaseId(""); setNewMatchRoundId(""); setNewMatchDate(""); setNewMatchTime(""); setNewMatchVenueId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); }
+    if (newMatchAddAnother) {
+      setNewMatchTeamA(""); setNewMatchTeamB("");
+    } else {
+      setShowNewMatch(false);
+      setNewMatchPhaseId(""); setNewMatchRoundId("");
+      setNewMatchDate(""); setNewMatchTime(""); setNewMatchVenueId("");
+      setNewMatchTeamA(""); setNewMatchTeamB("");
+    }
     await loadEditionData(selectedEditionId);
   }
 
@@ -376,11 +389,17 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             <div className="px-6 py-4 space-y-4">
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
-                <select value={newMatchPhaseId} onChange={e => { setNewMatchPhaseId(e.target.value); setNewMatchRoundId(""); }} className={inputClass} style={inputStyle}>
+                <select value={newMatchPhaseId} onChange={e => { setNewMatchPhaseId(e.target.value); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); }}
+                  className={inputClass} style={inputStyle}>
                   <option value="">Selecione a fase…</option>
-                  {phases.map(p => <option key={p.id} value={p.id}>{p.custom_label ?? p.full_name}</option>)}
+                  {phases.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.custom_label ?? p.full_name} — {PHASE_TYPE_LABEL[p.phase_type] ?? p.phase_type}
+                    </option>
+                  ))}
                 </select>
               </label>
+
               {newMatchPhaseId && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -393,6 +412,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       <input type="time" value={newMatchTime} onChange={e => setNewMatchTime(e.target.value)} className={inputClass} style={inputStyle} />
                     </label>
                   </div>
+
+                  {/* Rodada — pontos corridos e grupos */}
                   {isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && roundsForSelectedPhase.length > 0 && (
                     <label className="flex flex-col gap-1">
                       <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Rodada</span>
@@ -402,6 +423,26 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       </select>
                     </label>
                   )}
+
+                  {/* Rodada — mata-mata e conferência */}
+                  {!isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && roundsForSelectedPhase.length > 0 && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                        Estágio *
+                      </span>
+                      <select value={newMatchRoundId} onChange={e => setNewMatchRoundId(e.target.value)} className={inputClass} style={inputStyle}>
+                        <option value="">Selecione o estágio…</option>
+                        {roundsForSelectedPhase.map(r => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
+                      </select>
+                    </label>
+                  )}
+
+                  {roundsForSelectedPhase.length === 0 && !isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && (
+                    <p className="text-sm rounded-lg border px-3 py-2" style={{ color: "#F2C005", borderColor: "#F2C00533", backgroundColor: "#F2C00511" }}>
+                      Esta fase não tem rodadas cadastradas. Adicione rodadas no hub da fase antes de criar partidas.
+                    </p>
+                  )}
+
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Local</span>
                     <select value={newMatchVenueId} onChange={e => setNewMatchVenueId(e.target.value)} className={inputClass} style={inputStyle}>
@@ -409,6 +450,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {venues.map((v: any) => <option key={v.id} value={v.id}>{v.full_name}</option>)}
                     </select>
                   </label>
+
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe A (mandante) *</span>
                     <select value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)} className={inputClass} style={inputStyle}>
@@ -416,6 +458,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {teamsForEdition.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
+
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe B (visitante) *</span>
                     <select value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)} className={inputClass} style={inputStyle}>
@@ -423,17 +466,25 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {teamsForEdition.filter(t => t.id !== newMatchTeamA).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
+
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={newMatchAddAnother} onChange={e => setNewMatchAddAnother(e.target.checked)} className="h-4 w-4" />
-                    <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Adicionar outra com mesma data, horário e rodada</span>
+                    <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Adicionar outra com mesma data e horário</span>
                   </label>
                 </>
               )}
               {newMatchError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{newMatchError}</p>}
             </div>
             <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button" onClick={() => setShowNewMatch(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
-              <button type="button" onClick={handleCreateMatch} disabled={creatingMatch || !newMatchPhaseId} className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              <button type="button" onClick={() => setShowNewMatch(false)}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handleCreateMatch}
+                disabled={creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
                 {creatingMatch ? "Criando…" : "Confirmar"}
               </button>
             </div>

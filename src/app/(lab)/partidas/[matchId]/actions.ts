@@ -12,7 +12,6 @@ export async function criarPartida(
   if (!user) redirect("/login");
 
   const round_id = String(formData.get("round_id") ?? "").trim() || null;
-  const matchup_id = String(formData.get("matchup_id") ?? "").trim() || null;
   const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
   const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
   const team_a_is_home = formData.get("team_a_is_home") === "true";
@@ -20,11 +19,41 @@ export async function criarPartida(
   const match_time = String(formData.get("match_time") ?? "").trim() || null;
   const venue_id = String(formData.get("venue_id") ?? "").trim() || null;
 
+  // Busca tipo da fase
+  const { data: phase } = await supabase
+    .from("phases").select("phase_type").eq("id", faseId).maybeSingle();
+
+  const isKnockout = phase?.phase_type === "knockout" || phase?.phase_type === "conference";
+
+  let matchup_id: string | null = null;
+
+  // Para mata-mata e conferência, cria o matchup automaticamente vinculado à rodada
+  if (isKnockout && round_id) {
+    const { data: round } = await supabase
+      .from("rounds").select("name, display_order").eq("id", round_id).maybeSingle();
+
+    const { data: insertedMatchup, error: matchupError } = await supabase
+      .from("matchups")
+      .insert({
+        phase_id: faseId,
+        round_id,
+        round_label: round?.name ?? "",
+        team_a_id,
+        team_b_id,
+        display_order: round?.display_order ?? 0,
+        is_completed: false,
+      })
+      .select("id").single();
+
+    if (matchupError) return { error: matchupError.message };
+    matchup_id = insertedMatchup.id;
+  }
+
   const { data: inserted, error } = await supabase
     .from("matches")
     .insert({
       phase_id: faseId,
-      round_id,
+      round_id: isKnockout ? null : round_id,
       matchup_id,
       team_a_id,
       team_b_id,
@@ -237,7 +266,6 @@ export async function deletarAcao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Busca a ação para reverter o placar se necessário
   const { data: action } = await supabase
     .from("match_actions").select("*").eq("id", actionId).maybeSingle();
 
@@ -261,6 +289,19 @@ export async function deletarAcao(
           ? (isOwnGoal ? Math.max(0, match.score_b - 1) : match.score_b)
           : (isOwnGoal ? match.score_b : Math.max(0, match.score_b - 1)),
       }).eq("id", matchId);
+    }
+  }
+
+  // Recalcula stats da edição sempre que uma ação é deletada
+  const { data: match } = await supabase
+    .from("matches").select("phase_id").eq("id", matchId).maybeSingle();
+
+  if (match?.phase_id) {
+    const { data: phase } = await supabase
+      .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
+    if (phase?.edition_id) {
+      await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
+      await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
     }
   }
 

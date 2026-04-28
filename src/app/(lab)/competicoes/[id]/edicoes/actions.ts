@@ -20,7 +20,6 @@ export async function criarEdicao(
   const season_id = String(formData.get("season_id") ?? "").trim();
   if (!season_id) return { error: "Temporada é obrigatória." };
 
-  // Verifica se já existe edição desta competição nesta temporada
   const { data: existing } = await supabase
     .from("competition_editions")
     .select("id")
@@ -36,6 +35,27 @@ export async function criarEdicao(
     .select("id").single();
 
   if (error) return { error: error.message };
+
+  // Cria edition_settings padrão
+  await supabase.from("edition_settings").insert({ edition_id: inserted.id });
+
+  // Cria edition_team "sem clube" automaticamente
+  const { data: freeAgentTeam } = await supabase
+    .from("teams")
+    .select("id")
+    .eq("organization_id", profile.organization_id)
+    .eq("full_name", "Sem Clube")
+    .maybeSingle();
+
+  if (freeAgentTeam) {
+    await supabase.from("edition_teams").insert({
+      edition_id: inserted.id,
+      team_id: freeAgentTeam.id,
+      is_free_agent_pool: true,
+      display_order: 999,
+    });
+  }
+
   return { id: inserted.id };
 }
 
@@ -62,7 +82,6 @@ export async function editarEdicao(
 
   if (editionError) return { error: editionError.message };
 
-  // Upsert nas edition_settings
   const { error: settingsError } = await supabase
     .from("edition_settings")
     .upsert({
@@ -211,7 +230,6 @@ export async function atribuirPremiacao(
   if (!award_type) return { error: "Tipo de premiação obrigatório." };
   if (!athlete_id && !winning_team_id) return { error: "Atleta ou equipe é obrigatório." };
 
-  // Busca season_id e year_id da edição
   const { data: edition } = await supabase
     .from("competition_editions")
     .select("season_id, seasons(year_id)")
@@ -221,7 +239,6 @@ export async function atribuirPremiacao(
   const season_id = edition?.season_id ?? null;
   const year_id = (edition?.seasons as any)?.year_id ?? null;
 
-  // Remove premiação anterior do mesmo tipo na edição (uma por tipo)
   await supabase
     .from("edition_awards")
     .delete()
@@ -284,4 +301,128 @@ export async function aprovarInscricao(
 
   if (error) return { error: error.message };
   return { success: true };
+}
+
+export async function desativarInscricao(
+  entryId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("edition_roster_entries")
+    .update({ status: "inactive" })
+    .eq("id", entryId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function reativarInscricao(
+  entryId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("edition_roster_entries")
+    .update({ status: "approved" })
+    .eq("id", entryId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function transferirAtletaNaEdicao(
+  entryId: string,
+  newEditionTeamId: string,
+): Promise<{ success: true; newEntryId: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  const { data: original } = await supabase
+    .from("edition_roster_entries")
+    .select("*")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  if (!original) return { error: "Inscrição não encontrada." };
+
+  const { error: deactivateError } = await supabase
+    .from("edition_roster_entries")
+    .update({ status: "inactive" })
+    .eq("id", entryId);
+
+  if (deactivateError) return { error: deactivateError.message };
+
+  const { data: newEntry, error: insertError } = await supabase
+    .from("edition_roster_entries")
+    .insert({
+      edition_team_id: newEditionTeamId,
+      member_type: original.member_type,
+      athlete_id: original.athlete_id,
+      staff_member_id: original.staff_member_id,
+      position_id_at_inscription: original.position_id_at_inscription,
+      position_label_at_inscription: original.position_label_at_inscription,
+      status: "approved",
+      submitted_by: profile?.id,
+      submitter_type: "admin",
+      submitted_at: new Date().toISOString(),
+      reviewed_by: profile?.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (insertError) return { error: insertError.message };
+  return { success: true, newEntryId: newEntry.id };
+}
+
+export async function inscreverAtletaQualquer(
+  editionTeamId: string,
+  athleteId: string,
+  positionId: string | null,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  let positionLabel: string | null = null;
+  if (positionId) {
+    const { data: pos } = await supabase
+      .from("player_positions").select("full_name").eq("id", positionId).maybeSingle();
+    positionLabel = pos?.full_name ?? null;
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("edition_roster_entries")
+    .insert({
+      edition_team_id: editionTeamId,
+      member_type: "athlete",
+      athlete_id: athleteId,
+      position_id_at_inscription: positionId,
+      position_label_at_inscription: positionLabel,
+      status: "approved",
+      submitted_by: profile?.id,
+      submitter_type: "admin",
+      submitted_at: new Date().toISOString(),
+      reviewed_by: profile?.id,
+      reviewed_at: new Date().toISOString(),
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+  return { id: inserted.id };
 }

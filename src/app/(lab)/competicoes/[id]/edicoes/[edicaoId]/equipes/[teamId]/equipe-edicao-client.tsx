@@ -5,10 +5,10 @@ import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import {
-  removerAtletaEdicao, aprovarInscricao,
-  desativarInscricao, reativarInscricao, transferirAtletaNaEdicao,
-  inscreverAtletaQualquer,
-} from "../../../actions";
+    removerAtletaEdicao, aprovarInscricao, desativarInscricao, reativarInscricao,
+    transferirAtletaNaEdicao, inscreverAtletaQualquer,
+  } from "@/app/(lab)/competicoes/[id]/edicoes/actions";
+
 import { criarAtleta } from "@/app/(lab)/atletas/actions";
 import { Plus, Check, X, ArrowRightLeft, Search } from "lucide-react";
 

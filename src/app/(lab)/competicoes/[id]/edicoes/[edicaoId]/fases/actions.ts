@@ -337,3 +337,223 @@ export async function editarTemplate(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function editarRodada(
+  roundId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Nome é obrigatório." };
+
+  const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
+  const display_order = Number(formData.get("display_order") ?? 0) || 0;
+  const is_current = formData.get("is_current") === "true";
+
+  const { error } = await supabase
+    .from("rounds")
+    .update({ name, custom_label, display_order, is_current })
+    .eq("id", roundId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function deletarRodada(
+  roundId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: matches } = await supabase
+    .from("matches").select("id").eq("round_id", roundId).limit(1);
+
+  if (matches && matches.length > 0)
+    return { error: "Esta rodada possui partidas. Remova as partidas antes de excluir." };
+
+  const { error } = await supabase
+    .from("rounds").delete().eq("id", roundId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarConfronto(
+  matchupId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const round_label = String(formData.get("round_label") ?? "").trim();
+  const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
+  const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
+  const display_order = Number(formData.get("display_order") ?? 0) || 0;
+  const is_current = formData.get("is_current") === "true";
+
+  const { error } = await supabase
+    .from("matchups")
+    .update({ round_label, team_a_id, team_b_id, display_order, is_current })
+    .eq("id", matchupId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function deletarConfronto(
+  matchupId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: matches } = await supabase
+    .from("matches").select("id").eq("matchup_id", matchupId).limit(1);
+
+  if (matches && matches.length > 0)
+    return { error: "Este confronto possui partidas. Remova as partidas antes de excluir." };
+
+  const { error } = await supabase
+    .from("matchups").delete().eq("id", matchupId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function adicionarEquipeFase(
+  phaseId: string,
+  editionTeamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: existing } = await supabase
+    .from("phase_teams").select("id")
+    .eq("phase_id", phaseId).eq("edition_team_id", editionTeamId).maybeSingle();
+
+  if (existing) return { error: "Equipe já adicionada a esta fase." };
+
+  const { error } = await supabase
+    .from("phase_teams")
+    .insert({ phase_id: phaseId, edition_team_id: editionTeamId });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerEquipeFase(
+  phaseId: string,
+  editionTeamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("phase_teams")
+    .delete()
+    .eq("phase_id", phaseId)
+    .eq("edition_team_id", editionTeamId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function criarGrupo(
+  phaseId: string,
+  name: string,
+  displayOrder: number,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: inserted, error } = await supabase
+    .from("groups")
+    .insert({ phase_id: phaseId, name, display_order: displayOrder })
+    .select("id").single();
+
+  if (error) return { error: error.message };
+  return { id: inserted.id };
+}
+
+export async function editarGrupo(
+  groupId: string,
+  name: string,
+  customLabel: string | null,
+  displayOrder: number,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("groups")
+    .update({ name, custom_label: customLabel, display_order: displayOrder })
+    .eq("id", groupId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function deletarGrupo(
+  groupId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  await supabase.from("group_teams").delete().eq("group_id", groupId);
+
+  const { error } = await supabase
+    .from("groups").delete().eq("id", groupId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function adicionarEquipeGrupo(
+  groupId: string,
+  editionTeamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: existing } = await supabase
+    .from("group_teams").select("id")
+    .eq("group_id", groupId).eq("edition_team_id", editionTeamId).maybeSingle();
+
+  if (existing) return { error: "Equipe já está neste grupo." };
+
+  const { error } = await supabase
+    .from("group_teams")
+    .insert({ group_id: groupId, edition_team_id: editionTeamId });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function removerEquipeGrupo(
+  groupId: string,
+  editionTeamId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("group_teams")
+    .delete()
+    .eq("group_id", groupId)
+    .eq("edition_team_id", editionTeamId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}

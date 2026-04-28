@@ -14,49 +14,62 @@ export default async function FasePage({
   if (!user) redirect("/login");
 
   const { data: phase, error } = await supabase
-    .from("phases")
-    .select("*")
-    .eq("id", faseId)
-    .maybeSingle();
+    .from("phases").select("*").eq("id", faseId).maybeSingle();
 
-  if (error || !phase) redirect(`/competicoes/${competitionId}/edicoes/${edicaoId}`);
+  if (error || !phase) redirect(`/competicoes/${competitionId}`);
 
   const [
     { data: edition },
     { data: rounds },
     { data: matchups },
     { data: editionTeams },
-    { data: roundLabels },
-    { data: standings },
-    { data: topScorers },
+    { data: phaseTeams },
+    { data: groups },
   ] = await Promise.all([
     supabase.from("competition_editions")
       .select("seasons(name), competitions(full_name)")
       .eq("id", edicaoId).maybeSingle(),
-    supabase.from("rounds").select("id, name, custom_label, display_order").eq("phase_id", faseId).order("display_order"),
-    supabase.from("matchups").select("id, round_label, team_a_id, team_b_id, is_completed, display_order, teams_a:teams!matchups_team_a_id_fkey(full_name, abbreviation), teams_b:teams!matchups_team_b_id_fkey(full_name, abbreviation)").eq("phase_id", faseId).order("display_order"),
-    supabase.from("edition_teams").select("id, team_id, teams(id, full_name, abbreviation, logo_url)").eq("edition_id", edicaoId),
-    supabase.from("phase_round_labels").select("id, label, display_order").eq("phase_type_code", "knockout").order("display_order"),
-    supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", edicaoId).order("points", { ascending: false }).order("goal_difference", { ascending: false }).order("goals_for", { ascending: false }),
-    supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)").eq("edition_id", edicaoId).gt("goals", 0).order("goals", { ascending: false }).order("assists", { ascending: false }).limit(20),
+    supabase.from("rounds")
+      .select("id, name, custom_label, display_order, is_current")
+      .eq("phase_id", faseId).order("display_order"),
+    supabase.from("matchups")
+      .select("id, round_label, team_a_id, team_b_id, is_completed, is_current, display_order, teams_a:teams!matchups_team_a_id_fkey(id, full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(id, full_name, abbreviation, logo_url)")
+      .eq("phase_id", faseId).order("display_order"),
+    supabase.from("edition_teams")
+      .select("id, team_id, teams(id, full_name, abbreviation, logo_url)")
+      .eq("edition_id", edicaoId)
+      .eq("is_free_agent_pool", false),
+    supabase.from("phase_teams")
+      .select("id, edition_team_id")
+      .eq("phase_id", faseId),
+    supabase.from("groups")
+      .select("id, name, custom_label, display_order")
+      .eq("phase_id", faseId).order("display_order"),
   ]);
 
-  const competitionName = (edition as any)?.competitions?.full_name ?? "Competição";
-  const seasonName = (edition as any)?.seasons?.name ?? "Temporada";
+  // Busca group_teams separadamente para evitar query aninhada
+  const groupIds = (groups ?? []).map((g: any) => g.id);
+  let groupTeams: any[] = [];
+  if (groupIds.length > 0) {
+    const { data: gt } = await supabase
+      .from("group_teams")
+      .select("id, group_id, edition_team_id")
+      .in("group_id", groupIds);
+    groupTeams = gt ?? [];
+  }
 
   return (
     <FaseClient
       phase={phase}
       rounds={rounds ?? []}
-      matchups={matchups ?? []}
       editionTeams={editionTeams ?? []}
-      roundLabels={roundLabels ?? []}
+      phaseTeams={phaseTeams ?? []}
+      groups={groups ?? []}
+      groupTeams={groupTeams}
       competitionId={competitionId}
       edicaoId={edicaoId}
-      competitionName={competitionName}
-      seasonName={seasonName}
-      standings={standings ?? []}
-      topScorers={topScorers ?? []}
+      competitionName={(edition as any)?.competitions?.full_name ?? "Competição"}
+      seasonName={(edition as any)?.seasons?.name ?? "Temporada"}
     />
   );
 }
