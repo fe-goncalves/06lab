@@ -63,6 +63,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [standings, setStandings] = useState<Standing[]>([]);
   const [scorers, setScorers] = useState<Scorer[]>([]);
   const [matchups, setMatchups] = useState<any[]>([]);
+  const [groups, setGroups] = useState<any[]>([]);
+  const [groupTeams, setGroupTeams] = useState<any[]>([]);
   const [matchFilterPhaseId, setMatchFilterPhaseId] = useState<string>("");
   const [matchFilterRoundId, setMatchFilterRoundId] = useState<string>("");
   const [venues, setVenues] = useState<any[]>([]);
@@ -121,6 +123,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     const [
       { data: matchesData }, { data: phasesData }, { data: roundsData }, { data: teamsData },
       { data: standingsData }, { data: scorersData }, { data: matchupsData }, { data: venuesData },
+      { data: groupsData },
     ] = await Promise.all([
       phaseIds.length > 0
         ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: false })
@@ -136,7 +139,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id, teams_a:teams!matchups_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(full_name, abbreviation, logo_url)").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
       supabase.from("venues").select("id, full_name").eq("organization_id", orgId).order("full_name"),
+      phaseIds.length > 0
+        ? supabase.from("groups").select("id, name, custom_label, display_order, phase_id").in("phase_id", phaseIds).order("display_order")
+        : Promise.resolve({ data: [] }),
     ]);
+
     const phasesResult = (phasesData as Phase[]) ?? [];
     const currentPhase = phasesResult.find(p => p.is_current) ?? phasesResult[0];
     if (currentPhase) setSelectedPhaseId(currentPhase.id);
@@ -148,6 +155,17 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setScorers(scorersData ?? []);
     setMatchups((matchupsData as any) ?? []);
     setVenues(venuesData ?? []);
+    setGroups((groupsData as any) ?? []);
+
+    const groupIds = (groupsData ?? []).map((g: any) => g.id);
+    if (groupIds.length > 0) {
+      const { data: gtData } = await supabase
+        .from("group_teams").select("group_id, edition_team_id").in("group_id", groupIds);
+      setGroupTeams(gtData ?? []);
+    } else {
+      setGroupTeams([]);
+    }
+
     setLoadingMatches(false);
   }, [orgId]);
 
@@ -307,11 +325,136 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     filteredMatchesByRound[key].matches.push(m);
   });
 
-  // Stats derivadas
   const topScorers = [...scorers].filter(s => (s.goals ?? 0) > 0).sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0));
   const topAssists = [...scorers].filter(s => (s.assists ?? 0) > 0).sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0));
   const topYellow = [...scorers].filter(s => (s.yellow_cards ?? 0) > 0).sort((a, b) => (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0));
   const topRed = [...scorers].filter(s => (s.red_cards ?? 0) > 0).sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0));
+
+  // ── Renderização da classificação por tipo de fase ──
+  function renderClassificacao() {
+    if (!selectedPhase) {
+      return <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma fase disponível.</p>;
+    }
+
+    const StandingsTable = ({ rows, highlightTop = 4 }: { rows: any[]; highlightTop?: number }) => (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
+              {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
+                <th key={h} className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any, idx: number) => (
+              <tr key={row.team_id} style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }} className="hover:bg-[rgba(255,255,255,0.02)]">
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: idx < highlightTop ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{idx + 1}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {row.teams?.logo_url ? <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" /> : <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                    <span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>{row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}</span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_scored ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_conceded ?? 0}</td>
+                <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  {((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}
+                  {(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}
+                </td>
+                <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>{row.points ?? 0}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+
+    // Fase de grupos
+    if (selectedPhase.phase_type === "group_stage") {
+      const phaseGroups = groups.filter(g => g.phase_id === selectedPhaseId);
+      if (phaseGroups.length === 0) {
+        return <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum grupo cadastrado nesta fase.</p>;
+      }
+      return (
+        <div className="space-y-6">
+          {phaseGroups.map(group => {
+            const teamIdsInGroup = groupTeams.filter(gt => gt.group_id === group.id).map(gt => gt.edition_team_id);
+            const editionTeamIds = editionTeams.filter(et => teamIdsInGroup.includes(et.id)).map(et => et.team_id);
+            const groupStandings = standings
+              .filter(s => editionTeamIds.includes(s.team_id))
+              .sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || (b.goals_scored ?? 0) - (a.goals_scored ?? 0));
+            return (
+              <div key={group.id}>
+                <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>
+                  {group.custom_label ?? group.name}
+                </p>
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                  {groupStandings.length === 0 ? (
+                    <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Sem dados de classificação.</p>
+                  ) : (
+                    <StandingsTable rows={groupStandings} highlightTop={2} />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    // Pontos corridos
+    if (selectedPhase.phase_type === "round_robin") {
+      return (
+        <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+          {standings.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum dado de classificação disponível.</p>
+          ) : (
+            <StandingsTable rows={standings} highlightTop={4} />
+          )}
+        </div>
+      );
+    }
+
+    // Mata-mata / conferência — confrontos agrupados por rodada
+    const phaseMatchups = matchups.filter(m => m.phase_id === selectedPhaseId);
+    const byLabel: Record<string, any[]> = {};
+    phaseMatchups.forEach(m => {
+      if (!byLabel[m.round_label]) byLabel[m.round_label] = [];
+      byLabel[m.round_label].push(m);
+    });
+    if (Object.keys(byLabel).length === 0) {
+      return <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum confronto cadastrado nesta fase.</p>;
+    }
+    return (
+      <div className="space-y-6">
+        {Object.entries(byLabel).map(([label, items]) => (
+          <div key={label}>
+            <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>{label}</p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {items.map((m: any) => (
+                <div key={m.id} className="rounded-xl border p-4" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                  <div className="flex items-center gap-3 mb-2">
+                    {m.teams_a?.logo_url ? <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                    <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_a?.full_name ?? "A definir"}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {m.teams_b?.logo_url ? <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
+                    <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_b?.full_name ?? "A definir"}</span>
+                  </div>
+                  {m.is_completed && <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>Concluído</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
@@ -359,7 +502,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             </div>
           </div>
 
-          {/* Abas principais */}
           <div className="flex gap-6">
             {[
               { key: "jogos", label: "JOGOS" },
@@ -378,7 +520,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         </div>
       </div>
 
-      {/* Modais */}
+      {/* Modal nova partida */}
       {showNewMatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-md rounded-xl border shadow-xl" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
@@ -399,7 +541,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   ))}
                 </select>
               </label>
-
               {newMatchPhaseId && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -412,8 +553,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       <input type="time" value={newMatchTime} onChange={e => setNewMatchTime(e.target.value)} className={inputClass} style={inputStyle} />
                     </label>
                   </div>
-
-                  {/* Rodada — pontos corridos e grupos */}
                   {isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && roundsForSelectedPhase.length > 0 && (
                     <label className="flex flex-col gap-1">
                       <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Rodada</span>
@@ -423,26 +562,20 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       </select>
                     </label>
                   )}
-
-                  {/* Rodada — mata-mata e conferência */}
                   {!isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && roundsForSelectedPhase.length > 0 && (
                     <label className="flex flex-col gap-1">
-                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                        Estágio *
-                      </span>
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Estágio *</span>
                       <select value={newMatchRoundId} onChange={e => setNewMatchRoundId(e.target.value)} className={inputClass} style={inputStyle}>
                         <option value="">Selecione o estágio…</option>
                         {roundsForSelectedPhase.map(r => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
                       </select>
                     </label>
                   )}
-
                   {roundsForSelectedPhase.length === 0 && !isClassificatory(selectedNewMatchPhase?.phase_type ?? "") && (
                     <p className="text-sm rounded-lg border px-3 py-2" style={{ color: "#F2C005", borderColor: "#F2C00533", backgroundColor: "#F2C00511" }}>
                       Esta fase não tem rodadas cadastradas. Adicione rodadas no hub da fase antes de criar partidas.
                     </p>
                   )}
-
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Local</span>
                     <select value={newMatchVenueId} onChange={e => setNewMatchVenueId(e.target.value)} className={inputClass} style={inputStyle}>
@@ -450,7 +583,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {venues.map((v: any) => <option key={v.id} value={v.id}>{v.full_name}</option>)}
                     </select>
                   </label>
-
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe A (mandante) *</span>
                     <select value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)} className={inputClass} style={inputStyle}>
@@ -458,7 +590,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {teamsForEdition.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
-
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe B (visitante) *</span>
                     <select value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)} className={inputClass} style={inputStyle}>
@@ -466,7 +597,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {teamsForEdition.filter(t => t.id !== newMatchTeamA).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
-
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" checked={newMatchAddAnother} onChange={e => setNewMatchAddAnother(e.target.checked)} className="h-4 w-4" />
                     <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Adicionar outra com mesma data e horário</span>
@@ -476,15 +606,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               {newMatchError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{newMatchError}</p>}
             </div>
             <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button" onClick={() => setShowNewMatch(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                Cancelar
-              </button>
-              <button type="button" onClick={handleCreateMatch}
-                disabled={creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB}
-                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              <button type="button" onClick={() => setShowNewMatch(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
+              <button type="button" onClick={handleCreateMatch} disabled={creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
                 {creatingMatch ? "Criando…" : "Confirmar"}
               </button>
             </div>
@@ -492,6 +616,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         </div>
       )}
 
+      {/* Modal elenco */}
       {elencoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
           <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col max-h-[80vh]" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
@@ -557,6 +682,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         </div>
       )}
 
+      {/* Modal nova edição */}
       {showNewEdition && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
           <div className="w-full max-w-sm rounded-xl border p-6" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
@@ -584,65 +710,40 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {/* ABA JOGOS */}
         {activeTab === "jogos" && (
           <div>
-            {/* Filtros e header */}
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              {/* Filtro por fase */}
               {phases.length > 1 && (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button"
-                    onClick={() => setMatchFilterPhaseId("")}
+                  <button type="button" onClick={() => setMatchFilterPhaseId("")}
                     className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                    style={{
-                      borderColor: matchFilterPhaseId === "" ? "var(--color-brand)" : "var(--color-border)",
-                      backgroundColor: matchFilterPhaseId === "" ? "rgba(191,242,5,0.1)" : "transparent",
-                      color: matchFilterPhaseId === "" ? "var(--color-brand)" : "#A6A6A6",
-                    }}>
+                    style={{ borderColor: matchFilterPhaseId === "" ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterPhaseId === "" ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterPhaseId === "" ? "var(--color-brand)" : "#A6A6A6" }}>
                     Todas
                   </button>
                   {phases.map(p => (
-                    <button key={p.id} type="button"
-                      onClick={() => { setMatchFilterPhaseId(p.id); setMatchFilterRoundId(""); }}
+                    <button key={p.id} type="button" onClick={() => { setMatchFilterPhaseId(p.id); setMatchFilterRoundId(""); }}
                       className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                      style={{
-                        borderColor: matchFilterPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)",
-                        backgroundColor: matchFilterPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent",
-                        color: matchFilterPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6",
-                      }}>
+                      style={{ borderColor: matchFilterPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6" }}>
                       {p.custom_label ?? p.full_name}
                     </button>
                   ))}
                 </div>
               )}
-
-              {/* Filtro por rodada (só aparece se uma fase classificatória estiver selecionada) */}
               {matchFilterPhaseId && rounds.filter(r => r.phase_id === matchFilterPhaseId).length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Rodada:</span>
-                  <button type="button"
-                    onClick={() => setMatchFilterRoundId("")}
+                  <button type="button" onClick={() => setMatchFilterRoundId("")}
                     className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                    style={{
-                      borderColor: matchFilterRoundId === "" ? "var(--color-brand)" : "var(--color-border)",
-                      backgroundColor: matchFilterRoundId === "" ? "rgba(191,242,5,0.1)" : "transparent",
-                      color: matchFilterRoundId === "" ? "var(--color-brand)" : "#A6A6A6",
-                    }}>
+                    style={{ borderColor: matchFilterRoundId === "" ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterRoundId === "" ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterRoundId === "" ? "var(--color-brand)" : "#A6A6A6" }}>
                     Todas
                   </button>
                   {rounds.filter(r => r.phase_id === matchFilterPhaseId).map(r => (
-                    <button key={r.id} type="button"
-                      onClick={() => setMatchFilterRoundId(r.id)}
+                    <button key={r.id} type="button" onClick={() => setMatchFilterRoundId(r.id)}
                       className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                      style={{
-                        borderColor: matchFilterRoundId === r.id ? "var(--color-brand)" : "var(--color-border)",
-                        backgroundColor: matchFilterRoundId === r.id ? "rgba(191,242,5,0.1)" : "transparent",
-                        color: matchFilterRoundId === r.id ? "var(--color-brand)" : "#A6A6A6",
-                      }}>
+                      style={{ borderColor: matchFilterRoundId === r.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterRoundId === r.id ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterRoundId === r.id ? "var(--color-brand)" : "#A6A6A6" }}>
                       {r.custom_label ?? r.name}
                     </button>
                   ))}
                 </div>
               )}
-
               <div className="ml-auto flex items-center gap-3">
                 <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
                   {filteredMatches.length} {filteredMatches.length === 1 ? "partida" : "partidas"}
@@ -654,7 +755,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 </button>
               </div>
             </div>
-
             {loadingMatches ? (
               <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
             ) : filteredMatches.length === 0 ? (
@@ -693,87 +793,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 ))}
               </div>
             )}
-            {!selectedPhase ? (
-              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma fase disponível.</p>
-            ) : isClassificatory(selectedPhase.phase_type) ? (
-              <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                {standings.length === 0 ? (
-                  <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum dado de classificação disponível.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                          {["#", "Equipe", "J", "V", "E", "D", "GP", "GC", "SG", "PTS"].map(h => (
-                            <th key={h} className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {standings.map((row: any, idx: number) => (
-                          <tr key={row.team_id} style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }} className="hover:bg-[rgba(255,255,255,0.02)]">
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: idx < 4 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{idx + 1}</td>
-                            <td className="px-4 py-3"><div className="flex items-center gap-2">{row.teams?.logo_url ? <img src={row.teams.logo_url} alt="" className="h-5 w-5 rounded object-contain" /> : <div className="h-5 w-5 rounded" style={{ backgroundColor: "var(--color-border)" }} />}<span className="font-medium text-xs" style={{ color: "var(--color-text-primary)" }}>{row.teams?.abbreviation ?? row.teams?.full_name ?? "—"}</span></div></td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.matches_played ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.wins ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.draws ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.losses ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_scored ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{row.goals_conceded ?? 0}</td>
-                            <td className="px-4 py-3 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{((row.goals_scored ?? 0) - (row.goals_conceded ?? 0)) > 0 ? "+" : ""}{(row.goals_scored ?? 0) - (row.goals_conceded ?? 0)}</td>
-                            <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>{row.points ?? 0}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            ) : (
-              (() => {
-                const phaseMatchups = matchups.filter(m => m.phase_id === selectedPhaseId);
-                const byLabel: Record<string, any[]> = {};
-                phaseMatchups.forEach(m => { if (!byLabel[m.round_label]) byLabel[m.round_label] = []; byLabel[m.round_label].push(m); });
-                return Object.keys(byLabel).length === 0 ? (
-                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum confronto cadastrado nesta fase.</p>
-                ) : (
-                  <div className="space-y-6">
-                    {Object.entries(byLabel).map(([label, items]) => (
-                      <div key={label}>
-                        <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>{label}</p>
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                          {items.map((m: any) => (
-                            <div key={m.id} className="rounded-xl border p-4" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                              <div className="flex items-center gap-3 mb-2">
-                                {m.teams_a?.logo_url ? <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
-                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_a?.full_name ?? "A definir"}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                {m.teams_b?.logo_url ? <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
-                                <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_b?.full_name ?? "A definir"}</span>
-                              </div>
-                              {m.is_completed && <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>Concluído</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()
-            )}
+            {renderClassificacao()}
           </div>
         )}
 
         {/* ABA ESTATÍSTICAS */}
         {activeTab === "estatisticas" && (
           <div>
-            {/* Sub-abas */}
             <div className="mb-6 flex gap-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-              {[
-                { key: "geral", label: "GERAL" },
-                { key: "semanal", label: "SEMANAL" },
-              ].map(sub => (
+              {[{ key: "geral", label: "GERAL" }, { key: "semanal", label: "SEMANAL" }].map(sub => (
                 <button key={sub.key} type="button" onClick={() => setActiveStatsTab(sub.key as any)}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeStatsTab === sub.key ? "var(--color-brand)" : "transparent", color: activeStatsTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
@@ -781,50 +809,18 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 </button>
               ))}
             </div>
-
-            {/* Sub-aba GERAL */}
             {activeStatsTab === "geral" && (
               <div className="grid gap-6 lg:grid-cols-2">
-                <StatRanking
-                  title="Artilharia"
-                  data={topScorers}
-                  valueKey="goals"
-                  valueLabel="gols"
-                  emptyMessage="Nenhum gol registrado."
-                />
-                <StatRanking
-                  title="Assistências"
-                  data={topAssists}
-                  valueKey="assists"
-                  valueLabel="assist."
-                  emptyMessage="Nenhuma assistência registrada."
-                />
-                <StatRanking
-                  title="Cartões Amarelos"
-                  data={topYellow}
-                  valueKey="yellow_cards"
-                  valueLabel="amarelos"
-                  valueColor="#F2C005"
-                  emptyMessage="Nenhum cartão amarelo registrado."
-                />
-                <StatRanking
-                  title="Cartões Vermelhos"
-                  data={topRed}
-                  valueKey="red_cards"
-                  valueLabel="vermelhos"
-                  valueColor="var(--color-danger)"
-                  emptyMessage="Nenhum cartão vermelho registrado."
-                />
+                <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" emptyMessage="Nenhum gol registrado." />
+                <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." emptyMessage="Nenhuma assistência registrada." />
+                <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" emptyMessage="Nenhum cartão amarelo registrado." />
+                <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" emptyMessage="Nenhum cartão vermelho registrado." />
               </div>
             )}
-
-            {/* Sub-aba SEMANAL */}
             {activeStatsTab === "semanal" && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Premiações Semanais</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Em construção — MOTW e TOTW serão atribuídos aqui.
-                </p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — MOTW e TOTW serão atribuídos aqui.</p>
               </div>
             )}
           </div>
@@ -833,12 +829,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {/* ABA COMPETIÇÃO */}
         {activeTab === "competicao" && (
           <div>
-            {/* Sub-abas */}
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-              {[
-                { key: "fases", label: "FASES" },
-                { key: "equipes", label: "EQUIPES" },
-              ].map(sub => (
+              {[{ key: "fases", label: "FASES" }, { key: "equipes", label: "EQUIPES" }].map(sub => (
                 <button key={sub.key} type="button" onClick={() => setActiveCompTab(sub.key as any)}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeCompTab === sub.key ? "var(--color-brand)" : "transparent", color: activeCompTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
@@ -846,8 +838,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 </button>
               ))}
             </div>
-
-            {/* FASES */}
             {activeCompTab === "fases" && (
               <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
@@ -862,25 +852,20 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma fase criada.</p>
                 ) : (
                   phases.map((phase, idx) => (
-                    <Link key={phase.id}
-                      href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/fases/${phase.id}`}
+                    <Link key={phase.id} href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/fases/${phase.id}`}
                       className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                       <div className="flex-1">
                         <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{phase.custom_label ?? phase.full_name}</p>
                         <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{PHASE_TYPE_LABEL[phase.phase_type] ?? phase.phase_type}</p>
                       </div>
-                      {phase.is_current && (
-                        <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>atual</span>
-                      )}
+                      {phase.is_current && <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>atual</span>}
                       <ChevronRight size={14} style={{ color: "#555" }} />
                     </Link>
                   ))
                 )}
               </div>
             )}
-
-            {/* EQUIPES */}
             {activeCompTab === "equipes" && (
               <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
@@ -903,21 +888,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>
-                          {et.teams?.abbreviation?.toUpperCase() ?? "—"}
-                        </p>
-                        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                          {et.teams?.full_name ?? "—"}
-                        </p>
+                        <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>{et.teams?.abbreviation?.toUpperCase() ?? "—"}</p>
+                        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
                       </div>
                       {et.arrival_origin && (
-                        <span className="font-mono text-xs rounded px-2 py-0.5"
-                          style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                           {et.arrival_origin}
                         </span>
                       )}
-                      <Link
-                        href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
+                      <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
                         className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:border-[var(--color-brand)]"
                         style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
                         <Users size={12} /> Elenco
@@ -933,7 +912,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {/* ABA CONFIGURAÇÕES */}
         {activeTab === "configuracoes" && (
           <div>
-            {/* Sub-abas */}
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
               {[
                 { key: "gerais", label: "GERAIS" },
@@ -948,96 +926,117 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 </button>
               ))}
             </div>
-
             {activeConfigTab === "gerais" && (
-              <EdicaoConfigTab
-                selectedEditionId={selectedEditionId}
-                selectedEditionName={selectedEdition?.season_name ?? ""}
-                inputClass={inputClass}
-                inputStyle={inputStyle}
-              />
+              <EdicaoConfigTab selectedEditionId={selectedEditionId} selectedEditionName={selectedEdition?.season_name ?? ""} inputClass={inputClass} inputStyle={inputStyle} />
             )}
-
             {activeConfigTab === "premiacoes" && (
               <PremiacoesTab
-                awards={awards}
-                loadingAwards={loadingAwards}
-                awardType={awardType}
-                setAwardType={setAwardType}
-                awardAthleteId={awardAthleteId}
-                setAwardAthleteId={setAwardAthleteId}
-                awardTeamId={awardTeamId}
-                setAwardTeamId={setAwardTeamId}
-                savingAward={savingAward}
-                editionTeams={editionTeams}
-                editionAthletes={editionAthletes}
-                onAtribuir={handleAtribuirPremiacao}
-                onRemover={handleRemoverPremiacao}
-                inputClass={inputClass}
-                inputStyle={inputStyle}
+                awards={awards} loadingAwards={loadingAwards}
+                awardType={awardType} setAwardType={setAwardType}
+                awardAthleteId={awardAthleteId} setAwardAthleteId={setAwardAthleteId}
+                awardTeamId={awardTeamId} setAwardTeamId={setAwardTeamId}
+                savingAward={savingAward} editionTeams={editionTeams} editionAthletes={editionAthletes}
+                onAtribuir={handleAtribuirPremiacao} onRemover={handleRemoverPremiacao}
+                inputClass={inputClass} inputStyle={inputStyle}
               />
             )}
-
             {activeConfigTab === "inscricoes" && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Inscrições</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Em construção — janelas de inscrição e configurações serão gerenciadas aqui.
-                </p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — janelas de inscrição e configurações serão gerenciadas aqui.</p>
               </div>
             )}
-
             {activeConfigTab === "ranking" && (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Ranking</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Em construção — configuração de pontos do ranking por categoria serão definidos aqui.
-                </p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — configuração de pontos do ranking por categoria serão definidos aqui.</p>
               </div>
             )}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-  
-  // ─── StatRanking ─────────────────────────────────────────────────────────────
-
-  function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessage }: {
-    title: string;
-    data: any[];
-    valueKey: string;
-    valueLabel: string;
-    valueColor?: string;
-    emptyMessage: string;
-  }) {
-    const [showAll, setShowAll] = useState(false);
-    const LIMIT = 5;
-    const visible = data.slice(0, LIMIT);
-    const hasMore = data.length > LIMIT;
-  
-    return (
-      <>
-        <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-            <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
           </div>
-          {data.length === 0 ? (
-            <p className="px-5 py-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>{emptyMessage}</p>
-          ) : (
-            <>
-              {visible.map((row: any, idx: number) => (
-                <div key={row.athlete_id} className="flex items-center gap-3 px-5 py-3"
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── StatRanking ──────────────────────────────────────────────────────────────
+
+function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessage }: {
+  title: string; data: any[]; valueKey: string; valueLabel: string; valueColor?: string; emptyMessage: string;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const LIMIT = 5;
+  const visible = data.slice(0, LIMIT);
+  const hasMore = data.length > LIMIT;
+
+  return (
+    <>
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+        <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+          <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
+        </div>
+        {data.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>{emptyMessage}</p>
+        ) : (
+          <>
+            {visible.map((row: any, idx: number) => (
+              <div key={row.athlete_id} className="flex items-center gap-3 px-5 py-3"
+                style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                <span className="w-4 font-mono text-xs text-right shrink-0" style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+                  {idx + 1}
+                </span>
+                {row.athletes?.photo_url ? (
+                  <img src={row.athletes.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
+                ) : (
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                    style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                    {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
+                    {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
+                  </p>
+                  {row.team?.full_name && (
+                    <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
+                      {row.team.abbreviation ?? row.team.full_name}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 font-display text-lg font-bold" style={{ color: valueColor ?? "var(--color-brand)" }}>
+                  {row[valueKey] ?? 0}
+                </span>
+              </div>
+            ))}
+            {hasMore && (
+              <button type="button" onClick={() => setShowAll(true)}
+                className="w-full py-3 font-mono text-xs transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                style={{ color: "var(--color-brand)", borderTop: "1px solid var(--color-border)" }}>
+                Ver todos ({data.length})
+              </button>
+            )}
+          </>
+        )}
+      </div>
+      {showAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col max-h-[80vh]"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--color-border)" }}>
+              <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
+              <button type="button" onClick={() => setShowAll(false)} style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {data.map((row: any, idx: number) => (
+                <div key={row.athlete_id} className="flex items-center gap-3 px-6 py-3"
                   style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                  <span className="w-4 font-mono text-xs text-right shrink-0"
-                    style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+                  <span className="w-6 font-mono text-xs text-right shrink-0" style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                     {idx + 1}
                   </span>
                   {row.athletes?.photo_url ? (
-                    <img src={row.athletes.photo_url} alt="" className="h-5 w-5 rounded-full object-cover shrink-0" />
+                    <img src={row.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
                   ) : (
-                    <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
                       style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                       {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
@@ -1047,91 +1046,29 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
                     </p>
                     {row.team?.full_name && (
-                      <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
+                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
                         {row.team.abbreviation ?? row.team.full_name}
                       </p>
                     )}
                   </div>
-                  <span className="shrink-0 font-display text-lg font-bold"
-                    style={{ color: valueColor ?? "var(--color-brand)" }}>
+                  <span className="shrink-0 font-display text-xl font-bold" style={{ color: valueColor ?? "var(--color-brand)" }}>
                     {row[valueKey] ?? 0}
                   </span>
+                  <span className="font-mono text-xs shrink-0" style={{ color: "var(--color-text-secondary)" }}>{valueLabel}</span>
                 </div>
               ))}
-              {hasMore && (
-                <button type="button" onClick={() => setShowAll(true)}
-                  className="w-full py-3 font-mono text-xs transition-colors hover:bg-[rgba(255,255,255,0.03)]"
-                  style={{ color: "var(--color-brand)", borderTop: "1px solid var(--color-border)" }}>
-                  Ver todos ({data.length})
-                </button>
-              )}
-            </>
-          )}
-        </div>
-  
-        {/* Modal ver todos */}
-        {showAll && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-            <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col max-h-[80vh]"
-              style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
-                style={{ borderColor: "var(--color-border)" }}>
-                <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                  {title}
-                </h2>
-                <button type="button" onClick={() => setShowAll(false)}
-                  style={{ color: "var(--color-text-secondary)" }}>
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="overflow-y-auto flex-1">
-                {data.map((row: any, idx: number) => (
-                  <div key={row.athlete_id} className="flex items-center gap-3 px-6 py-3"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                    <span className="w-6 font-mono text-xs text-right shrink-0"
-                      style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                      {idx + 1}
-                    </span>
-                    {row.athletes?.photo_url ? (
-                      <img src={row.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                    ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                        style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
-                        {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
-                      </p>
-                      {row.team?.full_name && (
-                        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                          {row.team.abbreviation ?? row.team.full_name}
-                        </p>
-                      )}
-                    </div>
-                    <span className="shrink-0 font-display text-xl font-bold"
-                      style={{ color: valueColor ?? "var(--color-brand)" }}>
-                      {row[valueKey] ?? 0}
-                    </span>
-                    <span className="font-mono text-xs shrink-0" style={{ color: "var(--color-text-secondary)" }}>
-                      {valueLabel}
-                    </span>
-                  </div>
-                ))}
-              </div>
             </div>
           </div>
-        )}
-      </>
-    );
-  }
+        </div>
+      )}
+    </>
+  );
+}
 
 // ─── MatchRow ─────────────────────────────────────────────────────────────────
 
 function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelete: () => void }) {
   const [hovered, setHovered] = useState(false);
-
   const statusColor = STATUS_COLOR[match.status] ?? "#A6A6A6";
   const isScheduled = match.status === "scheduled";
 
@@ -1139,80 +1076,36 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
     <div className="relative group"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-        opacity: hovered ? 1 : 0.75,
-        transition: "opacity 0.15s ease",
-      }}>
-      <Link href={`/partidas/${match.id}`}
-        className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-[rgba(255,255,255,0.02)]">
-
-        {/* Status + data */}
+      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: hovered ? 1 : 0.75, transition: "opacity 0.15s ease" }}>
+      <Link href={`/partidas/${match.id}`} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-[rgba(255,255,255,0.02)]">
         <div className="shrink-0 w-12 text-center">
-          <span className="font-mono text-xs font-bold" style={{ color: statusColor }}>
-            {STATUS_LABEL[match.status] ?? match.status.toUpperCase()}
-          </span>
-          {match.match_date && (
-            <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>
-              {new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-            </p>
-          )}
-          {match.match_time && (
-            <p className="font-mono text-xs" style={{ color: "#444" }}>
-              {match.match_time.slice(0, 5)}
-            </p>
-          )}
+          <span className="font-mono text-xs font-bold" style={{ color: statusColor }}>{STATUS_LABEL[match.status] ?? match.status.toUpperCase()}</span>
+          {match.match_date && <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>{new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>}
+          {match.match_time && <p className="font-mono text-xs" style={{ color: "#444" }}>{match.match_time.slice(0, 5)}</p>}
         </div>
-
-        {/* Equipe A */}
         <div className="flex flex-1 items-center gap-2 min-w-0 justify-end">
           <span className="font-mono text-sm font-bold truncate text-right" style={{ color: "var(--color-text-primary)" }}>
             {match.teams_a?.abbreviation?.toUpperCase() ?? match.teams_a?.full_name ?? "—"}
           </span>
-          {match.teams_a?.logo_url ? (
-            <img src={match.teams_a.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" />
-          ) : (
-            <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
-          )}
+          {match.teams_a?.logo_url ? <img src={match.teams_a.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" /> : <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />}
         </div>
-
-        {/* Placar */}
         <div className="shrink-0 flex items-center gap-2 px-3">
-          <span className="font-display text-lg font-bold w-6 text-center"
-            style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>
-            {isScheduled ? "–" : match.score_a}
-          </span>
+          <span className="font-display text-lg font-bold w-6 text-center" style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>{isScheduled ? "–" : match.score_a}</span>
           <span className="font-mono text-xs" style={{ color: "#333" }}>:</span>
-          <span className="font-display text-lg font-bold w-6 text-center"
-            style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>
-            {isScheduled ? "–" : match.score_b}
-          </span>
+          <span className="font-display text-lg font-bold w-6 text-center" style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>{isScheduled ? "–" : match.score_b}</span>
         </div>
-
-        {/* Equipe B */}
         <div className="flex flex-1 items-center gap-2 min-w-0">
-          {match.teams_b?.logo_url ? (
-            <img src={match.teams_b.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" />
-          ) : (
-            <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
-          )}
+          {match.teams_b?.logo_url ? <img src={match.teams_b.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" /> : <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />}
           <span className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
             {match.teams_b?.abbreviation?.toUpperCase() ?? match.teams_b?.full_name ?? "—"}
           </span>
         </div>
-
-        {/* Fase/rodada */}
         <div className="shrink-0 hidden lg:block w-28 text-right">
-          <p className="font-mono text-xs truncate" style={{ color: "#444" }}>
-            {match.phases?.custom_label ?? match.phases?.full_name ?? ""}
-          </p>
+          <p className="font-mono text-xs truncate" style={{ color: "#444" }}>{match.phases?.custom_label ?? match.phases?.full_name ?? ""}</p>
         </div>
       </Link>
-
-      {/* Botão deletar */}
       {hovered && (
-        <button type="button"
-          onClick={e => { e.preventDefault(); onDelete(); }}
+        <button type="button" onClick={e => { e.preventDefault(); onDelete(); }}
           className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-lg border transition-colors hover:border-[var(--color-danger)]"
           style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
           <Trash2 size={13} strokeWidth={2} />
@@ -1229,7 +1122,6 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
 }) {
   const [editionStatus, setEditionStatus] = useState("planned");
   const [isPublic, setIsPublic] = useState(false);
-  const [minAthletes, setMinAthletes] = useState("");
   const [maxAthletes, setMaxAthletes] = useState("");
   const [yellowThreshold, setYellowThreshold] = useState("");
   const [loaded, setLoaded] = useState(false);
@@ -1245,7 +1137,6 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
       ]);
       setEditionStatus(ed?.status ?? "planned");
       setIsPublic(settings?.is_public ?? false);
-      setMinAthletes(String(settings?.min_athletes ?? ""));
       setMaxAthletes(String(settings?.max_athletes ?? ""));
       setYellowThreshold(String(settings?.yellow_card_suspension_threshold ?? ""));
       setLoaded(true);
@@ -1256,8 +1147,9 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
   async function handleSave() {
     setSaving(true);
     const fd = new FormData();
-    fd.append("status", editionStatus); fd.append("is_public", String(isPublic));
-    fd.append("min_athletes", minAthletes); fd.append("max_athletes", maxAthletes);
+    fd.append("status", editionStatus);
+    fd.append("is_public", String(isPublic));
+    fd.append("max_athletes", maxAthletes);
     fd.append("yellow_card_threshold", yellowThreshold);
     const result = await editarEdicao(selectedEditionId, fd);
     setSaving(false);
@@ -1305,6 +1197,8 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
   );
 }
 
+// ─── PremiacoesTab ────────────────────────────────────────────────────────────
+
 function PremiacoesTab({
   awards, loadingAwards, awardType, setAwardType, awardAthleteId, setAwardAthleteId,
   awardTeamId, setAwardTeamId, savingAward, editionTeams, editionAthletes,
@@ -1326,10 +1220,8 @@ function PremiacoesTab({
     best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
     champion: "Campeão", runner_up: "Vice-campeão", third_place: "Terceiro Lugar",
   };
-
   const INDIVIDUAL_TYPES = ["top_scorer", "top_assists", "mvp", "best_goalkeeper", "revelation", "best_defense", "best_performance"];
   const COLLECTIVE_TYPES = ["champion", "runner_up", "third_place"];
-
   const isColetiva = COLLECTIVE_TYPES.includes(awardType);
   const filteredAwards = awards.filter(a =>
     activeSub === "individuais" ? INDIVIDUAL_TYPES.includes(a.award_type) : COLLECTIVE_TYPES.includes(a.award_type)
@@ -1337,24 +1229,16 @@ function PremiacoesTab({
 
   return (
     <div className="max-w-2xl space-y-4">
-      {/* Sub-abas */}
       <div className="flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-        {[
-          { key: "individuais", label: "INDIVIDUAIS" },
-          { key: "coletivas", label: "COLETIVAS" },
-        ].map(sub => (
-          <button key={sub.key} type="button" onClick={() => { setActiveSub(sub.key as any); setAwardType(""); setAwardAthleteId(""); setAwardTeamId(""); }}
+        {[{ key: "individuais", label: "INDIVIDUAIS" }, { key: "coletivas", label: "COLETIVAS" }].map(sub => (
+          <button key={sub.key} type="button"
+            onClick={() => { setActiveSub(sub.key as any); setAwardType(""); setAwardAthleteId(""); setAwardTeamId(""); }}
             className="border-b-2 pb-3 font-mono text-xs transition-colors"
-            style={{
-              borderColor: activeSub === sub.key ? "var(--color-brand)" : "transparent",
-              color: activeSub === sub.key ? "var(--color-brand)" : "#A6A6A6",
-            }}>
+            style={{ borderColor: activeSub === sub.key ? "var(--color-brand)" : "transparent", color: activeSub === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
             {sub.label}
           </button>
         ))}
       </div>
-
-      {/* Atribuir */}
       <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
         <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
           Atribuir premiação {activeSub === "individuais" ? "individual" : "coletiva"}
@@ -1362,8 +1246,7 @@ function PremiacoesTab({
         <div className="grid gap-4 sm:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo</span>
-            <select value={awardType} onChange={e => { setAwardType(e.target.value); setAwardAthleteId(""); setAwardTeamId(""); }}
-              className={inputClass} style={inputStyle}>
+            <select value={awardType} onChange={e => { setAwardType(e.target.value); setAwardAthleteId(""); setAwardTeamId(""); }} className={inputClass} style={inputStyle}>
               <option value="">Selecione…</option>
               {activeSub === "individuais" ? (
                 <>
@@ -1384,7 +1267,6 @@ function PremiacoesTab({
               )}
             </select>
           </label>
-
           {awardType && !isColetiva && (
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Atleta</span>
@@ -1396,9 +1278,7 @@ function PremiacoesTab({
                   return (
                     <optgroup key={et.id} label={et.teams?.full_name ?? "Equipe"}>
                       {athletes.map((a: any) => (
-                        <option key={a.athlete_id} value={a.athlete_id}>
-                          {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
-                        </option>
+                        <option key={a.athlete_id} value={a.athlete_id}>{a.athletes?.surname ?? a.athletes?.full_name ?? "—"}</option>
                       ))}
                     </optgroup>
                   );
@@ -1406,19 +1286,15 @@ function PremiacoesTab({
               </select>
             </label>
           )}
-
           {awardType && isColetiva && (
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe</span>
               <select value={awardTeamId} onChange={e => setAwardTeamId(e.target.value)} className={inputClass} style={inputStyle}>
                 <option value="">Selecione…</option>
-                {editionTeams.map((et: any) => (
-                  <option key={et.team_id} value={et.team_id}>{et.teams?.full_name ?? "—"}</option>
-                ))}
+                {editionTeams.map((et: any) => <option key={et.team_id} value={et.team_id}>{et.teams?.full_name ?? "—"}</option>)}
               </select>
             </label>
           )}
-
           <div className="flex items-end">
             <button type="button" onClick={onAtribuir} disabled={savingAward || !awardType}
               className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
@@ -1428,8 +1304,6 @@ function PremiacoesTab({
           </div>
         </div>
       </div>
-
-      {/* Lista */}
       <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
         <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
           <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
@@ -1446,16 +1320,12 @@ function PremiacoesTab({
             const name = col ? (award.teams?.full_name ?? "—") : (award.athletes?.surname ?? award.athletes?.full_name ?? "—");
             const photo = col ? award.teams?.logo_url : award.athletes?.photo_url;
             return (
-              <div key={award.id} className="flex items-center gap-4 px-5 py-3"
-                style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-                  style={{ backgroundColor: "rgba(191,242,5,0.1)" }}>
+              <div key={award.id} className="flex items-center gap-4 px-5 py-3" style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: "rgba(191,242,5,0.1)" }}>
                   {photo ? <img src={photo} alt="" className="h-8 w-8 rounded object-contain" /> : <span>🏆</span>}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>
-                    {AWARD_LABELS[award.award_type] ?? award.award_type}
-                  </p>
+                  <p className="font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>{AWARD_LABELS[award.award_type] ?? award.award_type}</p>
                   <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{name}</p>
                 </div>
                 <button type="button" onClick={() => onRemover(award.id)}
