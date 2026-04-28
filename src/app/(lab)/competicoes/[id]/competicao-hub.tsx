@@ -25,7 +25,7 @@ type Match = {
   phases: { id: string; full_name: string; custom_label: string | null; phase_type: string } | null;
 };
 type Phase = { id: string; full_name: string; custom_label: string | null; phase_type: string; display_order: number; is_current: boolean };
-type Round = { id: string; name: string; custom_label: string | null; phase_id: string };
+type Round = { id: string; name: string; custom_label: string | null; phase_id: string; display_order: number; is_current: boolean; legs: boolean; aggregate_score: boolean };
 type EditionTeam = { id: string; team_id: string; arrival_origin: string | null; teams: Team | null };
 type Standing = any;
 type Scorer = any;
@@ -105,6 +105,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [savingAward, setSavingAward] = useState(false);
   const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
 
+  const [newMatchIsSecondLeg, setNewMatchIsSecondLeg] = useState(false);
+
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
   const isClassificatory = (type: string) => type === "round_robin" || type === "group_stage";
@@ -130,9 +132,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       phaseIds.length > 0
         ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: false })
         : Promise.resolve({ data: [] }),
-      supabase.from("phases").select("id, full_name, custom_label, phase_type, display_order, is_current").eq("edition_id", editionId).order("display_order"),
+        supabase.from("phases").select("id, full_name, custom_label, phase_type, display_order, is_current, legs, aggregate_score").eq("edition_id", editionId).order("display_order"),
       phaseIds.length > 0
-        ? supabase.from("rounds").select("id, name, custom_label, phase_id").in("phase_id", phaseIds).order("display_order")
+        ? supabase.from("rounds").select("id, name, custom_label, phase_id, display_order, is_current, legs, aggregate_score").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
       supabase.from("edition_teams").select("id, team_id, arrival_origin, teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
       supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
@@ -218,6 +220,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if (newMatchTime) fd.append("match_time", newMatchTime);
     if (newMatchVenueId) fd.append("venue_id", newMatchVenueId);
     if (newMatchRoundId) fd.append("round_id", newMatchRoundId);
+    if (newMatchIsSecondLeg) fd.append("is_second_leg", "true");
     const result = await criarPartida(newMatchPhaseId, fd);
     setCreatingMatch(false);
     if ("error" in result) { setNewMatchError(result.error); return; }
@@ -309,6 +312,31 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if (!matchesByRound[key]) matchesByRound[key] = { label: key, matches: [] };
     matchesByRound[key].matches.push(m);
   });
+
+  {(() => {
+    const selRound = (rounds as any[]).find((r: any) => r.id === newMatchRoundId);
+    if (!selRound?.legs) return null;
+    return (
+      <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+        style={{ borderColor: "var(--color-border)" }}>
+        <div className="flex-1">
+          <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Jogo de volta</p>
+          <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            {newMatchIsSecondLeg ? "Esta partida é a volta" : "Esta partida é a ida"}
+          </p>
+        </div>
+        <button type="button" onClick={() => setNewMatchIsSecondLeg(v => !v)}
+          style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+            backgroundColor: newMatchIsSecondLeg ? "var(--color-brand)" : "var(--color-border)",
+            transition: "background-color 0.15s", position: "relative" }}>
+          <div style={{ position: "absolute", top: 3, left: newMatchIsSecondLeg ? 21 : 3,
+            width: 16, height: 16, borderRadius: "50%",
+            backgroundColor: newMatchIsSecondLeg ? "var(--color-background)" : "#888",
+            transition: "left 0.15s" }} />
+        </button>
+      </div>
+    );
+  })()}
 
   const filteredMatches = matches.filter(m => {
     if (matchFilterPhaseId && m.phases?.id !== matchFilterPhaseId) return false;
@@ -422,39 +450,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       );
     }
 
-    // Mata-mata / conferência — confrontos agrupados por rodada
+    // Mata-mata / conferência
     const phaseMatchups = matchups.filter(m => m.phase_id === selectedPhaseId);
-    const byLabel: Record<string, any[]> = {};
-    phaseMatchups.forEach(m => {
-      if (!byLabel[m.round_label]) byLabel[m.round_label] = [];
-      byLabel[m.round_label].push(m);
-    });
-    if (Object.keys(byLabel).length === 0) {
-      return <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum confronto cadastrado nesta fase.</p>;
-    }
+    const phaseRounds = (rounds as Round[]).filter(r => r.phase_id === selectedPhaseId);
     return (
-      <div className="space-y-6">
-        {Object.entries(byLabel).map(([label, items]) => (
-          <div key={label}>
-            <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>{label}</p>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {items.map((m: any) => (
-                <div key={m.id} className="rounded-xl border p-4" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                  <div className="flex items-center gap-3 mb-2">
-                    {m.teams_a?.logo_url ? <img src={m.teams_a.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
-                    <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_a?.full_name ?? "A definir"}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {m.teams_b?.logo_url ? <img src={m.teams_b.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" /> : <div className="h-6 w-6 shrink-0 rounded" style={{ backgroundColor: "var(--color-border)" }} />}
-                    <span className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{m.teams_b?.full_name ?? "A definir"}</span>
-                  </div>
-                  {m.is_completed && <span className="mt-2 inline-block font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>Concluído</span>}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <BracketView
+        phaseId={selectedPhaseId}
+        matchups={phaseMatchups}
+        phaseRounds={phaseRounds}
+      />
     );
   }
 
@@ -1185,7 +1189,36 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
   }
 
   const formationSlots = FORMATIONS[formation].slots;
-  const selectedRound = rounds.find((r: any) => r.id === selectedRoundId);
+
+  {/* Toggle ida/volta — só aparece se rodada selecionada tem legs=true */}
+{(() => {
+  const selectedRound = rounds.find(r => r.id === newMatchRoundId);
+  if (!selectedRound?.legs) return null;
+  return (
+    <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
+      style={{ borderColor: "var(--color-border)" }}>
+      <div className="flex-1">
+        <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Jogo de volta</p>
+        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+          {newMatchIsSecondLeg ? "Esta partida é a volta" : "Esta partida é a ida"}
+        </p>
+      </div>
+      <button type="button"
+        onClick={() => setNewMatchIsSecondLeg(v => !v)}
+        style={{
+          width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
+          backgroundColor: newMatchIsSecondLeg ? "var(--color-brand)" : "var(--color-border)",
+          transition: "background-color 0.15s", position: "relative",
+        }}>
+        <div style={{
+          position: "absolute", top: 3, left: newMatchIsSecondLeg ? 21 : 3,
+          width: 16, height: 16, borderRadius: "50%", backgroundColor: newMatchIsSecondLeg ? "var(--color-background)" : "var(--color-text-secondary)",
+          transition: "left 0.15s",
+        }} />
+      </button>
+    </div>
+  );
+})()}
 
   // IDs already in slots or coach — prevent duplicates
   const usedAthleteIds = new Set(slots.filter(Boolean).map((s: any) => s.athleteId).filter(Boolean));
@@ -1704,6 +1737,435 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
           style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
           {saving ? "Salvando…" : "Salvar configurações"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── BracketView ──────────────────────────────────────────────────────────────
+// Renders a knockout/conference bracket for the classification tab
+// Usage: <BracketView phaseId={id} phases={phases} matchups={matchups} rounds={rounds} supabase={supabase} legs={phase.legs} aggregateScore={phase.aggregate_score} />
+
+const KNOCKOUT_ORDER = [
+  "Décimas de Final",
+  "Oitavas de Final",
+  "Quartas de Final",
+  "Semifinal",
+  "Final",
+  "Disputa de Terceiro Lugar",
+];
+
+function sortRounds(labels: string[]): string[] {
+  const thirds = labels.filter(l => l === "Disputa de Terceiro Lugar");
+  const rest = labels.filter(l => l !== "Disputa de Terceiro Lugar");
+  const sorted = rest.sort((a, b) => {
+    const ia = KNOCKOUT_ORDER.indexOf(a);
+    const ib = KNOCKOUT_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return -1;
+    if (ib === -1) return 1;
+    return ia - ib;
+  });
+  return [...sorted, ...thirds];
+}
+
+type MatchupData = {
+  id: string;
+  round_label: string;
+  round_id: string | null;
+  team_a_id: string | null;
+  team_b_id: string | null;
+  is_completed: boolean;
+  display_order: number;
+  teams_a: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; primary_color: string | null } | null;
+  teams_b: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; primary_color: string | null } | null;
+  matches?: MatchData[];
+};
+
+type MatchData = {
+  id: string;
+  score_a: number;
+  score_b: number;
+  status: string;
+  match_date: string | null;
+  pen_a?: number;
+  pen_b?: number;
+};
+
+function BracketView({
+  phaseId,
+  matchups,
+  legs,
+  aggregateScore,
+}: {
+  phaseId: string;
+  matchups: MatchupData[];
+  legs: boolean;
+  aggregateScore: boolean;
+}) {
+  const [enriched, setEnriched] = useState<MatchupData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalMatchup, setModalMatchup] = useState<MatchupData | null>(null);
+
+  useEffect(() => {
+    if (!phaseId) return;
+    async function load() {
+      setLoading(true);
+      const supabase = createClient();
+      const phaseMatchups = matchups.filter(m => m.id); // all passed in
+      const matchupIds = phaseMatchups.map(m => m.id);
+      if (matchupIds.length === 0) { setEnriched([]); setLoading(false); return; }
+
+      // Fetch matches for all matchups
+      const { data: matchesData } = await supabase
+        .from("matches")
+        .select("id, matchup_id, score_a, score_b, status, match_date, team_a_id")
+        .in("matchup_id", matchupIds)
+        .order("match_date", { ascending: true });
+
+      const matchIds = (matchesData ?? []).map((m: any) => m.id);
+
+      // Fetch shootout results
+      let shootouts: any[] = [];
+      if (matchIds.length > 0) {
+        const { data: soData } = await supabase
+          .from("match_penalty_shootout")
+          .select("match_id, team_id, result")
+          .in("match_id", matchIds);
+        shootouts = soData ?? [];
+      }
+
+      // Group shootout scores per match per team
+      const shootoutMap: Record<string, { team_a: number; team_b: number }> = {};
+      const matchTeamAMap: Record<string, string> = {};
+      (matchesData ?? []).forEach((m: any) => { matchTeamAMap[m.id] = m.team_a_id; });
+
+      shootouts.forEach((s: any) => {
+        if (!shootoutMap[s.match_id]) shootoutMap[s.match_id] = { team_a: 0, team_b: 0 };
+        if (s.result === "scored") {
+          if (s.team_id === matchTeamAMap[s.match_id]) shootoutMap[s.match_id].team_a++;
+          else shootoutMap[s.match_id].team_b++;
+        }
+      });
+
+      // Group matches by matchup
+      const matchesByMatchup: Record<string, MatchData[]> = {};
+      (matchesData ?? []).forEach((m: any) => {
+        if (!m.matchup_id) return;
+        if (!matchesByMatchup[m.matchup_id]) matchesByMatchup[m.matchup_id] = [];
+        const so = shootoutMap[m.id];
+        matchesByMatchup[m.matchup_id].push({
+          id: m.id, score_a: m.score_a, score_b: m.score_b,
+          status: m.status, match_date: m.match_date,
+          pen_a: so?.team_a, pen_b: so?.team_b,
+        });
+      });
+
+      setEnriched(phaseMatchups.map(m => ({ ...m, matches: matchesByMatchup[m.id] ?? [] })));
+      setLoading(false);
+    }
+    void load();
+  }, [phaseId, matchups]);
+
+  if (loading) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando bracket…</p>;
+  if (enriched.length === 0) return <p style={{ fontSize: 13, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Nenhum confronto cadastrado.</p>;
+
+  // Group by round_label
+  const byLabel: Record<string, MatchupData[]> = {};
+  enriched.forEach(m => {
+    const key = m.round_label ?? "—";
+    if (!byLabel[key]) byLabel[key] = [];
+    byLabel[key].push(m);
+  });
+  const sortedLabels = sortRounds(Object.keys(byLabel));
+
+  return (
+    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+      {modalMatchup && (
+        <SeriesModal matchup={modalMatchup} legs={legs} aggregateScore={aggregateScore} onClose={() => setModalMatchup(null)} />
+      )}
+      <div style={{ display: "flex", gap: 0, alignItems: "stretch", minWidth: sortedLabels.length * 220 }}>
+        {sortedLabels.map((label, colIdx) => {
+          const colMatchups = [...(byLabel[label] ?? [])].sort((a, b) => a.display_order - b.display_order);
+          const isLast = colIdx === sortedLabels.length - 1 || (sortedLabels.length > 1 && label === "Disputa de Terceiro Lugar");
+          const isThird = label === "Disputa de Terceiro Lugar";
+          return (
+            <div key={label} style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 200 }}>
+              {/* Column header */}
+              <div style={{ padding: "10px 16px 14px", borderBottom: "1px solid var(--color-border)" }}>
+                <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: isThird ? "var(--color-warning)" : "var(--color-brand)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  {label}
+                </p>
+              </div>
+
+              {/* Matchup cards */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", padding: "16px 12px", gap: 12 }}>
+                {colMatchups.map((matchup, mIdx) => (
+                  <MatchupCard
+                    key={matchup.id}
+                    matchup={matchup}
+                    legs={legs}
+                    aggregateScore={aggregateScore}
+                    showConnector={!isLast && !isThird}
+                    onOpenModal={() => legs && setModalMatchup(matchup)}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── MatchupCard ──────────────────────────────────────────────────────────────
+
+function MatchupCard({ matchup, legs, aggregateScore, showConnector, onOpenModal }: {
+  matchup: MatchupData;
+  legs: boolean;
+  aggregateScore: boolean;
+  showConnector: boolean;
+  onOpenModal: () => void;
+}) {
+  const matches = matchup.matches ?? [];
+  const hasMatches = matches.some(m => m.status === "finished");
+  const isClickable = legs && matches.length > 0;
+
+  // Compute display scores
+  let scoreA: number | null = null;
+  let scoreB: number | null = null;
+  let penA: number | null = null;
+  let penB: number | null = null;
+  let winnerSide: "a" | "b" | null = null;
+
+  if (hasMatches) {
+    const finished = matches.filter(m => m.status === "finished");
+    if (!legs) {
+      // Single match
+      const m = finished[0];
+      if (m) {
+        scoreA = m.score_a; scoreB = m.score_b;
+        penA = m.pen_a ?? null; penB = m.pen_b ?? null;
+        if (penA !== null && penB !== null) {
+          winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
+        } else {
+          winnerSide = scoreA > scoreB ? "a" : scoreB > scoreA ? "b" : null;
+        }
+      }
+    } else if (aggregateScore) {
+      // Sum goals
+      scoreA = finished.reduce((s, m) => s + m.score_a, 0);
+      scoreB = finished.reduce((s, m) => s + m.score_b, 0);
+      // Check last match for penalties
+      const last = finished[finished.length - 1];
+      if (last?.pen_a !== undefined && last?.pen_b !== undefined) {
+        penA = last.pen_a ?? null; penB = last.pen_b ?? null;
+      }
+      if (penA !== null && penB !== null) {
+        winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
+      } else {
+        winnerSide = (scoreA ?? 0) > (scoreB ?? 0) ? "a" : (scoreB ?? 0) > (scoreA ?? 0) ? "b" : null;
+      }
+    } else {
+      // Ida e volta sem agregado — count wins
+      let winsA = 0, winsB = 0;
+      finished.forEach(m => {
+        if (m.pen_a !== undefined && m.pen_b !== undefined && m.pen_a !== null && m.pen_b !== null) {
+          if (m.pen_a > m.pen_b) winsA++; else if (m.pen_b > m.pen_a) winsB++;
+        } else {
+          if (m.score_a > m.score_b) winsA++; else if (m.score_b > m.score_a) winsB++;
+        }
+      });
+      scoreA = winsA; scoreB = winsB;
+      winnerSide = winsA > winsB ? "a" : winsB > winsA ? "b" : null;
+    }
+  }
+
+  const teamA = matchup.teams_a;
+  const teamB = matchup.teams_b;
+  const aWins = winnerSide === "a";
+  const bWins = winnerSide === "b";
+
+  return (
+    <div style={{ position: "relative" }}>
+      <div
+        onClick={isClickable ? onOpenModal : undefined}
+        style={{
+          borderRadius: 10, border: `1px solid ${matchup.is_completed ? "var(--color-border)" : "var(--color-border)"}`,
+          backgroundColor: "var(--color-surface)", overflow: "hidden",
+          cursor: isClickable ? "pointer" : "default",
+          transition: "border-color 0.15s",
+        }}
+        onMouseEnter={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; }}
+        onMouseLeave={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
+      >
+        <TeamRow team={teamA} score={scoreA} penScore={penA} isWinner={aWins} isLoser={!aWins && bWins && hasMatches} hasBorder />
+        <TeamRow team={teamB} score={scoreB} penScore={penB} isWinner={bWins} isLoser={!bWins && aWins && hasMatches} hasBorder={false} />
+        {isClickable && (
+          <div style={{ padding: "4px 10px", borderTop: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 4 }}>
+            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand)", letterSpacing: "0.04em" }}>
+              VER JOGOS ›
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Connector line to next round */}
+      {showConnector && (
+        <div style={{
+          position: "absolute", right: -12, top: "50%", transform: "translateY(-50%)",
+          width: 12, height: 1, backgroundColor: "var(--color-border)",
+        }} />
+      )}
+    </div>
+  );
+}
+
+// ─── TeamRow ──────────────────────────────────────────────────────────────────
+
+function TeamRow({ team, score, penScore, isWinner, isLoser, hasBorder }: {
+  team: MatchupData["teams_a"];
+  score: number | null;
+  penScore: number | null;
+  isWinner: boolean;
+  isLoser: boolean;
+  hasBorder: boolean;
+}) {
+  const name = team?.full_name ?? team?.abbreviation ?? "A definir";
+  const textColor = isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.35)" : "var(--color-text-primary)";
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
+      borderTop: hasBorder ? "none" : "1px solid var(--color-border)",
+      backgroundColor: isWinner ? "rgba(191,242,5,0.04)" : "transparent",
+    }}>
+      {/* Logo */}
+      {team?.logo_url ? (
+        <img src={team.logo_url} alt="" style={{
+          width: 20, height: 20, objectFit: "contain", flexShrink: 0,
+          filter: isLoser ? "grayscale(1) opacity(0.4)" : isWinner ? "drop-shadow(0 0 4px rgba(191,242,5,0.5))" : "none",
+          transition: "filter 0.15s",
+        }} />
+      ) : (
+        <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "var(--color-border)", flexShrink: 0 }} />
+      )}
+
+      {/* Name */}
+      <p style={{ margin: 0, flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: isWinner ? 700 : 500,
+        color: textColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {team ? name : <span style={{ opacity: 0.4 }}>A definir</span>}
+      </p>
+
+      {/* Score */}
+      {score !== null && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0 }}>
+          {penScore !== null && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", opacity: 0.8 }}>
+              ({penScore})
+            </span>
+          )}
+          <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.3)" : "var(--color-text-primary)", minWidth: 16, textAlign: "right" }}>
+            {score}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SeriesModal ──────────────────────────────────────────────────────────────
+
+function SeriesModal({ matchup, legs, aggregateScore, onClose }: {
+  matchup: MatchupData;
+  legs: boolean;
+  aggregateScore: boolean;
+  onClose: () => void;
+}) {
+  const matches = (matchup.matches ?? []).filter(m => m.status === "finished");
+  const teamA = matchup.teams_a;
+  const teamB = matchup.teams_b;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 16 }}>
+      <div style={{ width: "100%", maxWidth: 380, borderRadius: 14, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+        {/* Header */}
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
+            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>
+              {teamA?.abbreviation ?? teamA?.full_name ?? "—"}
+            </p>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>vs</span>
+            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>
+              {teamB?.abbreviation ?? teamB?.full_name ?? "—"}
+            </p>
+            {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
+          </div>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Match list */}
+        <div>
+          {matches.length === 0 ? (
+            <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>
+              Nenhuma partida finalizada.
+            </p>
+          ) : matches.map((m, idx) => {
+            const date = m.match_date ? new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null;
+            const hasPen = m.pen_a !== undefined && m.pen_b !== undefined && m.pen_a !== null && m.pen_b !== null;
+            let winSide: "a" | "b" | null = null;
+            if (hasPen) winSide = (m.pen_a ?? 0) > (m.pen_b ?? 0) ? "a" : (m.pen_b ?? 0) > (m.pen_a ?? 0) ? "b" : null;
+            else winSide = m.score_a > m.score_b ? "a" : m.score_b > m.score_a ? "b" : null;
+
+            const labelMap: Record<number, string> = { 0: "Ida", 1: "Volta" };
+            const gameLabel = matches.length > 1 ? (labelMap[idx] ?? `Jogo ${idx + 1}`) : "Jogo único";
+
+            return (
+              <div key={m.id} style={{ padding: "12px 18px", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{gameLabel}</span>
+                  {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>{date}</span>}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  {/* Team A */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+                    {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "b" ? "grayscale(1) opacity(0.4)" : "none" }} />}
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "a" ? 700 : 400, color: winSide === "a" ? "#BFF205" : winSide === "b" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>
+                      {teamA?.abbreviation ?? "—"}
+                    </span>
+                  </div>
+                  {/* Score */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+                    <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, minWidth: 18, textAlign: "right", color: winSide === "a" ? "#BFF205" : "var(--color-text-primary)" }}>
+                      {hasPen ? `${m.score_a}(${m.pen_a})` : m.score_a}
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>×</span>
+                    <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, minWidth: 18, textAlign: "left", color: winSide === "b" ? "#BFF205" : "var(--color-text-primary)" }}>
+                      {hasPen ? `${m.score_b}(${m.pen_b})` : m.score_b}
+                    </span>
+                  </div>
+                  {/* Team B */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "b" ? 700 : 400, color: winSide === "b" ? "#BFF205" : winSide === "a" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>
+                      {teamB?.abbreviation ?? "—"}
+                    </span>
+                    {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "a" ? "grayscale(1) opacity(0.4)" : "none" }} />}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "10px 18px", borderTop: "1px solid var(--color-border)", textAlign: "right" }}>
+          <button type="button" onClick={onClose}
+            style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-brand)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.05em" }}>
+            FECHAR
+          </button>
+        </div>
       </div>
     </div>
   );

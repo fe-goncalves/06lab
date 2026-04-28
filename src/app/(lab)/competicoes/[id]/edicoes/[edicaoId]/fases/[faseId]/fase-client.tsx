@@ -83,8 +83,6 @@ export default function FaseClient({
   const [displayOrder, setDisplayOrder] = useState(String(phase.display_order ?? 0));
   const [halfDuration, setHalfDuration] = useState(String(phase.half_duration_minutes ?? ""));
   const [isCurrent, setIsCurrent] = useState(phase.is_current ?? false);
-  const [legs, setLegs] = useState(phase.legs ?? false);
-  const [aggregateScore, setAggregateScore] = useState(phase.aggregate_score ?? false);
   const [tiebreakerType, setTiebreakerType] = useState(phase.penalty_tiebreaker_type ?? "penalties");
   const [pointsWin, setPointsWin] = useState(String(phase.points_win ?? 3));
   const [pointsDraw, setPointsDraw] = useState(String(phase.points_draw ?? 1));
@@ -92,16 +90,24 @@ export default function FaseClient({
   const [saving, setSaving] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
 
-  // Rodadas
+  // Rodadas — create
   const [showRoundForm, setShowRoundForm] = useState(false);
   const [roundName, setRoundName] = useState("");
+  const [roundCustomLabel, setRoundCustomLabel] = useState("");
   const [roundOrder, setRoundOrder] = useState("");
+  const [roundLegs, setRoundLegs] = useState(false);
+  const [roundAggregate, setRoundAggregate] = useState(false);
   const [savingRound, setSavingRound] = useState(false);
   const [roundError, setRoundError] = useState<string | null>(null);
+
+  // Rodadas — edit
   const [editingRoundId, setEditingRoundId] = useState<string | null>(null);
   const [editRoundName, setEditRoundName] = useState("");
+  const [editRoundCustomLabel, setEditRoundCustomLabel] = useState("");
   const [editRoundOrder, setEditRoundOrder] = useState("");
   const [editRoundCurrent, setEditRoundCurrent] = useState(false);
+  const [editRoundLegs, setEditRoundLegs] = useState(false);
+  const [editRoundAggregate, setEditRoundAggregate] = useState(false);
 
   // Grupos
   const [showGroupForm, setShowGroupForm] = useState(false);
@@ -128,8 +134,6 @@ export default function FaseClient({
     fd.append("half_duration_minutes", halfDuration);
     fd.append("is_current", String(isCurrent));
     if (isKnockout || isConference) {
-      fd.append("legs", String(legs));
-      fd.append("aggregate_score", String(aggregateScore));
       fd.append("penalty_tiebreaker_type", tiebreakerType);
     }
     if (isClassificatory) {
@@ -159,29 +163,43 @@ export default function FaseClient({
   }
 
   async function handleCreateRound() {
-    if (!roundName.trim()) { setRoundError("Nome é obrigatório."); return; }
+    if (!roundName.trim()) { setRoundError("Tipo é obrigatório."); return; }
     setRoundError(null); setSavingRound(true);
     const fd = new FormData();
     fd.append("name", roundName.trim());
-    fd.append("custom_label", "");
+    fd.append("custom_label", roundCustomLabel.trim());
     fd.append("display_order", roundOrder || String(rounds.length + 1));
+    fd.append("legs", String(roundLegs));
+    fd.append("aggregate_score", String(roundAggregate));
     const result = await criarRodada(phase.id, fd);
     setSavingRound(false);
     if ("error" in result) { setRoundError(result.error); return; }
-    setRounds(prev => [...prev, { id: result.id, name: roundName.trim(), custom_label: null, display_order: Number(roundOrder || rounds.length + 1), is_current: false }]);
-    setShowRoundForm(false); setRoundName(""); setRoundOrder("");
+    setRounds(prev => [...prev, {
+      id: result.id,
+      name: roundName.trim(),
+      custom_label: roundCustomLabel.trim() || null,
+      display_order: Number(roundOrder || rounds.length + 1),
+      is_current: false,
+      legs: roundLegs,
+      aggregate_score: roundAggregate,
+    }]);
+    setShowRoundForm(false);
+    setRoundName(""); setRoundCustomLabel(""); setRoundOrder("");
+    setRoundLegs(false); setRoundAggregate(false);
   }
 
   async function handleUpdateRound(roundId: string) {
     const fd = new FormData();
     fd.append("name", editRoundName.trim());
-    fd.append("custom_label", "");
+    fd.append("custom_label", editRoundCustomLabel.trim());
     fd.append("display_order", editRoundOrder);
     fd.append("is_current", String(editRoundCurrent));
+    fd.append("legs", String(editRoundLegs));
+    fd.append("aggregate_score", String(editRoundAggregate));
     const result = await editarRodada(roundId, fd);
     if ("error" in result) { toast("error", result.error); return; }
     setRounds(prev => prev.map(r => r.id === roundId
-      ? { ...r, name: editRoundName.trim(), display_order: Number(editRoundOrder), is_current: editRoundCurrent }
+      ? { ...r, name: editRoundName.trim(), custom_label: editRoundCustomLabel.trim() || null, display_order: Number(editRoundOrder), is_current: editRoundCurrent, legs: editRoundLegs, aggregate_score: editRoundAggregate }
       : editRoundCurrent ? { ...r, is_current: false } : r
     ));
     setEditingRoundId(null);
@@ -346,16 +364,9 @@ export default function FaseClient({
               <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
                 <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Configurações do mata-mata</h2>
                 <div className="space-y-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={legs} onChange={e => setLegs(e.target.checked)} className="h-4 w-4" />
-                    <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Jogos de ida e volta</span>
-                  </label>
-                  {legs && (
-                    <label className="flex items-center gap-3 cursor-pointer ml-6">
-                      <input type="checkbox" checked={aggregateScore} onChange={e => setAggregateScore(e.target.checked)} className="h-4 w-4" />
-                      <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Placar agregado</span>
-                    </label>
-                  )}
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                    Configurações de ida/volta e placar agregado são definidas por rodada.
+                  </p>
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo de desempate final</span>
                     <select value={tiebreakerType} onChange={e => setTiebreakerType(e.target.value)} className={inputClass} style={inputStyle}>
@@ -599,7 +610,7 @@ export default function FaseClient({
           </div>
         )}
 
-        {/* RODADAS — unificado para todos os tipos */}
+        {/* RODADAS */}
         {activeTab === "rodadas" && (
           <div className="max-w-2xl">
             <div className="mb-4 flex items-center justify-between">
@@ -618,7 +629,9 @@ export default function FaseClient({
                 style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nome *</span>
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      {hasMatchups ? "Tipo *" : "Nome *"}
+                    </span>
                     {hasMatchups ? (
                       <select value={roundName} onChange={e => setRoundName(e.target.value)} className={inputClass} style={inputStyle}>
                         <option value="">Selecione…</option>
@@ -629,15 +642,31 @@ export default function FaseClient({
                         placeholder={`Rodada ${rounds.length + 1}`} className={inputClass} style={inputStyle} />
                     )}
                   </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
-                    <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)}
-                      placeholder={String(rounds.length + 1)} className={inputClass} style={inputStyle} />
-                  </label>
+                  {hasMatchups && (
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido (opcional)</span>
+                      <input type="text" value={roundCustomLabel} onChange={e => setRoundCustomLabel(e.target.value)}
+                        placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
+                    </label>
+                  )}
                 </div>
+                {hasMatchups && (
+                  <div className="flex items-center gap-6">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" checked={roundLegs} onChange={e => { setRoundLegs(e.target.checked); if (!e.target.checked) setRoundAggregate(false); }} className="h-4 w-4" />
+                      <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Ida e volta</span>
+                    </label>
+                    {roundLegs && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={roundAggregate} onChange={e => setRoundAggregate(e.target.checked)} className="h-4 w-4" />
+                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Placar agregado</span>
+                      </label>
+                    )}
+                  </div>
+                )}
                 {roundError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{roundError}</p>}
                 <div className="flex gap-2 justify-end">
-                  <button type="button" onClick={() => { setShowRoundForm(false); setRoundName(""); setRoundOrder(""); }}
+                  <button type="button" onClick={() => { setShowRoundForm(false); setRoundName(""); setRoundCustomLabel(""); setRoundOrder(""); setRoundLegs(false); setRoundAggregate(false); }}
                     className="rounded-lg border px-3 py-1.5 text-sm"
                     style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                     Cancelar
@@ -665,38 +694,75 @@ export default function FaseClient({
                 {rounds.sort((a, b) => a.display_order - b.display_order).map((r: any, idx: number) => (
                   <div key={r.id} style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                     {editingRoundId === r.id ? (
-                      <div className="flex items-center gap-3 px-5 py-3">
-                        {hasMatchups ? (
-                          <select value={editRoundName} onChange={e => setEditRoundName(e.target.value)}
-                            className="flex-1 rounded-lg border px-2 py-1.5 text-sm outline-none" style={inputStyle} autoFocus>
-                            {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                          </select>
-                        ) : (
-                          <input type="text" value={editRoundName} onChange={e => setEditRoundName(e.target.value)}
-                            className="flex-1 rounded-lg border px-2 py-1.5 text-sm outline-none" style={inputStyle} autoFocus />
+                      <div className="p-4 space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                              {hasMatchups ? "Tipo" : "Nome"}
+                            </span>
+                            {hasMatchups ? (
+                              <select value={editRoundName} onChange={e => setEditRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
+                                {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
+                              </select>
+                            ) : (
+                              <input type="text" value={editRoundName} onChange={e => setEditRoundName(e.target.value)}
+                                className={inputClass} style={inputStyle} autoFocus />
+                            )}
+                          </label>
+                          {hasMatchups && (
+                            <label className="flex flex-col gap-1">
+                              <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido</span>
+                              <input type="text" value={editRoundCustomLabel} onChange={e => setEditRoundCustomLabel(e.target.value)}
+                                placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
+                            </label>
+                          )}
+                        </div>
+                        {hasMatchups && (
+                          <div className="flex items-center gap-6">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input type="checkbox" checked={editRoundLegs} onChange={e => { setEditRoundLegs(e.target.checked); if (!e.target.checked) setEditRoundAggregate(false); }} className="h-3 w-3" />
+                              <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Ida e volta</span>
+                            </label>
+                            {editRoundLegs && (
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={editRoundAggregate} onChange={e => setEditRoundAggregate(e.target.checked)} className="h-3 w-3" />
+                                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Placar agregado</span>
+                              </label>
+                            )}
+                          </div>
                         )}
-                        <input type="number" value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)}
-                          className="w-16 rounded-lg border px-2 py-1.5 text-sm outline-none" style={inputStyle} placeholder="Ordem" />
                         <label className="flex items-center gap-1 cursor-pointer">
                           <input type="checkbox" checked={editRoundCurrent} onChange={e => setEditRoundCurrent(e.target.checked)} className="h-3 w-3" />
-                          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>atual</span>
+                          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Rodada atual</span>
                         </label>
-                        <button type="button" onClick={() => handleUpdateRound(r.id)}
-                          className="rounded border px-2 py-1.5" style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                          <Check size={13} />
-                        </button>
-                        <button type="button" onClick={() => setEditingRoundId(null)} style={{ color: "var(--color-text-secondary)" }}>
-                          <X size={15} />
-                        </button>
+                        <div className="flex gap-2 justify-end">
+                          <button type="button" onClick={() => setEditingRoundId(null)}
+                            className="rounded-lg border px-3 py-1.5 text-sm"
+                            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                            Cancelar
+                          </button>
+                          <button type="button" onClick={() => handleUpdateRound(r.id)}
+                            className="rounded-lg px-3 py-1.5 text-sm font-medium"
+                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                            Salvar
+                          </button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-4 px-5 py-3 group hover:bg-[rgba(255,255,255,0.02)]">
                         <span className="font-mono text-xs w-6 text-right shrink-0" style={{ color: "var(--color-text-secondary)" }}>
                           {r.display_order}
                         </span>
-                        <p className="flex-1 font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
-                          {r.custom_label ?? r.name}
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
+                            {r.custom_label ?? r.name}
+                          </p>
+                          {hasMatchups && (r.legs || r.aggregate_score) && (
+                            <p className="font-mono text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
+                              {r.legs ? "Ida e volta" : ""}{r.legs && r.aggregate_score ? " · " : ""}{r.aggregate_score ? "Agregado" : ""}
+                            </p>
+                          )}
+                        </div>
                         {r.is_current && (
                           <span className="font-mono text-xs rounded px-2 py-0.5"
                             style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
@@ -712,7 +778,15 @@ export default function FaseClient({
                             </Link>
                           )}
                           <button type="button"
-                            onClick={() => { setEditingRoundId(r.id); setEditRoundName(r.custom_label ?? r.name); setEditRoundOrder(String(r.display_order)); setEditRoundCurrent(r.is_current ?? false); }}
+                            onClick={() => {
+                              setEditingRoundId(r.id);
+                              setEditRoundName(r.name);
+                              setEditRoundCustomLabel(r.custom_label ?? "");
+                              setEditRoundOrder(String(r.display_order));
+                              setEditRoundCurrent(r.is_current ?? false);
+                              setEditRoundLegs(r.legs ?? false);
+                              setEditRoundAggregate(r.aggregate_score ?? false);
+                            }}
                             className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                             <Pencil size={11} />
                           </button>

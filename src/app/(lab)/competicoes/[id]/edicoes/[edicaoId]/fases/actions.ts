@@ -21,8 +21,6 @@ export async function criarFase(
   const display_order = Number(formData.get("display_order") ?? 0) || 0;
   const half_duration_minutes = Number(formData.get("half_duration_minutes") ?? 0) || null;
   const template_id = String(formData.get("template_id") ?? "").trim() || null;
-  const legs = formData.get("legs") === "true";
-  const aggregate_score = formData.get("aggregate_score") === "true";
   const third_place_match = formData.get("third_place_match") === "true";
   const penalty_tiebreaker_type = String(formData.get("penalty_tiebreaker_type") ?? "").trim() || null;
   const points_win = Number(formData.get("points_win") ?? 3) || 3;
@@ -42,7 +40,7 @@ export async function criarFase(
       half_duration_minutes,
       is_current: false,
       template_id,
-      ...(isKnockout ? { legs, aggregate_score, third_place_match, penalty_tiebreaker_type } : {}),
+      ...(isKnockout ? { third_place_match, penalty_tiebreaker_type } : {}),
       ...(isClassificatory ? { points_win, points_draw, points_loss } : {}),
     })
     .select("id").single();
@@ -79,8 +77,6 @@ export async function criarFaseDoTemplate(
       is_current: false,
       template_id: templateId,
       ...(isKnockout ? {
-        legs: template.legs,
-        aggregate_score: template.aggregate_score,
         third_place_match: template.third_place_match,
         penalty_tiebreaker_type: template.penalty_tiebreaker_type,
       } : {}),
@@ -112,8 +108,6 @@ export async function editarFase(
   const half_duration_minutes = Number(formData.get("half_duration_minutes") ?? 0) || null;
   const is_current = formData.get("is_current") === "true";
   const phase_type = String(formData.get("phase_type") ?? "");
-  const legs = formData.get("legs") === "true";
-  const aggregate_score = formData.get("aggregate_score") === "true";
   const third_place_match = formData.get("third_place_match") === "true";
   const penalty_tiebreaker_type = String(formData.get("penalty_tiebreaker_type") ?? "").trim() || null;
   const points_win = Number(formData.get("points_win") ?? 3) || 3;
@@ -141,7 +135,7 @@ export async function editarFase(
       display_order,
       half_duration_minutes,
       is_current,
-      ...(isKnockout ? { legs, aggregate_score, third_place_match, penalty_tiebreaker_type } : {}),
+      ...(isKnockout ? { third_place_match, penalty_tiebreaker_type } : {}),
       ...(isClassificatory ? { points_win, points_draw, points_loss } : {}),
     })
     .eq("id", faseId);
@@ -180,42 +174,66 @@ export async function criarRodada(
   if (!user) redirect("/login");
 
   const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { error: "Nome é obrigatório." };
+  if (!name) return { error: "Tipo é obrigatório." };
 
   const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
   const display_order = Number(formData.get("display_order") ?? 0) || 0;
+  const legs = formData.get("legs") === "true";
+  const aggregate_score = formData.get("aggregate_score") === "true";
 
   const { data: inserted, error } = await supabase
     .from("rounds")
-    .insert({ phase_id: faseId, name, custom_label, display_order })
+    .insert({ phase_id: faseId, name, custom_label, display_order, legs, aggregate_score })
     .select("id").single();
 
   if (error) return { error: error.message };
   return { id: inserted.id };
 }
 
-export async function criarConfrontoEliminatorio(
-  faseId: string,
+export async function editarRodada(
+  roundId: string,
   formData: FormData,
-): Promise<{ id: string } | { error: string }> {
+): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) return { error: "Não autenticado." };
 
-  const round_label = String(formData.get("round_label") ?? "").trim();
-  if (!round_label) return { error: "Rótulo da rodada é obrigatório." };
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return { error: "Nome é obrigatório." };
 
-  const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
-  const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
+  const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
   const display_order = Number(formData.get("display_order") ?? 0) || 0;
+  const is_current = formData.get("is_current") === "true";
+  const legs = formData.get("legs") === "true";
+  const aggregate_score = formData.get("aggregate_score") === "true";
 
-  const { data: inserted, error } = await supabase
-    .from("matchups")
-    .insert({ phase_id: faseId, round_label, team_a_id, team_b_id, display_order, is_completed: false })
-    .select("id").single();
+  const { error } = await supabase
+    .from("rounds")
+    .update({ name, custom_label, display_order, is_current, legs, aggregate_score })
+    .eq("id", roundId);
 
   if (error) return { error: error.message };
-  return { id: inserted.id };
+  return { success: true };
+}
+
+export async function deletarRodada(
+  roundId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: matches } = await supabase
+    .from("matches").select("id").eq("round_id", roundId).limit(1);
+
+  if (matches && matches.length > 0)
+    return { error: "Esta rodada possui partidas. Remova as partidas antes de excluir." };
+
+  const { error } = await supabase
+    .from("rounds").delete().eq("id", roundId);
+
+  if (error) return { error: error.message };
+  return { success: true };
 }
 
 export async function salvarFaseComoTemplate(
@@ -231,7 +249,6 @@ export async function salvarFaseComoTemplate(
 
   if (phaseError || !phase) return { error: "Fase não encontrada." };
 
-  // Verifica se já existe template com mesmo nome nessa competição
   const { data: existing } = await supabase
     .from("phase_templates")
     .select("id")
@@ -240,7 +257,6 @@ export async function salvarFaseComoTemplate(
     .maybeSingle();
 
   if (existing) {
-    // Atualiza o existente
     const { error } = await supabase
       .from("phase_templates")
       .update({
@@ -248,8 +264,6 @@ export async function salvarFaseComoTemplate(
         phase_type: phase.phase_type,
         display_order: phase.display_order,
         half_duration_minutes: phase.half_duration_minutes,
-        legs: phase.legs,
-        aggregate_score: phase.aggregate_score,
         third_place_match: phase.third_place_match,
         penalty_tiebreaker_type: phase.penalty_tiebreaker_type,
         points_win: phase.points_win,
@@ -268,8 +282,6 @@ export async function salvarFaseComoTemplate(
         phase_type: phase.phase_type,
         display_order: phase.display_order,
         half_duration_minutes: phase.half_duration_minutes,
-        legs: phase.legs,
-        aggregate_score: phase.aggregate_score,
         third_place_match: phase.third_place_match,
         penalty_tiebreaker_type: phase.penalty_tiebreaker_type,
         points_win: phase.points_win,
@@ -281,7 +293,6 @@ export async function salvarFaseComoTemplate(
 
   return { success: true };
 }
-
 
 export async function deletarTemplate(
   templateId: string,
@@ -310,8 +321,6 @@ export async function editarTemplate(
 
   const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
   const half_duration_minutes = Number(formData.get("half_duration_minutes") ?? 0) || null;
-  const legs = formData.get("legs") === "true";
-  const aggregate_score = formData.get("aggregate_score") === "true";
   const third_place_match = formData.get("third_place_match") === "true";
   const penalty_tiebreaker_type = String(formData.get("penalty_tiebreaker_type") ?? "").trim() || null;
   const points_win = Number(formData.get("points_win") ?? 3) || 3;
@@ -324,8 +333,6 @@ export async function editarTemplate(
       name,
       custom_label,
       half_duration_minutes,
-      legs,
-      aggregate_score,
       third_place_match,
       penalty_tiebreaker_type,
       points_win,
@@ -333,93 +340,6 @@ export async function editarTemplate(
       points_loss,
     })
     .eq("id", templateId);
-
-  if (error) return { error: error.message };
-  return { success: true };
-}
-
-export async function editarRodada(
-  roundId: string,
-  formData: FormData,
-): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const name = String(formData.get("name") ?? "").trim();
-  if (!name) return { error: "Nome é obrigatório." };
-
-  const custom_label = String(formData.get("custom_label") ?? "").trim() || null;
-  const display_order = Number(formData.get("display_order") ?? 0) || 0;
-  const is_current = formData.get("is_current") === "true";
-
-  const { error } = await supabase
-    .from("rounds")
-    .update({ name, custom_label, display_order, is_current })
-    .eq("id", roundId);
-
-  if (error) return { error: error.message };
-  return { success: true };
-}
-
-export async function deletarRodada(
-  roundId: string,
-): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const { data: matches } = await supabase
-    .from("matches").select("id").eq("round_id", roundId).limit(1);
-
-  if (matches && matches.length > 0)
-    return { error: "Esta rodada possui partidas. Remova as partidas antes de excluir." };
-
-  const { error } = await supabase
-    .from("rounds").delete().eq("id", roundId);
-
-  if (error) return { error: error.message };
-  return { success: true };
-}
-
-export async function editarConfronto(
-  matchupId: string,
-  formData: FormData,
-): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const round_label = String(formData.get("round_label") ?? "").trim();
-  const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
-  const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
-  const display_order = Number(formData.get("display_order") ?? 0) || 0;
-  const is_current = formData.get("is_current") === "true";
-
-  const { error } = await supabase
-    .from("matchups")
-    .update({ round_label, team_a_id, team_b_id, display_order, is_current })
-    .eq("id", matchupId);
-
-  if (error) return { error: error.message };
-  return { success: true };
-}
-
-export async function deletarConfronto(
-  matchupId: string,
-): Promise<{ success: true } | { error: string }> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Não autenticado." };
-
-  const { data: matches } = await supabase
-    .from("matches").select("id").eq("matchup_id", matchupId).limit(1);
-
-  if (matches && matches.length > 0)
-    return { error: "Este confronto possui partidas. Remova as partidas antes de excluir." };
-
-  const { error } = await supabase
-    .from("matchups").delete().eq("id", matchupId);
 
   if (error) return { error: error.message };
   return { success: true };
@@ -553,6 +473,49 @@ export async function removerEquipeGrupo(
     .delete()
     .eq("group_id", groupId)
     .eq("edition_team_id", editionTeamId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarConfronto(
+  matchupId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const round_label = String(formData.get("round_label") ?? "").trim();
+  const team_a_id = String(formData.get("team_a_id") ?? "").trim() || null;
+  const team_b_id = String(formData.get("team_b_id") ?? "").trim() || null;
+  const display_order = Number(formData.get("display_order") ?? 0) || 0;
+  const is_current = formData.get("is_current") === "true";
+
+  const { error } = await supabase
+    .from("matchups")
+    .update({ round_label, team_a_id, team_b_id, display_order, is_current })
+    .eq("id", matchupId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function deletarConfronto(
+  matchupId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: matches } = await supabase
+    .from("matches").select("id").eq("matchup_id", matchupId).limit(1);
+
+  if (matches && matches.length > 0)
+    return { error: "Este confronto possui partidas. Remova as partidas antes de excluir." };
+
+  const { error } = await supabase
+    .from("matchups").delete().eq("id", matchupId);
 
   if (error) return { error: error.message };
   return { success: true };

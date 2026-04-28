@@ -30,7 +30,7 @@ export default async function FasePage({
       .select("seasons(name), competitions(full_name)")
       .eq("id", edicaoId).maybeSingle(),
     supabase.from("rounds")
-      .select("id, name, custom_label, display_order, is_current")
+      .select("id, name, custom_label, display_order, is_current, legs, aggregate_score")
       .eq("phase_id", faseId).order("display_order"),
     supabase.from("matchups")
       .select("id, round_label, team_a_id, team_b_id, is_completed, is_current, display_order, teams_a:teams!matchups_team_a_id_fkey(id, full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(id, full_name, abbreviation, logo_url)")

@@ -14,16 +14,13 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet, responseHeaders) {
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, options);
-          });
-          Object.entries(responseHeaders).forEach(([key, value]) => {
-            supabaseResponse.headers.set(key, value);
           });
         },
       },
@@ -36,12 +33,10 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith(route)
   );
 
-  // Não autenticado tentando acessar rota protegida → login
   if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  // Autenticado tentando acessar login → painel
   if (user && pathname === "/login") {
     return NextResponse.redirect(new URL("/", request.url));
   }

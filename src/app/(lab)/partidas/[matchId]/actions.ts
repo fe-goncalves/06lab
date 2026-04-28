@@ -18,8 +18,8 @@ export async function criarPartida(
   const match_date = String(formData.get("match_date") ?? "").trim() || null;
   const match_time = String(formData.get("match_time") ?? "").trim() || null;
   const venue_id = String(formData.get("venue_id") ?? "").trim() || null;
+  const is_second_leg = formData.get("is_second_leg") === "true";
 
-  // Busca tipo da fase
   const { data: phase } = await supabase
     .from("phases").select("phase_type").eq("id", faseId).maybeSingle();
 
@@ -27,26 +27,42 @@ export async function criarPartida(
 
   let matchup_id: string | null = null;
 
-  // Para mata-mata e conferência, cria o matchup automaticamente vinculado à rodada
-  if (isKnockout && round_id) {
-    const { data: round } = await supabase
-      .from("rounds").select("name, display_order").eq("id", round_id).maybeSingle();
-
-    const { data: insertedMatchup, error: matchupError } = await supabase
+  if (isKnockout && round_id && team_a_id && team_b_id) {
+    // Busca matchup existente para este par de times nesta rodada
+    // Considera ambas as ordens (A vs B ou B vs A)
+    const { data: existingMatchup } = await supabase
       .from("matchups")
-      .insert({
-        phase_id: faseId,
-        round_id,
-        round_label: round?.name ?? "",
-        team_a_id,
-        team_b_id,
-        display_order: round?.display_order ?? 0,
-        is_completed: false,
-      })
-      .select("id").single();
+      .select("id")
+      .eq("phase_id", faseId)
+      .eq("round_id", round_id)
+      .or(
+        `and(team_a_id.eq.${team_a_id},team_b_id.eq.${team_b_id}),and(team_a_id.eq.${team_b_id},team_b_id.eq.${team_a_id})`
+      )
+      .maybeSingle();
 
-    if (matchupError) return { error: matchupError.message };
-    matchup_id = insertedMatchup.id;
+    if (existingMatchup) {
+      matchup_id = existingMatchup.id;
+    } else {
+      // Cria novo matchup para este confronto
+      const { data: round } = await supabase
+        .from("rounds").select("name, custom_label, display_order").eq("id", round_id).maybeSingle();
+
+      const { data: insertedMatchup, error: matchupError } = await supabase
+        .from("matchups")
+        .insert({
+          phase_id: faseId,
+          round_id,
+          round_label: round?.name ?? "",
+          team_a_id,
+          team_b_id,
+          display_order: round?.display_order ?? 0,
+          is_completed: false,
+        })
+        .select("id").single();
+
+      if (matchupError) return { error: matchupError.message };
+      matchup_id = insertedMatchup.id;
+    }
   }
 
   const { data: inserted, error } = await supabase
@@ -61,6 +77,7 @@ export async function criarPartida(
       match_date,
       match_time,
       venue_id,
+      is_second_leg,
       status: "scheduled",
       score_a: 0,
       score_b: 0,
