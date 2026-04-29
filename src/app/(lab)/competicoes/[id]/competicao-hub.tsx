@@ -26,7 +26,7 @@ type Match = {
 };
 type Phase = { id: string; full_name: string; custom_label: string | null; phase_type: string; display_order: number; is_current: boolean };
 type Round = { id: string; name: string; custom_label: string | null; phase_id: string; display_order: number; is_current: boolean; legs: boolean; aggregate_score: boolean };
-type EditionTeam = { id: string; team_id: string; arrival_origin: string | null; teams: Team | null };
+type EditionTeam = { id: string; team_id: string; arrival_origin: string | null; is_free_agent_pool: boolean; teams: Team | null };
 type Standing = any;
 type Scorer = any;
 
@@ -136,11 +136,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       phaseIds.length > 0
         ? supabase.from("rounds").select("id, name, custom_label, phase_id, display_order, is_current, legs, aggregate_score").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
-      supabase.from("edition_teams").select("id, team_id, arrival_origin, teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
+        supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
       supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
       supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation)").eq("edition_id", editionId).order("goals", { ascending: false }).limit(30),
       phaseIds.length > 0
-        ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id, teams_a:teams!matchups_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matchups_team_b_id_fkey(full_name, abbreviation, logo_url)").in("phase_id", phaseIds).order("display_order")
+        ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
       supabase.from("venues").select("id, full_name").eq("organization_id", orgId).order("full_name"),
       phaseIds.length > 0
@@ -157,7 +157,22 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setEditionTeams((teamsData as any) ?? []);
     setStandings(standingsData ?? []);
     setScorers(scorersData ?? []);
-    setMatchups((matchupsData as any) ?? []);
+
+    // Enriquece matchups com dados dos times
+    const rawMatchups = (matchupsData as any[]) ?? [];
+    const allTeamIds = [...new Set(rawMatchups.flatMap((m: any) => [m.team_a_id, m.team_b_id].filter(Boolean)))];
+    let teamsMap: Record<string, any> = {};
+    if (allTeamIds.length > 0) {
+      const { data: teamsData2 } = await supabase.from("teams").select("id, full_name, abbreviation, logo_url").in("id", allTeamIds);
+      (teamsData2 ?? []).forEach((t: any) => { teamsMap[t.id] = t; });
+    }
+    const enrichedMatchups = rawMatchups.map((m: any) => ({
+      ...m,
+      teams_a: m.team_a_id ? teamsMap[m.team_a_id] ?? null : null,
+      teams_b: m.team_b_id ? teamsMap[m.team_b_id] ?? null : null,
+    }));
+    
+    setMatchups(enrichedMatchups);
     setVenues(venuesData ?? []);
     setGroups((groupsData as any) ?? []);
 
@@ -207,7 +222,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
   const selectedNewMatchPhase = phases.find(p => p.id === newMatchPhaseId);
   const roundsForSelectedPhase = rounds.filter(r => r.phase_id === newMatchPhaseId);
-  const teamsForEdition = editionTeams.filter(et => et.teams?.full_name && et.teams.full_name !== "Sem clube").map(et => et.teams).filter(Boolean) as Team[];
+  const teamsForEdition = editionTeams
+    .filter(et => !et.is_free_agent_pool && et.teams != null)
+    .map(et => et.teams) as Team[];
 
   async function handleCreateMatch() {
     if (!newMatchPhaseId || !newMatchTeamA || !newMatchTeamB) { setNewMatchError("Fase e equipes são obrigatórias."); return; }
@@ -313,30 +330,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     matchesByRound[key].matches.push(m);
   });
 
-  {(() => {
-    const selRound = (rounds as any[]).find((r: any) => r.id === newMatchRoundId);
-    if (!selRound?.legs) return null;
-    return (
-      <div className="flex items-center gap-3 rounded-lg border px-3 py-2.5"
-        style={{ borderColor: "var(--color-border)" }}>
-        <div className="flex-1">
-          <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Jogo de volta</p>
-          <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-            {newMatchIsSecondLeg ? "Esta partida é a volta" : "Esta partida é a ida"}
-          </p>
-        </div>
-        <button type="button" onClick={() => setNewMatchIsSecondLeg(v => !v)}
-          style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer",
-            backgroundColor: newMatchIsSecondLeg ? "var(--color-brand)" : "var(--color-border)",
-            transition: "background-color 0.15s", position: "relative" }}>
-          <div style={{ position: "absolute", top: 3, left: newMatchIsSecondLeg ? 21 : 3,
-            width: 16, height: 16, borderRadius: "50%",
-            backgroundColor: newMatchIsSecondLeg ? "var(--color-background)" : "#888",
-            transition: "left 0.15s" }} />
-        </button>
-      </div>
-    );
-  })()}
 
   const filteredMatches = matches.filter(m => {
     if (matchFilterPhaseId && m.phases?.id !== matchFilterPhaseId) return false;
@@ -1482,7 +1475,7 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
           {/* Footer row */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
             <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)" }}>
-              {selectedRound?.custom_label ?? selectedRound?.name}
+            {rounds.find((r: any) => r.id === selectedRoundId)?.custom_label ?? rounds.find((r: any) => r.id === selectedRoundId)?.name}
               {motwIndex !== null && slots[motwIndex] && (
                 <span style={{ marginLeft: 12, color: "#BFF205" }}>★ MOTW: {slots[motwIndex]!.name}</span>
               )}
@@ -1537,6 +1530,7 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
   const [loading, setLoading] = useState(true);
   const [modalMatchup, setModalMatchup] = useState<MatchupData | null>(null);
   const [modalLegs, setModalLegs] = useState({ legs: false, aggregateScore: false });
+  const matchupIdsKey = matchups.map(m => m.id).join(",");
 
   useEffect(() => {
     if (!phaseId) return;
@@ -1580,10 +1574,12 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
       setLoading(false);
     }
     void load();
-  }, [phaseId, matchups]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phaseId, matchupIdsKey]);
 
   if (loading) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando bracket…</p>;
-  if (enriched.length === 0) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Nenhum confronto ainda. Crie partidas na aba Jogos.</p>;
+  console.log("BRACKET enriched:", enriched, "matchups prop:", matchups, "phaseId:", phaseId);
+  if (enriched.length === 0) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>matchups recebidos: {matchups.length} | enriched: {enriched.length}</p>;
 
   const byLabel: Record<string, MatchupData[]> = {};
   enriched.forEach(m => {
@@ -1610,7 +1606,7 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
               </div>
               <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", padding: "16px 12px", gap: 12 }}>
                 {colMatchups.map(matchup => {
-                  const round = phaseRounds.find(r => r.id === matchup.round_id);
+                  const round = phaseRounds.find(r => (r.custom_label ?? r.name) === matchup.round_label);
                   const rLegs = round?.legs ?? false;
                   const rAggregate = round?.aggregate_score ?? false;
                   return (
