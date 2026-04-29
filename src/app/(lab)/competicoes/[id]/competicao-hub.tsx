@@ -104,7 +104,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [savingAward, setSavingAward] = useState(false);
   const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
 
-  const [newMatchIsSecondLeg, setNewMatchIsSecondLeg] = useState(false);
+  const [phaseTeamIds, setPhaseTeamIds] = useState<string[]>([]);
+  const [loadingPhaseTeams, setLoadingPhaseTeams] = useState(false);
 
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
@@ -225,6 +226,18 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     .filter(et => !et.is_free_agent_pool && et.teams != null)
     .map(et => et.teams) as Team[];
 
+  const teamsForSelectedPhase = newMatchPhaseId && phaseTeamIds.length > 0
+    ? editionTeams
+        .filter(et => !et.is_free_agent_pool && et.teams != null && phaseTeamIds.includes(et.team_id))
+        .map(et => et.teams) as Team[]
+    : teamsForEdition;
+
+  const teamsForSelectedPhase = newMatchPhaseId && phaseTeamIds.length > 0
+    ? editionTeams
+        .filter(et => !et.is_free_agent_pool && et.teams != null && phaseTeamIds.includes(et.team_id))
+        .map(et => et.teams) as Team[]
+    : teamsForEdition;
+
   async function handleCreateMatch() {
     if (!newMatchPhaseId || !newMatchTeamA || !newMatchTeamB) { setNewMatchError("Fase e equipes são obrigatórias."); return; }
     setCreatingMatch(true); setNewMatchError(null);
@@ -258,6 +271,23 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Partida excluída.");
     setMatches(prev => prev.filter(m => m.id !== matchId));
+  }
+
+  async function loadPhaseTeams(phaseId: string) {
+    if (!phaseId) { setPhaseTeamIds([]); return; }
+    setLoadingPhaseTeams(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("phase_teams")
+      .select("edition_team_id")
+      .eq("phase_id", phaseId);
+    const etIds = (data ?? []).map((r: any) => r.edition_team_id);
+    // Mapeia edition_team_id → team_id
+    const teamIds = editionTeams
+      .filter(et => etIds.includes(et.id))
+      .map(et => et.team_id);
+    setPhaseTeamIds(teamIds);
+    setLoadingPhaseTeams(false);
   }
 
   async function openElencoModal(editionTeamId: string, teamId: string, teamName: string) {
@@ -527,7 +557,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             <div className="px-6 py-4 space-y-4">
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
-                <select value={newMatchPhaseId} onChange={e => { setNewMatchPhaseId(e.target.value); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); }}
+                <select value={newMatchPhaseId} onChange={e => { const pid = e.target.value; setNewMatchPhaseId(pid); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); loadPhaseTeams(pid); }}
                   className={inputClass} style={inputStyle}>
                   <option value="">Selecione a fase…</option>
                   {phases.map(p => (
@@ -607,14 +637,14 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe A (mandante) *</span>
                     <select value={newMatchTeamA} onChange={e => setNewMatchTeamA(e.target.value)} className={inputClass} style={inputStyle}>
                       <option value="">Selecione…</option>
-                      {teamsForEdition.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                      {teamsForSelectedPhase.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipe B (visitante) *</span>
                     <select value={newMatchTeamB} onChange={e => setNewMatchTeamB(e.target.value)} className={inputClass} style={inputStyle}>
                       <option value="">Selecione…</option>
-                      {teamsForEdition.filter(t => t.id !== newMatchTeamA).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                      {teamsForSelectedPhase.filter(t => t.id !== newMatchTeamA).map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
                     </select>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
@@ -1594,7 +1624,7 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
                     <BracketMatchupCard
                       key={matchup.id} matchup={matchup} legs={rLegs} aggregateScore={rAggregate}
                       showConnector={!isLast && !isThird}
-                      onOpenModal={() => { if (rLegs && (matchup.matches?.length ?? 0) > 0) { setModalLegs({ legs: rLegs, aggregateScore: rAggregate }); setModalMatchup(matchup); } }}
+                      onOpenModal={() => { if ((matchup.matches?.length ?? 0) > 0) { setModalLegs({ legs: rLegs, aggregateScore: rAggregate }); setModalMatchup(matchup); } }}
                     />
                   );
                 })}
@@ -1637,7 +1667,7 @@ function BracketMatchupCard({ matchup, legs, aggregateScore, showConnector, onOp
     if (penA !== null && penB !== null) winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
     else if (scoreA !== null && scoreB !== null) winnerSide = scoreA > scoreB ? "a" : scoreB > scoreA ? "b" : null;
   }
-  const isClickable = legs && finished.length > 0;
+  const isClickable = finished.length > 0;
   return (
     <div style={{ position: "relative" }}>
       <div onClick={isClickable ? onOpenModal : undefined}
