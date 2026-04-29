@@ -28,13 +28,19 @@ export async function criarPartida(
   let matchup_id: string | null = null;
 
   if (isKnockout && round_id && team_a_id && team_b_id) {
-    // Busca matchup existente para este par de times nesta rodada
-    // Considera ambas as ordens (A vs B ou B vs A)
+    // Busca a rodada para obter o label estável
+    const { data: round } = await supabase
+      .from("rounds").select("name, custom_label, display_order").eq("id", round_id).maybeSingle();
+
+    const roundLabel = round?.name ?? "";
+
+    // Busca matchup existente por phase_id + round_label + par de times
+    // Usa round_label (string) em vez de round_id (pode ser null em dados antigos)
     const { data: existingMatchup } = await supabase
       .from("matchups")
       .select("id")
       .eq("phase_id", faseId)
-      .eq("round_id", round_id)
+      .eq("round_label", roundLabel)
       .or(
         `and(team_a_id.eq.${team_a_id},team_b_id.eq.${team_b_id}),and(team_a_id.eq.${team_b_id},team_b_id.eq.${team_a_id})`
       )
@@ -44,15 +50,12 @@ export async function criarPartida(
       matchup_id = existingMatchup.id;
     } else {
       // Cria novo matchup para este confronto
-      const { data: round } = await supabase
-        .from("rounds").select("name, custom_label, display_order").eq("id", round_id).maybeSingle();
-
       const { data: insertedMatchup, error: matchupError } = await supabase
         .from("matchups")
         .insert({
           phase_id: faseId,
           round_id,
-          round_label: round?.name ?? "",
+          round_label: roundLabel,
           team_a_id,
           team_b_id,
           display_order: round?.display_order ?? 0,
@@ -108,13 +111,11 @@ export async function editarPartida(
   const highlights_url = String(formData.get("highlights_url") ?? "").trim() || null;
   const photos_url = String(formData.get("photos_url") ?? "").trim() || null;
 
-  // Nunca sobrescreve team_a_id e team_b_id — esses são definidos na criação
   const updateData: Record<string, any> = {
     status, finish_type, score_a, score_b,
     motm_athlete_id, highlights_url, photos_url,
   };
 
-  // Só atualiza data/hora/local se foram passados
   if (match_date) updateData.match_date = match_date;
   if (match_time) updateData.match_time = match_time;
   if (formData.has("venue_id")) updateData.venue_id = venue_id;
@@ -136,7 +137,6 @@ export async function salvarFormacoes(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Busca a partida para pegar team_a_id e team_b_id
   const { data: match } = await supabase
     .from("matches")
     .select("team_a_id, team_b_id, phase_id")
@@ -145,13 +145,11 @@ export async function salvarFormacoes(
 
   if (!match) return { error: "Partida não encontrada." };
 
-  // Busca edition_id a partir da fase
   const { data: phase } = await supabase
     .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
 
   if (!phase) return { error: "Fase não encontrada." };
 
-  // Busca edition_teams para mapear team_id → edition_team_id
   const { data: editionTeams } = await supabase
     .from("edition_teams")
     .select("id, team_id")
@@ -163,7 +161,6 @@ export async function salvarFormacoes(
     teamToEditionTeam[et.team_id] = et.id;
   });
 
-  // Busca atletas via edition_roster_entries — mais confiável que stints
   const athleteIds = lineups.map(l => l.athlete_id);
   const { data: rosterEntries } = await supabase
     .from("edition_roster_entries")
@@ -173,13 +170,11 @@ export async function salvarFormacoes(
 
   const athleteToEditionTeam: Record<string, string> = {};
   (rosterEntries ?? []).forEach((r: any) => {
-    // Filtra apenas os edition_teams da partida
     if (Object.values(teamToEditionTeam).includes(r.edition_team_id)) {
       athleteToEditionTeam[r.athlete_id] = r.edition_team_id;
     }
   });
 
-  // Monta os registros com edition_team_id correto
   const records = lineups
     .map(l => {
       const editionTeamId = athleteToEditionTeam[l.athlete_id];
@@ -264,7 +259,6 @@ export async function adicionarAcao(
     const { data: match } = await supabase.from("matches").select("team_a_id, score_a, score_b").eq("id", matchId).maybeSingle();
     if (match) {
       const isTeamA = match.team_a_id === team_id;
-      // Gol contra: ponto para o adversário
       await supabase.from("matches").update({
         score_a: isTeamA ? match.score_a : match.score_a + 1,
         score_b: isTeamA ? match.score_b + 1 : match.score_b,
@@ -309,7 +303,7 @@ export async function deletarAcao(
     }
   }
 
-  // Recalcula stats da edição sempre que uma ação é deletada
+  // Recalcula stats da edição
   const { data: match } = await supabase
     .from("matches").select("phase_id").eq("id", matchId).maybeSingle();
 
@@ -332,7 +326,6 @@ export async function deletarPartida(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Verifica se tem ações registradas
   const { data: actions } = await supabase
     .from("match_actions").select("id").eq("match_id", matchId).limit(1);
 
@@ -340,7 +333,6 @@ export async function deletarPartida(
     return { error: "Esta partida possui ações registradas. Remova as ações antes de excluir." };
   }
 
-  // Remove lineups
   await supabase.from("match_lineups").delete().eq("match_id", matchId);
   await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
 
@@ -382,7 +374,6 @@ export async function publicarResultado(
 
   const now = new Date().toISOString();
 
-  // Busca o perfil para pegar id e role
   const { data: profile } = await supabase
     .from("user_profiles")
     .select("id, role")
@@ -400,27 +391,27 @@ export async function publicarResultado(
     .eq("match_id", matchId)
     .maybeSingle();
 
-    let reportError = null;
-    if (existingReport) {
-      const { error } = await supabase
-        .from("match_reports")
-        .update({ status: "approved", reviewed_by: profileId, reviewed_at: now })
-        .eq("id", existingReport.id);
-      reportError = error;
-    } else {
-      const { error } = await supabase
-        .from("match_reports")
-        .insert({
-          match_id: matchId,
-          submitted_by: profileId,
-          submitter_type: submitterType,
-          status: "approved",
-          reviewed_by: profileId,
-          submitted_at: now,
-          reviewed_at: now,
-        });
-      reportError = error;
-    }
+  let reportError = null;
+  if (existingReport) {
+    const { error } = await supabase
+      .from("match_reports")
+      .update({ status: "approved", reviewed_by: profileId, reviewed_at: now })
+      .eq("id", existingReport.id);
+    reportError = error;
+  } else {
+    const { error } = await supabase
+      .from("match_reports")
+      .insert({
+        match_id: matchId,
+        submitted_by: profileId,
+        submitter_type: submitterType,
+        status: "approved",
+        reviewed_by: profileId,
+        submitted_at: now,
+        reviewed_at: now,
+      });
+    reportError = error;
+  }
 
   if (reportError) return { error: reportError.message };
 
@@ -449,7 +440,6 @@ export async function salvarArbitrosPartida(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Remove todos e reinserge
   const { error: deleteError } = await supabase
     .from("match_referees")
     .delete()

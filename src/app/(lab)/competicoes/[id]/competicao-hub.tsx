@@ -18,7 +18,7 @@ type Season = { id: string; name: string; year_value: number };
 type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null };
 type Match = {
   id: string; match_date: string | null; match_time: string | null; status: string;
-  score_a: number; score_b: number;
+  score_a: number; score_b: number; matchup_id: string | null;
   teams_a: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   teams_b: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   rounds: { name: string; custom_label: string | null } | null;
@@ -68,7 +68,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [groups, setGroups] = useState<any[]>([]);
   const [groupTeams, setGroupTeams] = useState<any[]>([]);
   const [matchFilterPhaseId, setMatchFilterPhaseId] = useState<string>("");
-  const [matchFilterRoundId, setMatchFilterRoundId] = useState<string>("");
   const [venues, setVenues] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
 
@@ -130,7 +129,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       { data: groupsData },
     ] = await Promise.all([
       phaseIds.length > 0
-        ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: false })
+      ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, matchup_id, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: true })
         : Promise.resolve({ data: [] }),
         supabase.from("phases").select("id, full_name, custom_label, phase_type, display_order, is_current, legs, aggregate_score").eq("edition_id", editionId).order("display_order"),
       phaseIds.length > 0
@@ -171,7 +170,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       teams_a: m.team_a_id ? teamsMap[m.team_a_id] ?? null : null,
       teams_b: m.team_b_id ? teamsMap[m.team_b_id] ?? null : null,
     }));
-    
+
     setMatchups(enrichedMatchups);
     setVenues(venuesData ?? []);
     setGroups((groupsData as any) ?? []);
@@ -323,28 +322,26 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setAwards(prev => prev.filter((a: any) => a.id !== awardId));
   }
 
-  const matchesByRound: Record<string, { label: string; matches: Match[] }> = {};
-  matches.forEach(m => {
-    const key = m.rounds?.custom_label ?? m.rounds?.name ?? m.phases?.custom_label ?? m.phases?.full_name ?? "Sem rodada";
-    if (!matchesByRound[key]) matchesByRound[key] = { label: key, matches: [] };
-    matchesByRound[key].matches.push(m);
-  });
-
 
   const filteredMatches = matches.filter(m => {
     if (matchFilterPhaseId && m.phases?.id !== matchFilterPhaseId) return false;
-    if (matchFilterRoundId) {
-      const roundName = rounds.find(r => r.id === matchFilterRoundId);
-      const matchRoundLabel = m.rounds?.custom_label ?? m.rounds?.name ?? "";
-      if (matchRoundLabel !== (roundName?.custom_label ?? roundName?.name ?? "")) return false;
-    }
     return true;
   });
 
-  const filteredMatchesByRound: Record<string, { label: string; matches: Match[] }> = {};
+  const filteredMatchesByRound: Record<string, { label: string; matches: Match[]; order: number }> = {};
   filteredMatches.forEach(m => {
-    const key = m.rounds?.custom_label ?? m.rounds?.name ?? m.phases?.custom_label ?? m.phases?.full_name ?? "Sem rodada";
-    if (!filteredMatchesByRound[key]) filteredMatchesByRound[key] = { label: key, matches: [] };
+    let key: string;
+    let order = 0;
+    if (m.rounds?.custom_label ?? m.rounds?.name) {
+      key = m.rounds?.custom_label ?? m.rounds?.name ?? "Sem rodada";
+    } else if (m.matchup_id) {
+      const mu = matchups.find(mu => mu.id === m.matchup_id);
+      key = mu?.round_label ?? m.phases?.custom_label ?? m.phases?.full_name ?? "Sem rodada";
+      order = mu?.display_order ?? 0;
+    } else {
+      key = m.phases?.custom_label ?? m.phases?.full_name ?? "Sem rodada";
+    }
+    if (!filteredMatchesByRound[key]) filteredMatchesByRound[key] = { label: key, matches: [], order };
     filteredMatchesByRound[key].matches.push(m);
   });
 
@@ -750,23 +747,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   ))}
                 </div>
               )}
-              {matchFilterPhaseId && rounds.filter(r => r.phase_id === matchFilterPhaseId).length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Rodada:</span>
-                  <button type="button" onClick={() => setMatchFilterRoundId("")}
-                    className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                    style={{ borderColor: matchFilterRoundId === "" ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterRoundId === "" ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterRoundId === "" ? "var(--color-brand)" : "#A6A6A6" }}>
-                    Todas
-                  </button>
-                  {rounds.filter(r => r.phase_id === matchFilterPhaseId).map(r => (
-                    <button key={r.id} type="button" onClick={() => setMatchFilterRoundId(r.id)}
-                      className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                      style={{ borderColor: matchFilterRoundId === r.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterRoundId === r.id ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterRoundId === r.id ? "var(--color-brand)" : "#A6A6A6" }}>
-                      {r.custom_label ?? r.name}
-                    </button>
-                  ))}
-                </div>
-              )}
               <div className="ml-auto flex items-center gap-3">
                 <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
                   {filteredMatches.length} {filteredMatches.length === 1 ? "partida" : "partidas"}
@@ -789,7 +769,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               </div>
             ) : (
               <div className="space-y-6">
-                {Object.values(filteredMatchesByRound).map(group => (
+                {Object.values(filteredMatchesByRound)
+                  .sort((a, b) => a.order - b.order)
+                  .map(group => (
                   <div key={group.label}>
                     <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{group.label}</p>
                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
@@ -1578,7 +1560,6 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
   }, [phaseId, matchupIdsKey]);
 
   if (loading) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando bracket…</p>;
-  console.log("BRACKET enriched:", enriched, "matchups prop:", matchups, "phaseId:", phaseId);
   if (enriched.length === 0) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>matchups recebidos: {matchups.length} | enriched: {enriched.length}</p>;
 
   const byLabel: Record<string, MatchupData[]> = {};
