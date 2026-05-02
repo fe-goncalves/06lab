@@ -1,3 +1,5 @@
+// EQUIPE EDICAO / PAGE
+
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import EquipeEdicaoClient from "./equipe-edicao-client";
@@ -54,9 +56,10 @@ export default async function EquipeEdicaoPage({
       .select("id, seasons(name)")
       .eq("id", edicaoId).maybeSingle(),
 
-    supabase.from("edition_roster_entries")
+      supabase.from("edition_roster_entries")
       .select("id, member_type, status, submitted_at, reviewed_at, athlete_id, staff_member_id, position_id_at_inscription, position_label_at_inscription, athletes(id, full_name, surname, photo_url, birth_date, rg, position_id, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
       .eq("edition_team_id", editionTeam.id)
+      .eq("is_transfer_origin", false)
       .order("member_type")
       .order("submitted_at"),
 
@@ -95,7 +98,8 @@ export default async function EquipeEdicaoPage({
       ? supabase.from("edition_roster_entries")
           .select("athlete_id, staff_member_id, member_type")
           .in("edition_team_id", allEditionTeamIds)
-          .neq("status", "inactive")
+          .in("status", ["pending", "approved"])
+          .eq("is_transfer_origin", false)
       : Promise.resolve({ data: [] }),
   ]);
 
@@ -142,6 +146,7 @@ export default async function EquipeEdicaoPage({
       allEditionTeams={allEditionTeams ?? []}
       freeAgentPoolId={freeAgentPool?.id ?? null}
       positions={positions ?? []}
+      competitionGender={competitionGender}
     />
   );
 }

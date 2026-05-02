@@ -359,20 +359,41 @@ export async function transferirAtletaNaEdicao(
 
   if (!original) return { error: "Inscrição não encontrada." };
 
-  const { error: deactivateError } = await supabase
-    .from("edition_roster_entries")
-    .update({ status: "inactive" })
-    .eq("id", entryId);
-
-  if (deactivateError) return { error: deactivateError.message };
-
-  // Verifica se já existe um entry para este atleta neste destination team (mesmo inativo)
   const lookupField = original.member_type === "athlete" ? "athlete_id" : "staff_member_id";
   const lookupValue = original.member_type === "athlete" ? original.athlete_id : original.staff_member_id;
 
+  // Busca todos os edition_teams desta edição
+  const { data: currentET } = await supabase
+    .from("edition_teams")
+    .select("edition_id")
+    .eq("id", original.edition_team_id)
+    .maybeSingle();
+
+  if (!currentET) return { error: "Edição não encontrada." };
+
+  const { data: allETs } = await supabase
+    .from("edition_teams")
+    .select("id")
+    .eq("edition_id", currentET.edition_id);
+
+  const allETIds = (allETs ?? []).map((et: any) => et.id);
+
+  // Marca TODOS os entries ativos/pendentes do membro em qualquer equipe como is_transfer_origin
+  if (allETIds.length > 0) {
+    const { error: deactivateError } = await supabase
+      .from("edition_roster_entries")
+      .update({ status: "inactive", is_transfer_origin: true })
+      .eq(lookupField, lookupValue)
+      .in("edition_team_id", allETIds)
+      .in("status", ["pending", "approved"]);
+
+    if (deactivateError) return { error: deactivateError.message };
+  }
+
+  // Verifica se já existe um entry (inativo) no destino — reativa em vez de duplicar
   const { data: existingInDest } = await supabase
     .from("edition_roster_entries")
-    .select("id, status")
+    .select("id")
     .eq("edition_team_id", newEditionTeamId)
     .eq(lookupField, lookupValue)
     .maybeSingle();
@@ -380,13 +401,17 @@ export async function transferirAtletaNaEdicao(
   let newEntryId: string;
 
   if (existingInDest) {
-    // Reativa o entry existente em vez de criar duplicata
+    // Reativa marcando como não-transferência e voltando para pending
     const { error: reactivateError } = await supabase
       .from("edition_roster_entries")
       .update({
-        status: "approved",
-        reviewed_by: profile?.id,
-        reviewed_at: new Date().toISOString(),
+        status: "pending",
+        is_transfer_origin: false,
+        submitted_by: profile?.id,
+        submitter_type: "admin",
+        submitted_at: new Date().toISOString(),
+        reviewed_by: null,
+        reviewed_at: null,
       })
       .eq("id", existingInDest.id);
     if (reactivateError) return { error: reactivateError.message };
@@ -402,6 +427,7 @@ export async function transferirAtletaNaEdicao(
         position_id_at_inscription: original.position_id_at_inscription,
         position_label_at_inscription: original.position_label_at_inscription,
         status: "pending",
+        is_transfer_origin: false,
         submitted_by: profile?.id,
         submitter_type: "admin",
         submitted_at: new Date().toISOString(),
@@ -412,13 +438,14 @@ export async function transferirAtletaNaEdicao(
     newEntryId = newEntry.id;
   }
 
-  return { success: true, newEntryId: newEntryId };
+  return { success: true, newEntryId };
 }
 
 export async function inscreverAtletaQualquer(
   editionTeamId: string,
-  athleteId: string,
+  memberId: string,
   positionId: string | null,
+  memberType: "athlete" | "staff" = "athlete",
 ): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -428,28 +455,62 @@ export async function inscreverAtletaQualquer(
     .from("user_profiles").select("id")
     .eq("auth_user_id", user.id).maybeSingle();
 
+  // Busca edition_id diretamente
+  const { data: currentET } = await supabase
+    .from("edition_teams").select("edition_id").eq("id", editionTeamId).maybeSingle();
+
+  if (currentET?.edition_id) {
+    const { data: allETs } = await supabase
+      .from("edition_teams").select("id").eq("edition_id", currentET.edition_id);
+    const allETIds = (allETs ?? []).map((et: any) => et.id);
+
+    if (allETIds.length > 0) {
+      const lookupField = memberType === "athlete" ? "athlete_id" : "staff_member_id";
+      const { data: existingActive } = await supabase
+        .from("edition_roster_entries")
+        .select("id")
+        .eq(lookupField, memberId)
+        .in("edition_team_id", allETIds)
+        .in("status", ["pending", "approved"])
+        .eq("is_transfer_origin", false)
+        .maybeSingle();
+
+      if (existingActive) {
+        return { error: memberType === "athlete"
+          ? "Atleta já inscrito em outra equipe nesta edição."
+          : "Membro já inscrito em outra equipe nesta edição."
+        };
+      }
+    }
+  }
+
   let positionLabel: string | null = null;
-  if (positionId) {
+  if (positionId && memberType === "athlete") {
     const { data: pos } = await supabase
       .from("player_positions").select("full_name").eq("id", positionId).maybeSingle();
     positionLabel = pos?.full_name ?? null;
   }
 
+  const insertPayload: any = {
+    edition_team_id: editionTeamId,
+    member_type: memberType,
+    status: "pending",
+    submitted_by: profile?.id,
+    submitter_type: "admin",
+    submitted_at: new Date().toISOString(),
+  };
+
+  if (memberType === "athlete") {
+    insertPayload.athlete_id = memberId;
+    insertPayload.position_id_at_inscription = positionId;
+    insertPayload.position_label_at_inscription = positionLabel;
+  } else {
+    insertPayload.staff_member_id = memberId;
+  }
+
   const { data: inserted, error } = await supabase
     .from("edition_roster_entries")
-    .insert({
-      edition_team_id: editionTeamId,
-      member_type: "athlete",
-      athlete_id: athleteId,
-      position_id_at_inscription: positionId,
-      position_label_at_inscription: positionLabel,
-      status: "approved",
-      submitted_by: profile?.id,
-      submitter_type: "admin",
-      submitted_at: new Date().toISOString(),
-      reviewed_by: profile?.id,
-      reviewed_at: new Date().toISOString(),
-    })
+    .insert(insertPayload)
     .select("id")
     .single();
 
