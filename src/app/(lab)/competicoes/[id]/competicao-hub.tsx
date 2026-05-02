@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
-import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw } from "lucide-react";
 import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad } from "./edicoes/actions";
@@ -54,7 +54,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
   const [activeTab, setActiveTab] = useState<"jogos" | "classificacao" | "estatisticas" | "competicao" | "configuracoes">("jogos");
   const [activeStatsTab, setActiveStatsTab] = useState<"geral" | "semanal">("geral");
-  const [activeCompTab, setActiveCompTab] = useState<"fases" | "equipes">("fases");
+  const [activeCompTab, setActiveCompTab] = useState<"equipes" | "fases">("equipes");
   const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking">("gerais");
   const [selectedEditionId, setSelectedEditionId] = useState<string>(searchParams.get("edicao") ?? editions[0]?.id ?? "");
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
@@ -1219,10 +1219,16 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     editionTeams.filter(et => !et.is_free_agent_pool).map((et, idx) => {
                       const isInactive = (et as any).is_active === false;
                       return (
-                        <div key={et.id} className="flex items-center gap-4 px-5 py-3 group"
-                          style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: isInactive ? 0.4 : 0.7, transition: "opacity 0.15s" }}
+                        <div key={et.id} className="group relative flex items-center gap-3 px-4 py-3 transition-all duration-150"
+                          style={{
+                            borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
+                            opacity: isInactive ? 0.45 : 0.75,
+                            cursor: "pointer",
+                          }}
                           onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.4" : "0.7")}>
+                          onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.45" : "0.75")}
+                          onClick={() => router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`)}>
+
                           {/* Logo */}
                           {et.teams?.logo_url ? (
                             <img src={et.teams.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain shrink-0" />
@@ -1232,51 +1238,97 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                               {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
                             </div>
                           )}
-                          {/* Sigla (mesmo tamanho da logo) */}
+
+                          {/* Sigla */}
                           <div className="flex h-10 w-10 shrink-0 items-center justify-center">
                             <p className="font-mono text-sm font-bold leading-none" style={{ color: "var(--color-text-primary)" }}>
                               {et.teams?.abbreviation?.toUpperCase() ?? "—"}
                             </p>
                           </div>
+
                           {/* Nome */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                                {et.teams?.full_name?.split(" ").slice(0, 2).join(" ") ?? "—"}
+                                {((et.teams as any)?.short_name ?? et.teams?.full_name ?? "—")}
                               </p>
-                              {isInactive && <span className="font-mono text-xs rounded px-1.5 py-0.5" style={{ backgroundColor: "rgba(242,192,5,0.15)", color: "#F2C005" }}>Desativada</span>}
+                              {isInactive && (
+                                <span className="font-mono text-xs rounded px-1.5 py-0.5 shrink-0"
+                                  style={{ backgroundColor: "rgba(242,192,5,0.15)", color: "#F2C005" }}>
+                                  Desativada
+                                </span>
+                              )}
                             </div>
-                            <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
+                            <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
+                              {et.teams?.full_name ?? "—"}
+                            </p>
                           </div>
-                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
-                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-brand)]"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                              <Users size={12} /> Elenco
-                            </Link>
+
+                          {/* Ações — só aparecem no hover, param propagação do click */}
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={e => e.stopPropagation()}>
+                            <HubActionButton
+                              icon={<Users size={14} strokeWidth={2.5} />}
+                              label="Elenco"
+                              onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`); }}
+                              color="var(--color-brand)"
+                            />
                             {isInactive ? (
-                              <button type="button" onClick={() => handleReativarEquipeHub(et.id)}
-                                className="rounded border px-2 py-1 font-mono text-xs"
-                                style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                                Reativar
-                              </button>
+                              <HubActionButton
+                                icon={<RotateCcw size={14} strokeWidth={2.5} />}
+                                label="Reativar"
+                                onClick={e => { e.stopPropagation(); handleReativarEquipeHub(et.id); }}
+                                color="var(--color-brand)"
+                              />
                             ) : (
-                              <button type="button" onClick={() => handleDesativarEquipeHub(et.id)}
-                                className="rounded border px-2 py-1 font-mono text-xs"
-                                style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
-                                Desativar
-                              </button>
+                              <HubActionButton
+                                icon={<Ban size={14} strokeWidth={2.5} />}
+                                label="Desativar"
+                                onClick={e => { e.stopPropagation(); handleDesativarEquipeHub(et.id); }}
+                                color="#F2C005"
+                              />
                             )}
-                            <button type="button" onClick={() => handleRemoverEquipeHub(et.id)}
-                              className="rounded border px-2 py-1 font-mono text-xs"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                              <Trash2 size={11} />
-                            </button>
+                            <HubActionButton
+                              icon={<Trash2 size={14} strokeWidth={2.5} />}
+                              label="Remover"
+                              onClick={e => { e.stopPropagation(); handleRemoverEquipeHub(et.id); }}
+                              color="var(--color-danger)"
+                            />
                           </div>
                         </div>
                       );
                     })
                   )}
+                  {/* Sem Clube — sempre por último */}
+                  {editionTeams.filter(et => et.is_free_agent_pool).map(et => (
+                    <div key={et.id}
+                      className="group relative flex items-center gap-3 px-4 py-3 transition-all duration-150"
+                      style={{ borderTop: "1px solid var(--color-border)", opacity: 0.6, cursor: "pointer" }}
+                      onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                      onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}
+                      onClick={() => router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`)}>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
+                        style={{ borderColor: "var(--color-border)", borderStyle: "dashed" }}>
+                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>SC</span>
+                      </div>
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+                        <p className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>—</p>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-secondary)" }}>Sem Clube</p>
+                        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)", opacity: 0.6 }}>Atletas sem equipe</p>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onClick={e => e.stopPropagation()}>
+                        <HubActionButton
+                          icon={<Users size={14} strokeWidth={2.5} />}
+                          label="Ver elenco"
+                          onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`); }}
+                          color="var(--color-brand)"
+                        />
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 {/* Modal adicionar equipe */}
@@ -1342,6 +1394,46 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── HubActionButton ──────────────────────────────────────────────────────────
+function HubActionButton({ icon, label, onClick, disabled, color }: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: (e: React.MouseEvent) => void;
+  disabled?: boolean;
+  color?: string;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div className="relative" style={{ flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        className="flex items-center justify-center rounded border transition-all duration-150 disabled:opacity-40"
+        style={{
+          width: 30,
+          height: 30,
+          borderColor: hov ? (color ?? "var(--color-brand)") : "var(--color-border)",
+          color: color ?? "var(--color-text-secondary)",
+          backgroundColor: hov ? `${color ?? "var(--color-brand)"}15` : "transparent",
+        }}
+      >
+        {icon}
+      </button>
+      {hov && (
+        <div
+          className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 font-mono text-xs pointer-events-none z-10"
+          style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+        >
+          {label}
+        </div>
+      )}
     </div>
   );
 }

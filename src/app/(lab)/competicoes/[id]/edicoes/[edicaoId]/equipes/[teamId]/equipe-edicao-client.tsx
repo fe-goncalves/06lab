@@ -12,7 +12,7 @@ import {
   } from "@/app/(lab)/competicoes/[id]/edicoes/actions";
 
 import { criarAtleta } from "@/app/(lab)/atletas/actions";
-import { Plus, Check, X, ArrowRightLeft, Search } from "lucide-react";
+import { Plus, Check, X, ArrowRightLeft, Search, Ban, RotateCcw, Trash2 } from "lucide-react";
 
 type RosterEntry = {
   id: string;
@@ -23,6 +23,7 @@ type RosterEntry = {
   position_label_at_inscription: string | null;
   athletes: {
     id: string; full_name: string; surname: string | null; photo_url: string | null;
+    birth_date: string | null; rg: string | null;
     player_positions: { full_name: string; abbreviation: string } | null;
   } | null;
   staff_members: {
@@ -65,37 +66,51 @@ function applyDateMask(value: string): string {
 }
 
 function RosterCard({
-  photoUrl, displayName, fullName, subtitle, teamColor, statusEl, actionsEl,
+  photoUrl, displayName, fullName, subtitle, positionAbbr, birthDate, rg,
+  teamColor, statusEl, actionsEl,
 }: {
   photoUrl: string | null;
   displayName: string;
   fullName: string;
   subtitle: string;
+  positionAbbr: string | null;
+  birthDate: string | null;
+  rg: string | null;
   teamColor: string;
   statusEl: React.ReactNode;
   actionsEl: React.ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
+
+  function formatDate(raw: string | null): string {
+    if (!raw) return "";
+    try {
+      const d = new Date(raw + "T00:00:00");
+      return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+    } catch { return raw; }
+  }
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      className="group flex items-center gap-4 px-5 transition-all duration-200"
+      className="flex items-center gap-4 px-5 transition-all duration-200"
       style={{
-        paddingTop: hovered ? 14 : 10,
-        paddingBottom: hovered ? 14 : 10,
+        paddingTop: hovered ? 14 : 9,
+        paddingBottom: hovered ? 14 : 9,
         borderTop: "1px solid var(--color-border)",
-        backgroundColor: hovered ? "rgba(255,255,255,0.02)" : "transparent",
+        backgroundColor: hovered ? "rgba(255,255,255,0.025)" : "transparent",
       }}
     >
       {/* Foto */}
       <div
         className="shrink-0 overflow-hidden rounded-full transition-all duration-200"
         style={{
-          width: hovered ? 42 : 34,
-          height: hovered ? 42 : 34,
+          width: hovered ? 44 : 36,
+          height: hovered ? 44 : 36,
           border: `2px solid ${hovered ? teamColor : "var(--color-border)"}`,
           backgroundColor: `${teamColor}22`,
+          flexShrink: 0,
         }}
       >
         {photoUrl ? (
@@ -108,39 +123,93 @@ function RosterCard({
         )}
       </div>
 
-      {/* Info */}
+      {/* Info principal */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="font-mono text-sm font-bold leading-tight" style={{ color: "var(--color-text-primary)" }}>
+        {/* Linha 1: Apelido + Posição */}
+        <div className="flex items-center gap-2">
+          <p className="font-mono text-sm font-bold leading-tight truncate" style={{ color: "var(--color-text-primary)" }}>
             {displayName.toUpperCase()}
           </p>
-          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-            {subtitle}
-          </span>
+          {positionAbbr && (
+            <span className="shrink-0 font-mono text-xs rounded px-1.5 py-0.5 font-bold"
+              style={{ backgroundColor: `${teamColor}22`, color: teamColor, fontSize: 10 }}>
+              {positionAbbr}
+            </span>
+          )}
         </div>
-        <p
-          className="font-mono text-xs transition-all duration-200 overflow-hidden"
-          style={{
-            color: "var(--color-text-secondary)",
-            maxHeight: hovered ? "20px" : "0px",
-            opacity: hovered ? 0.7 : 0,
-            marginTop: hovered ? 2 : 0,
-          }}
-        >
+        {/* Linha 2: Nome completo */}
+        <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
           {fullName}
         </p>
+        {/* Linha 3: Dados extras — aparecem no hover */}
+        <div
+          className="flex items-center gap-3 transition-all duration-200 overflow-hidden"
+          style={{
+            maxHeight: hovered ? "20px" : "0px",
+            opacity: hovered ? 1 : 0,
+            marginTop: hovered ? 3 : 0,
+          }}
+        >
+          {birthDate && (
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)", opacity: 0.65 }}>
+              🗓 {formatDate(birthDate)}
+            </span>
+          )}
+          {rg && (
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)", opacity: 0.65 }}>
+              RG {rg}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Status */}
       <div className="shrink-0">{statusEl}</div>
 
-      {/* Ações — aparecem no hover */}
-      <div
-        className="flex items-center gap-1 transition-all duration-200 overflow-hidden shrink-0"
-        style={{ maxWidth: hovered ? 200 : 0, opacity: hovered ? 1 : 0 }}
-      >
+      {/* Ações com ícones + tooltip no hover */}
+      <div className="flex items-center gap-1 shrink-0">
         {actionsEl}
       </div>
+    </div>
+  );
+}
+
+function ActionButton({ icon, label, onClick, disabled, color, borderColor }: {
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  color?: string;
+  borderColor?: string;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div className="relative flex items-center" style={{ flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        onMouseEnter={() => setHov(true)}
+        onMouseLeave={() => setHov(false)}
+        className="flex items-center justify-center rounded border transition-all duration-150 disabled:opacity-40"
+        style={{
+          width: 30,
+          height: 30,
+          borderColor: hov ? (color ?? "var(--color-brand)") : (borderColor ?? "var(--color-border)"),
+          color: color ?? "var(--color-text-secondary)",
+          backgroundColor: hov ? `${color ?? "var(--color-brand)"}11` : "transparent",
+        }}
+      >
+        {icon}
+      </button>
+      {hov && (
+        <div
+          className="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded px-2 py-1 font-mono text-xs pointer-events-none z-10"
+          style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-text-primary)" }}
+        >
+          {label}
+        </div>
+      )}
     </div>
   );
 }
@@ -469,10 +538,10 @@ export default function EquipeEdicaoClient({
           <div className="mb-6 flex items-center gap-6">
             <div className="relative shrink-0">
               {team?.logo_url ? (
-                <img src={team.logo_url} alt="" className="h-20 w-20 rounded-xl object-contain"
-                  style={{ filter: `drop-shadow(0 0 12px ${teamColor}77)` }} />
-              ) : (
-                <div className="flex h-20 w-20 items-center justify-center rounded-xl border font-display text-2xl font-bold"
+                <img src={team.logo_url} alt="" className="h-24 w-24 rounded-xl object-contain"
+                style={{ filter: `drop-shadow(0 0 14px ${teamColor}77)` }} />
+            ) : (
+              <div className="flex h-24 w-24 items-center justify-center rounded-xl border font-display text-2xl font-bold"
                   style={{ borderColor: teamColor, backgroundColor: `${teamColor}11`, color: teamColor }}>
                   {team?.abbreviation?.slice(0, 2) ?? "?"}
                 </div>
@@ -483,7 +552,7 @@ export default function EquipeEdicaoClient({
                 {team?.full_name ?? ""}
               </p>
               <h1 className="font-display text-3xl font-bold truncate leading-tight" style={{ color: "var(--color-text-primary)" }}>
-                {team?.abbreviation?.toUpperCase() ?? team?.full_name ?? "Equipe"}
+                {(team?.short_name ?? team?.full_name ?? "Equipe").toUpperCase()}
               </h1>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className="font-mono text-xs font-bold" style={{ color: teamColor }}>{competitionName}</span>
@@ -554,6 +623,9 @@ export default function EquipeEdicaoClient({
                     displayName={entry.athletes?.surname ?? entry.athletes?.full_name ?? "?"}
                     fullName={entry.athletes?.full_name ?? "—"}
                     subtitle={entry.position_label_at_inscription ?? entry.athletes?.player_positions?.full_name ?? "—"}
+                    positionAbbr={entry.athletes?.player_positions?.abbreviation ?? null}
+                    birthDate={(entry.athletes as any)?.birth_date ?? null}
+                    rg={(entry.athletes as any)?.rg ?? null}
                     teamColor={teamColor}
                     statusEl={
                       <span className="font-mono text-xs rounded px-2 py-0.5"
@@ -564,39 +636,28 @@ export default function EquipeEdicaoClient({
                     actionsEl={
                       <>
                         {entry.status === "pending" && (
-                          <button type="button" onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
-                            className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                            <Check size={11} /> Aprovar
-                          </button>
+                          <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
+                            onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                            color="var(--color-brand)" />
                         )}
                         {entry.status === "approved" && (
                           <>
-                            <button type="button" onClick={() => { setTransferEntryId(entry.id); setTransferTargetId(""); }}
-                              disabled={processing === entry.id}
-                              className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }} title="Transferir">
-                              <ArrowRightLeft size={11} />
-                            </button>
-                            <button type="button" onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
-                              className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                              style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
-                              Desativar
-                            </button>
+                            <ActionButton icon={<ArrowRightLeft size={14} strokeWidth={2.5} />} label="Transferir"
+                              onClick={() => { setTransferEntryId(entry.id); setTransferTargetId(""); }}
+                              disabled={processing === entry.id} />
+                            <ActionButton icon={<Ban size={14} strokeWidth={2.5} />} label="Desativar"
+                              onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
+                              color="#F2C005" />
                           </>
                         )}
                         {entry.status === "inactive" && (
-                          <button type="button" onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
-                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                            Reativar
-                          </button>
+                          <ActionButton icon={<RotateCcw size={14} strokeWidth={2.5} />} label="Reativar"
+                            onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
+                            color="var(--color-brand)" />
                         )}
-                        <button type="button" onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
-                          className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                          style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                          <X size={11} />
-                        </button>
+                        <ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
+                          onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
+                          color="var(--color-danger)" />
                       </>
                     }
                   />
@@ -625,6 +686,9 @@ export default function EquipeEdicaoClient({
                     displayName={entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "?"}
                     fullName={entry.staff_members?.full_name ?? "—"}
                     subtitle={entry.staff_members?.staff_roles?.full_name ?? "—"}
+                    positionAbbr={null}
+                    birthDate={null}
+                    rg={null}
                     teamColor={teamColor}
                     statusEl={
                       <span className="font-mono text-xs rounded px-2 py-0.5"
@@ -635,31 +699,23 @@ export default function EquipeEdicaoClient({
                     actionsEl={
                       <>
                         {entry.status === "pending" && (
-                          <button type="button" onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
-                            className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                            <Check size={11} /> Aprovar
-                          </button>
+                          <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
+                            onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                            color="var(--color-brand)" />
                         )}
                         {entry.status === "approved" && (
-                          <button type="button" onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
-                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                            style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
-                            Desativar
-                          </button>
+                          <ActionButton icon={<Ban size={14} strokeWidth={2.5} />} label="Desativar"
+                            onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
+                            color="#F2C005" />
                         )}
                         {entry.status === "inactive" && (
-                          <button type="button" onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
-                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                            Reativar
-                          </button>
+                          <ActionButton icon={<RotateCcw size={14} strokeWidth={2.5} />} label="Reativar"
+                            onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
+                            color="var(--color-brand)" />
                         )}
-                        <button type="button" onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
-                          className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                          style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                          <X size={11} />
-                        </button>
+                        <ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
+                          onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
+                          color="var(--color-danger)" />
                       </>
                     }
                   />

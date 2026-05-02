@@ -21,7 +21,7 @@ export default async function EquipeEdicaoPage({
   // Busca edition_team da equipe atual
   const { data: editionTeam } = await supabase
     .from("edition_teams")
-    .select("id, team_id, arrival_origin, teams(id, full_name, abbreviation, logo_url, primary_color, secondary_color)")
+    .select("id, team_id, arrival_origin, teams(id, full_name, short_name, abbreviation, logo_url, primary_color, secondary_color)")
     .eq("edition_id", edicaoId)
     .eq("team_id", teamId)
     .maybeSingle();
@@ -55,7 +55,7 @@ export default async function EquipeEdicaoPage({
       .eq("id", edicaoId).maybeSingle(),
 
     supabase.from("edition_roster_entries")
-      .select("id, member_type, status, submitted_at, reviewed_at, athlete_id, staff_member_id, position_id_at_inscription, position_label_at_inscription, athletes(id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
+      .select("id, member_type, status, submitted_at, reviewed_at, athlete_id, staff_member_id, position_id_at_inscription, position_label_at_inscription, athletes(id, full_name, surname, photo_url, birth_date, rg, position_id, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
       .eq("edition_team_id", editionTeam.id)
       .order("member_type")
       .order("submitted_at"),
