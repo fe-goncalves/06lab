@@ -168,7 +168,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       phaseIds.length > 0
         ? supabase.from("rounds").select("id, name, custom_label, phase_id, display_order, is_current, legs, aggregate_score").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
-        supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
+        supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, short_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
       supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
       supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation)").eq("edition_id", editionId).order("goals", { ascending: false }).limit(30),
       phaseIds.length > 0

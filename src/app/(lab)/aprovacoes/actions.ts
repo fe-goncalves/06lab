@@ -144,19 +144,37 @@ async function _notificarInscricoes(
 
     if (!entries?.length) return;
 
-    const notifications = entries.map((e: any) => ({
-      organization_id: orgId,
-      type: status === "approved" ? "roster_approved" : "roster_rejected",
-      payload: {
-        entry_id: e.id,
-        member_type: e.member_type,
-        team_name: e.edition_teams?.teams?.full_name ?? "—",
-        edition_id: e.edition_teams?.edition_id ?? null,
-        ...(reason ? { reason } : {}),
-      },
-      is_read: false,
-      created_at: new Date().toISOString(),
-    }));
+    // Busca admins da org para notificar
+    const { data: admins } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("organization_id", orgId)
+      .in("role", ["main", "supporter"])
+      .eq("status", "active");
+
+    if (!admins?.length) return;
+
+    const notifications: any[] = [];
+    for (const entry of entries) {
+      for (const admin of admins) {
+        notifications.push({
+          organization_id: orgId,
+          recipient_id: admin.id,
+          recipient_type: "user",
+          type: status === "approved" ? "roster_approved" : "roster_rejected",
+          message: `Inscrição ${status === "approved" ? "aprovada" : "rejeitada"}: ${entry.edition_teams?.teams?.full_name ?? "—"}`,
+          context: {
+            entry_id: entry.id,
+            member_type: entry.member_type,
+            team_name: entry.edition_teams?.teams?.full_name ?? "—",
+            edition_id: entry.edition_teams?.edition_id ?? null,
+            ...(reason ? { reason } : {}),
+          },
+          is_read: false,
+          created_at: new Date().toISOString(),
+        });
+      }
+    }
 
     await supabase.from("notifications").insert(notifications);
   } catch {
