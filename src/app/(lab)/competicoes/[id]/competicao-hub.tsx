@@ -1616,9 +1616,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    setLoaded(false);
-  }, [selectedEditionId]);
+  useEffect(() => { setLoaded(false); }, [selectedEditionId]);
 
   useEffect(() => {
     if (!selectedEditionId || loaded) return;
@@ -1641,7 +1639,6 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
       const win = windows?.[0];
       if (win) {
         setWindowId(win.id);
-        // datetime-local espera "YYYY-MM-DDTHH:MM"
         setWindowOpensAt(win.opens_at ? win.opens_at.slice(0, 16) : "");
         setWindowClosesAt(win.closes_at ? win.closes_at.slice(0, 16) : "");
       }
@@ -1653,8 +1650,6 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   async function handleSave() {
     setSaving(true);
     const supabase = createClient();
-
-    // Salva edition_settings
     const { error: settingsError } = await supabase
       .from("edition_settings")
       .upsert({
@@ -1670,7 +1665,6 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
 
     if (settingsError) { toast("error", settingsError.message); setSaving(false); return; }
 
-    // Salva/atualiza janela de inscrição (período único)
     if (windowOpensAt && windowClosesAt) {
       if (windowId) {
         await supabase.from("edition_registration_windows")
@@ -1684,198 +1678,259 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
         if (inserted) setWindowId(inserted.id);
       }
     } else if (windowId && !windowOpensAt && !windowClosesAt) {
-      // Se o admin apagou as datas, desativa a janela
       await supabase.from("edition_registration_windows")
         .update({ is_active: false }).eq("id", windowId);
     }
 
     setSaving(false);
-    toast("success", "Configurações de inscrição salvas.");
+    toast("success", "Configurações salvas.");
   }
 
-  // Status da janela atual
   function getWindowStatus(): { label: string; color: string } | null {
     if (!windowOpensAt || !windowClosesAt) return null;
     const now = new Date();
-    const opens = new Date(windowOpensAt);
-    const closes = new Date(windowClosesAt);
-    if (now < opens) return { label: "Agendada", color: "#F2C005" };
-    if (now > closes) return { label: "Encerrada", color: "#555" };
+    if (now < new Date(windowOpensAt)) return { label: "Agendada", color: "#F2C005" };
+    if (now > new Date(windowClosesAt)) return { label: "Encerrada", color: "#555" };
     return { label: "Aberta agora", color: "var(--color-brand)" };
   }
 
   const windowStatus = getWindowStatus();
+  const windowInvalid = !!windowOpensAt && !!windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt);
 
   if (!loaded) return <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>;
 
-  const sectionClass = "rounded-xl border p-5 space-y-4";
-  const sectionStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" };
+  // Estilos reutilizáveis
+  const card: React.CSSProperties = {
+    borderRadius: 12,
+    border: "1px solid var(--color-border)",
+    backgroundColor: "var(--color-surface)",
+    padding: "20px 20px 24px",
+  };
 
-  const fieldStyle: React.CSSProperties = {
-    borderColor: "var(--color-border)",
-    backgroundColor: "var(--color-background)",
+  const sectionTitle: React.CSSProperties = {
+    fontFamily: "var(--font-mono)",
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
     color: "var(--color-text-primary)",
+    marginBottom: 4,
+  };
+
+  const sectionDesc: React.CSSProperties = {
+    fontFamily: "var(--font-mono)",
+    fontSize: 11,
+    color: "var(--color-text-secondary)",
+    marginBottom: 16,
+    lineHeight: 1.5,
+  };
+
+  const fieldLabel: React.CSSProperties = {
+    display: "block",
+    fontFamily: "var(--font-mono)",
+    fontSize: 11,
+    color: "var(--color-text-secondary)",
+    marginBottom: 6,
+  };
+
+  // Input sem setas (number) e sem spinner (datetime)
+  const baseInput: React.CSSProperties = {
+    width: "100%",
+    padding: "9px 12px",
     borderRadius: 8,
     border: "1px solid var(--color-border)",
-    padding: "8px 12px",
-    fontSize: 13,
+    backgroundColor: "var(--color-background)",
+    color: "var(--color-text-primary)",
     fontFamily: "var(--font-mono)",
+    fontSize: 13,
     outline: "none",
-    width: "100%",
-    appearance: "none" as any,
+    transition: "border-color 0.15s",
+    // Remove spinner arrows
     MozAppearance: "textfield" as any,
   };
 
   return (
-    <div className="max-w-2xl space-y-5">
+    <>
+      {/* CSS global para remover setas de inputs number */}
+      <style>{`
+        .no-spin::-webkit-inner-spin-button,
+        .no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .no-spin { -moz-appearance: textfield; }
+        .no-cal::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; }
+        .cfg-input:focus { border-color: var(--color-brand) !important; }
+      `}</style>
 
-      {/* ── Janela de inscrição ── */}
-      <div className={sectionClass} style={sectionStyle}>
-        <div className="flex items-center justify-between">
-          <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-            Janela de inscrição
-          </h3>
-          {windowStatus && (
-            <span className="font-mono text-xs rounded px-2 py-0.5 font-bold"
-              style={{ backgroundColor: `${windowStatus.color}22`, color: windowStatus.color }}>
-              {windowStatus.label}
-            </span>
+      <div style={{ maxWidth: 640, display: "flex", flexDirection: "column", gap: 16 }}>
+
+        {/* ── 1. Documentos de controle ── */}
+        <div style={card}>
+          <p style={sectionTitle}>Documentos de controle</p>
+          <p style={sectionDesc}>Qual documento será exigido para identificação dos inscritos.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+            {[
+              { label: "Atletas", val: athleteDocType, set: setAthleteDocType },
+              { label: "Comissão técnica", val: staffDocType, set: setStaffDocType },
+            ].map(({ label, val, set }) => (
+              <div key={label}>
+                <span style={{ ...fieldLabel }}>{label}</span>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {(["rg", "cpf"] as const).map(doc => (
+                    <button key={doc} type="button" onClick={() => set(doc)}
+                      style={{
+                        flex: 1, padding: "8px 0", borderRadius: 8, border: "1px solid",
+                        fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, cursor: "pointer",
+                        transition: "all 0.15s",
+                        borderColor: val === doc ? "var(--color-brand)" : "var(--color-border)",
+                        backgroundColor: val === doc ? "rgba(191,242,5,0.1)" : "transparent",
+                        color: val === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
+                      }}>
+                      {doc.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── 2. Limites por equipe ── */}
+        <div style={card}>
+          <p style={sectionTitle}>Limites por equipe</p>
+          <p style={sectionDesc}>Deixe em branco para não impor limite.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+            {[
+              { label: "Máx. atletas", val: maxAthletes, set: setMaxAthletes, ph: "∞" },
+              { label: "Máx. comissão", val: maxStaff, set: setMaxStaff, ph: "∞" },
+              { label: "Máx. transferências", val: maxTransfers, set: setMaxTransfers, ph: "∞" },
+            ].map(({ label, val, set, ph }) => (
+              <div key={label}>
+                <span style={fieldLabel}>{label}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={val}
+                  onChange={e => set(e.target.value)}
+                  placeholder={ph}
+                  className="no-spin cfg-input"
+                  style={baseInput}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── 3. Controle por ano de nascimento ── */}
+        <div style={card}>
+          <p style={sectionTitle}>Controle por ano de nascimento</p>
+          <p style={sectionDesc}>Atletas nascidos fora desta faixa serão bloqueados na inscrição.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            {[
+              { label: "Ano mínimo (mais antigo)", val: minBirthYear, set: setMinBirthYear, ph: "Ex: 1990" },
+              { label: "Ano máximo (mais recente)", val: maxBirthYear, set: setMaxBirthYear, ph: "Ex: 2008" },
+            ].map(({ label, val, set, ph }) => (
+              <div key={label}>
+                <span style={fieldLabel}>{label}</span>
+                <input
+                  type="number"
+                  min="1900"
+                  max="2030"
+                  value={val}
+                  onChange={e => set(e.target.value)}
+                  placeholder={ph}
+                  className="no-spin cfg-input"
+                  style={baseInput}
+                />
+              </div>
+            ))}
+          </div>
+          {minBirthYear && maxBirthYear && Number(minBirthYear) <= Number(maxBirthYear) && (
+            <div style={{
+              marginTop: 14, padding: "8px 12px", borderRadius: 8,
+              border: "1px solid rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)",
+              fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)",
+            }}>
+              Atletas elegíveis: nascidos entre {minBirthYear} e {maxBirthYear}
+            </div>
+          )}
+          {minBirthYear && maxBirthYear && Number(minBirthYear) > Number(maxBirthYear) && (
+            <div style={{
+              marginTop: 14, padding: "8px 12px", borderRadius: 8,
+              border: "1px solid rgba(255,68,68,0.2)", backgroundColor: "rgba(255,68,68,0.05)",
+              fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)",
+            }}>
+              O ano mínimo não pode ser maior que o máximo.
+            </div>
           )}
         </div>
-        <p className="font-mono text-xs" style={{ color: "#555" }}>
-          Representantes só podem submeter inscrições dentro deste período. Admins podem inscrever a qualquer momento.
-        </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Abertura</span>
-            <input
-              type="datetime-local"
-              value={windowOpensAt}
-              onChange={e => setWindowOpensAt(e.target.value)}
-              style={fieldStyle}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Encerramento</span>
-            <input
-              type="datetime-local"
-              value={windowClosesAt}
-              onChange={e => setWindowClosesAt(e.target.value)}
-              style={fieldStyle}
-            />
-          </label>
-        </div>
-        {windowOpensAt && windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt) && (
-          <p className="font-mono text-xs" style={{ color: "var(--color-danger)" }}>
-            A data de abertura deve ser anterior ao encerramento.
+
+        {/* ── 4. Janela de inscrição ── */}
+        <div style={{ ...card, borderColor: windowStatus?.color === "var(--color-brand)" ? "rgba(191,242,5,0.3)" : "var(--color-border)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <p style={sectionTitle}>Janela de inscrição</p>
+            {windowStatus && (
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+                padding: "3px 10px", borderRadius: 20,
+                backgroundColor: `${windowStatus.color}22`,
+                color: windowStatus.color,
+                border: `1px solid ${windowStatus.color}44`,
+              }}>
+                {windowStatus.label}
+              </span>
+            )}
+          </div>
+          <p style={sectionDesc}>
+            Representantes só podem submeter inscrições dentro deste período.{" "}
+            <span style={{ color: "var(--color-text-primary)" }}>Admins inscrevem a qualquer momento.</span>
           </p>
-        )}
-      </div>
-
-      {/* ── Documentos de controle ── */}
-      <div className={sectionClass} style={sectionStyle}>
-        <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-          Documentos de controle
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <p className="mb-2 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Atletas</p>
-            <div className="flex gap-2">
-              {(["rg", "cpf"] as const).map(doc => (
-                <button key={doc} type="button" onClick={() => setAthleteDocType(doc)}
-                  className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
-                  style={{
-                    borderColor: athleteDocType === doc ? "var(--color-brand)" : "var(--color-border)",
-                    backgroundColor: athleteDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
-                    color: athleteDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
-                  }}>
-                  {doc.toUpperCase()}
-                </button>
-              ))}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div>
+              <span style={fieldLabel}>Abertura</span>
+              <input
+                type="datetime-local"
+                value={windowOpensAt}
+                onChange={e => setWindowOpensAt(e.target.value)}
+                className="no-cal cfg-input"
+                style={baseInput}
+              />
+            </div>
+            <div>
+              <span style={fieldLabel}>Encerramento</span>
+              <input
+                type="datetime-local"
+                value={windowClosesAt}
+                onChange={e => setWindowClosesAt(e.target.value)}
+                className="no-cal cfg-input"
+                style={baseInput}
+              />
             </div>
           </div>
-          <div>
-            <p className="mb-2 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Comissão técnica</p>
-            <div className="flex gap-2">
-              {(["rg", "cpf"] as const).map(doc => (
-                <button key={doc} type="button" onClick={() => setStaffDocType(doc)}
-                  className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
-                  style={{
-                    borderColor: staffDocType === doc ? "var(--color-brand)" : "var(--color-border)",
-                    backgroundColor: staffDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
-                    color: staffDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
-                  }}>
-                  {doc.toUpperCase()}
-                </button>
-              ))}
+          {windowInvalid && (
+            <div style={{
+              marginTop: 12, padding: "8px 12px", borderRadius: 8,
+              border: "1px solid rgba(255,68,68,0.2)", backgroundColor: "rgba(255,68,68,0.05)",
+              fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)",
+            }}>
+              A data de abertura deve ser anterior ao encerramento.
             </div>
-          </div>
+          )}
         </div>
-      </div>
 
-      {/* ── Limites por equipe ── */}
-      <div className={sectionClass} style={sectionStyle}>
-        <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-          Limites por equipe
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. atletas</span>
-            <input type="number" min="0" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)}
-              placeholder="Sem limite" style={fieldStyle} />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. comissão</span>
-            <input type="number" min="0" value={maxStaff} onChange={e => setMaxStaff(e.target.value)}
-              placeholder="Sem limite" style={fieldStyle} />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. transferências</span>
-            <input type="number" min="0" value={maxTransfers} onChange={e => setMaxTransfers(e.target.value)}
-              placeholder="Sem limite" style={fieldStyle} />
-          </label>
-        </div>
-      </div>
-
-      {/* ── Controle de nascimento ── */}
-      <div className={sectionClass} style={sectionStyle}>
+        {/* ── Salvar ── */}
         <div>
-          <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-            Controle por ano de nascimento
-          </h3>
-          <p className="mt-1 font-mono text-xs" style={{ color: "#555" }}>
-            Atletas nascidos fora desta faixa não poderão ser inscritos.
-          </p>
+          <button type="button" onClick={handleSave}
+            disabled={saving || windowInvalid}
+            style={{
+              padding: "10px 28px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer",
+              backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+              fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+              opacity: saving || windowInvalid ? 0.5 : 1, transition: "opacity 0.15s",
+            }}>
+            {saving ? "Salvando…" : "Salvar configurações"}
+          </button>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Ano mínimo (mais antigo)</span>
-            <input type="number" min="1900" max="2030" value={minBirthYear}
-              onChange={e => setMinBirthYear(e.target.value)} placeholder="Ex: 1990"
-              style={fieldStyle} />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Ano máximo (mais recente)</span>
-            <input type="number" min="1900" max="2030" value={maxBirthYear}
-              onChange={e => setMaxBirthYear(e.target.value)} placeholder="Ex: 2008"
-              style={fieldStyle} />
-          </label>
-        </div>
-        {minBirthYear && maxBirthYear && Number(minBirthYear) <= Number(maxBirthYear) && (
-          <p className="font-mono text-xs rounded-lg border px-3 py-2"
-            style={{ color: "var(--color-brand)", borderColor: "rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)" }}>
-            Atletas elegíveis: nascidos entre {minBirthYear} e {maxBirthYear}
-          </p>
-        )}
       </div>
-
-      <button type="button" onClick={handleSave}
-        disabled={saving || (!!windowOpensAt && !!windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt))}
-        className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-        style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-        {saving ? "Salvando…" : "Salvar configurações"}
-      </button>
-    </div>
+    </>
   );
 }
 
