@@ -326,20 +326,35 @@ export async function deletarPartida(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  const { data: actions } = await supabase
-    .from("match_actions").select("id").eq("match_id", matchId).limit(1);
-
-  if (actions && actions.length > 0) {
-    return { error: "Esta partida possui ações registradas. Remova as ações antes de excluir." };
-  }
-
-  await supabase.from("match_lineups").delete().eq("match_id", matchId);
-  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
+  // Descobre o matchup_id antes de deletar
+  const { data: match } = await supabase
+    .from("matches")
+    .select("matchup_id")
+    .eq("id", matchId)
+    .maybeSingle();
 
   const { error } = await supabase
-    .from("matches").delete().eq("id", matchId);
+    .from("matches")
+    .delete()
+    .eq("id", matchId);
 
   if (error) return { error: error.message };
+
+  // Se tinha matchup, verifica se ficou órfão (zero partidas restantes)
+  if (match?.matchup_id) {
+    const { count } = await supabase
+      .from("matches")
+      .select("id", { count: "exact", head: true })
+      .eq("matchup_id", match.matchup_id);
+
+    if (count === 0) {
+      await supabase
+        .from("matchups")
+        .delete()
+        .eq("id", match.matchup_id);
+    }
+  }
+
   return { success: true };
 }
 

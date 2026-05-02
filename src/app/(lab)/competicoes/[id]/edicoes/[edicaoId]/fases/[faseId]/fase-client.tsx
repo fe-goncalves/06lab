@@ -1,3 +1,5 @@
+// fase-client
+
 "use client";
 
 import {
@@ -651,6 +653,13 @@ export default function FaseClient({
                   )}
                 </div>
                 {hasMatchups && (
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
+                    <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)}
+                      placeholder={String(rounds.length + 1)} className={inputClass} style={inputStyle} />
+                  </label>
+                )}
+                {hasMatchups && (
                   <div className="flex items-center gap-6">
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={roundLegs} onChange={e => { setRoundLegs(e.target.checked); if (!e.target.checked) setRoundAggregate(false); }} className="h-4 w-4" />
@@ -717,6 +726,13 @@ export default function FaseClient({
                             </label>
                           )}
                         </div>
+                        {hasMatchups && (
+                          <label className="flex flex-col gap-1">
+                            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
+                            <input type="number" value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)}
+                              className={inputClass} style={inputStyle} />
+                          </label>
+                        )}
                         {hasMatchups && (
                           <div className="flex items-center gap-6">
                             <label className="flex items-center gap-2 cursor-pointer">

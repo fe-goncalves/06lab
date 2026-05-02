@@ -1,13 +1,15 @@
+// COMPETICAO-HUB
+
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
-import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao } from "./edicoes/actions";
+import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad } from "./edicoes/actions";
 import { Star, Search } from "lucide-react";
@@ -71,6 +73,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [venues, setVenues] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
 
+  // Novo confronto (fases eliminatórias)
+  const [showNovoConfronto, setShowNovoConfronto] = useState(false);
+  
+
   // Nova partida
   const [showNewMatch, setShowNewMatch] = useState(false);
   const [newMatchPhaseId, setNewMatchPhaseId] = useState("");
@@ -83,6 +89,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [newMatchAddAnother, setNewMatchAddAnother] = useState(false);
   const [creatingMatch, setCreatingMatch] = useState(false);
   const [newMatchError, setNewMatchError] = useState<string | null>(null);
+  const [newMatchIsSecondLeg, setNewMatchIsSecondLeg] = useState(false);
 
   // Elenco
   const [elencoModal, setElencoModal] = useState<{ editionTeamId: string; teamName: string } | null>(null);
@@ -107,9 +114,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [phaseTeamIds, setPhaseTeamIds] = useState<string[]>([]);
   const [loadingPhaseTeams, setLoadingPhaseTeams] = useState(false);
 
+  const [jobsSubTab, setJobsSubTab] = useState<"confrontos" | "partidas">("confrontos");
+  const [editingMatchup, setEditingMatchup] = useState<any | null>(null);
+
+  const [novoMatchPreselectedPhaseId, setNovoMatchPreselectedPhaseId] = useState("");
+
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
   const isClassificatory = (type: string) => type === "round_robin" || type === "group_stage";
+  const isEliminatoria = (type: string) => type === "knockout" || type === "conference";
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -225,12 +238,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const teamsForEdition = editionTeams
     .filter(et => !et.is_free_agent_pool && et.teams != null)
     .map(et => et.teams) as Team[];
-
-  const teamsForSelectedPhase = newMatchPhaseId && phaseTeamIds.length > 0
-    ? editionTeams
-        .filter(et => !et.is_free_agent_pool && et.teams != null && phaseTeamIds.includes(et.team_id))
-        .map(et => et.teams) as Team[]
-    : teamsForEdition;
 
   const teamsForSelectedPhase = newMatchPhaseId && phaseTeamIds.length > 0
     ? editionTeams
@@ -380,6 +387,12 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const topYellow = [...scorers].filter(s => (s.yellow_cards ?? 0) > 0).sort((a, b) => (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0));
   const topRed = [...scorers].filter(s => (s.red_cards ?? 0) > 0).sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0));
 
+  const sortedPhases = [...phases].sort((a, b) => {
+    if (a.is_current && !b.is_current) return -1;
+    if (!a.is_current && b.is_current) return 1;
+    return (a.display_order ?? 0) - (b.display_order ?? 0);
+  });
+
   // ── Renderização da classificação por tipo de fase ──
   function renderClassificacao() {
     if (!selectedPhase) {
@@ -478,6 +491,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         phaseId={selectedPhaseId}
         matchups={phaseMatchups}
         phaseRounds={phaseRounds}
+        phaseType={selectedPhase.phase_type as "knockout" | "conference"}
       />
     );
   }
@@ -555,18 +569,27 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               <button type="button" onClick={() => setShowNewMatch(false)} style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
             </div>
             <div className="px-6 py-4 space-y-4">
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
-                <select value={newMatchPhaseId} onChange={e => { const pid = e.target.value; setNewMatchPhaseId(pid); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); loadPhaseTeams(pid); }}
-                  className={inputClass} style={inputStyle}>
-                  <option value="">Selecione a fase…</option>
-                  {phases.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.custom_label ?? p.full_name} — {PHASE_TYPE_LABEL[p.phase_type] ?? p.phase_type}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {phases.filter(p => isClassificatory(p.phase_type)).length > 1 ? (
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
+                  <select value={newMatchPhaseId} onChange={e => { const pid = e.target.value; setNewMatchPhaseId(pid); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); loadPhaseTeams(pid); }}
+                    className={inputClass} style={inputStyle}>
+                    <option value="">Selecione a fase…</option>
+                    {phases.filter(p => isClassificatory(p.phase_type)).map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.custom_label ?? p.full_name} — {PHASE_TYPE_LABEL[p.phase_type] ?? p.phase_type}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
+                  <p className="font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
+                    {phases.find(p => p.id === newMatchPhaseId)?.custom_label ?? phases.find(p => p.id === newMatchPhaseId)?.full_name ?? "—"}
+                  </p>
+                </div>
+              )}
               {newMatchPhaseId && (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -666,6 +689,38 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         </div>
       )}
 
+      {/* Modal novo confronto — fases eliminatórias */}
+      {showNovoConfronto && (
+        <NovoConfrontoModal
+          phases={phases.filter(p => isEliminatoria(p.phase_type))}
+          initialPhaseId={matchFilterPhaseId}
+          rounds={rounds}
+          editionTeams={editionTeams}
+          venues={venues}
+          onClose={() => setShowNovoConfronto(false)}
+          onSuccess={() => {
+            setShowNovoConfronto(false);
+            loadEditionData(selectedEditionId);
+          }}
+          inputClass={inputClass}
+          inputStyle={inputStyle}
+        />
+      )}
+
+{editingMatchup && (
+  <MatchupEditModal
+    matchup={editingMatchup}
+    rounds={rounds}
+    editionTeams={editionTeams}
+    venues={venues}
+    phaseId={matchFilterPhaseId}
+    onClose={() => setEditingMatchup(null)}
+    onSuccess={() => { setEditingMatchup(null); loadEditionData(selectedEditionId); }}
+    inputClass={inputClass}
+    inputStyle={inputStyle}
+  />
+)}
+
       {/* Modal elenco */}
       {elencoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55">
@@ -759,67 +814,258 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
         {/* ABA JOGOS */}
         {activeTab === "jogos" && (
-          <div>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              {phases.length > 1 && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button type="button" onClick={() => setMatchFilterPhaseId("")}
-                    className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                    style={{ borderColor: matchFilterPhaseId === "" ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterPhaseId === "" ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterPhaseId === "" ? "var(--color-brand)" : "#A6A6A6" }}>
-                    Todas
-                  </button>
-                  {phases.map(p => (
-                    <button key={p.id} type="button" onClick={() => { setMatchFilterPhaseId(p.id); setMatchFilterRoundId(""); }}
-                      className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                      style={{ borderColor: matchFilterPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: matchFilterPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent", color: matchFilterPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6" }}>
-                      {p.custom_label ?? p.full_name}
-                    </button>
-                  ))}
-                </div>
+  <div>
+    {/* Filtros de fase + botão de ação */}
+    <div className="mb-4 flex flex-wrap items-center gap-3">
+      {phases.length > 1 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {sortedPhases.map(p => (
+            <button key={p.id} type="button"
+              onClick={() => {
+                setMatchFilterPhaseId(p.id);
+                setJobsSubTab(isEliminatoria(p.phase_type) ? "confrontos" : "partidas");
+              }}
+              className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
+              style={{
+                borderColor: matchFilterPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)",
+                backgroundColor: matchFilterPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent",
+                color: matchFilterPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6",
+              }}>
+              {p.custom_label ?? p.full_name}
+              {p.is_current && (
+                <span style={{ marginLeft: 5, fontSize: 8, opacity: 0.6 }}>●</span>
               )}
-              <div className="ml-auto flex items-center gap-3">
-                <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                  {filteredMatches.length} {filteredMatches.length === 1 ? "partida" : "partidas"}
-                </p>
-                <button type="button" onClick={() => setShowNewMatch(true)}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                  <Plus size={14} strokeWidth={2.5} /> Nova partida
-                </button>
-              </div>
-            </div>
-            {loadingMatches ? (
-              <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
-            ) : filteredMatches.length === 0 ? (
+            </button>
+          ))}
+        </div>
+      )}
+ 
+      <div className="ml-auto flex items-center gap-3">
+        {/* Contador — só para sub-aba partidas */}
+        {(!isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") || jobsSubTab === "partidas") && (
+          <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            {filteredMatches.length} {filteredMatches.length === 1 ? "partida" : "partidas"}
+          </p>
+        )}
+ 
+        {/* Botão contextual */}
+        {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") ? (
+          jobsSubTab === "confrontos" ? (
+            <button type="button" onClick={() => {
+              setNovoMatchPreselectedPhaseId(matchFilterPhaseId);
+              setShowNovoConfronto(true);
+            }}
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              <Plus size={14} strokeWidth={2.5} /> Novo confronto
+            </button>
+          ) : null
+        ) : (
+          <button type="button" onClick={() => {
+            setNovoMatchPreselectedPhaseId(matchFilterPhaseId);
+            setShowNewMatch(true);
+          }}
+            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+            <Plus size={14} strokeWidth={2.5} /> Nova partida
+          </button>
+        )}
+      </div>
+    </div>
+ 
+    {/* Sub-abas — só para fases eliminatórias */}
+    {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") && (
+      <div className="mb-4 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
+        {[
+          { key: "confrontos", label: "CONFRONTOS" },
+          { key: "partidas", label: "PARTIDAS" },
+        ].map(sub => (
+          <button key={sub.key} type="button"
+            onClick={() => setJobsSubTab(sub.key as "confrontos" | "partidas")}
+            className="border-b-2 pb-3 font-mono text-xs transition-colors"
+            style={{
+              borderColor: jobsSubTab === sub.key ? "var(--color-brand)" : "transparent",
+              color: jobsSubTab === sub.key ? "var(--color-brand)" : "#A6A6A6",
+            }}>
+            {sub.label}
+          </button>
+        ))}
+      </div>
+    )}
+ 
+    {loadingMatches ? (
+      <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
+    ) : (
+      <>
+        {/* ── SUB-ABA CONFRONTOS ── */}
+        {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") && jobsSubTab === "confrontos" && (() => {
+          const phaseMatchups = matchups
+            .filter(m => m.phase_id === matchFilterPhaseId)
+            .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+ 
+          // Agrupa por round_label, ordenando pelo display_order da rodada correspondente
+          const byRound: Record<string, { matchups: any[]; roundOrder: number }> = {};
+          phaseMatchups.forEach(mu => {
+            const rd = rounds.find(r =>
+              r.phase_id === matchFilterPhaseId &&
+              (r.custom_label ?? r.name) === mu.round_label
+            );
+            const order = rd?.display_order ?? 999;
+            if (!byRound[mu.round_label]) byRound[mu.round_label] = { matchups: [], roundOrder: order };
+            byRound[mu.round_label].matchups.push(mu);
+          });
+ 
+          const sortedGroups = Object.entries(byRound).sort((a, b) => a[1].roundOrder - b[1].roundOrder);
+ 
+          if (sortedGroups.length === 0) {
+            return (
               <div className="flex flex-col items-center justify-center py-20 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
+                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem confrontos</p>
                 <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  {matches.length > 0 ? "Nenhuma partida neste filtro." : "Clique em \"Nova partida\" para começar."}
+                  Clique em "Novo confronto" para começar.
                 </p>
               </div>
-            ) : (
-              <div className="space-y-6">
-                {Object.values(filteredMatchesByRound)
-                  .sort((a, b) => a.order - b.order)
-                  .map(group => (
+            );
+          }
+ 
+          return (
+            <div className="space-y-6">
+              {sortedGroups.map(([label, group]) => (
+                <div key={label}>
+                  <p className="mb-3 font-mono text-xs uppercase tracking-widest"
+                    style={{ color: "var(--color-text-secondary)" }}>
+                    {label}
+                  </p>
+                  <div className="rounded-xl border overflow-hidden"
+                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                    {group.matchups.map((mu, idx) => {
+                      const tA = mu.teams_a?.abbreviation ?? mu.teams_a?.full_name ?? "A definir";
+                      const tB = mu.teams_b?.abbreviation ?? mu.teams_b?.full_name ?? "A definir";
+                      const logoA = mu.teams_a?.logo_url ?? null;
+                      const logoB = mu.teams_b?.logo_url ?? null;
+                      const matchCount = matches.filter(m => m.matchup_id === mu.id).length;
+ 
+                      return (
+                        <div key={mu.id}
+                          className="flex items-center gap-4 px-5 py-3 group"
+                          style={{
+                            borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
+                            opacity: 0.8,
+                            transition: "opacity 0.15s",
+                          }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = "0.8")}>
+ 
+                          {/* Times */}
+                          <div className="flex-1 flex items-center gap-3 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              {logoA
+                                ? <img src={logoA} alt="" style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3 }} />
+                                : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-border)" }} />
+                              }
+                              <span className="font-mono text-sm font-bold"
+                                style={{ color: mu.teams_a ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
+                                {tA}
+                              </span>
+                            </div>
+                            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>×</span>
+                            <div className="flex items-center gap-1.5">
+                              {logoB
+                                ? <img src={logoB} alt="" style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3 }} />
+                                : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-border)" }} />
+                              }
+                              <span className="font-mono text-sm font-bold"
+                                style={{ color: mu.teams_b ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
+                                {tB}
+                              </span>
+                            </div>
+                          </div>
+ 
+                          {/* Info de partidas */}
+                          <span className="font-mono text-xs shrink-0"
+                            style={{ color: "var(--color-text-secondary)" }}>
+                            {matchCount} {matchCount === 1 ? "partida" : "partidas"}
+                          </span>
+ 
+                          {/* Ações */}
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <button type="button"
+                              onClick={() => setEditingMatchup(mu)}
+                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}
+                              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+                              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
+                              Editar
+                            </button>
+                            <button type="button"
+                              onClick={async () => {
+                                if (!confirm(`Remover confronto ${tA} × ${tB}? As partidas vinculadas também serão removidas.`)) return;
+                                const supabase = createClient();
+                                await supabase.from("matches").delete().eq("matchup_id", mu.id);
+                                await supabase.from("matchups").delete().eq("id", mu.id);
+                                await loadEditionData(selectedEditionId);
+                                toast("success", "Confronto removido.");
+                              }}
+                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}
+                              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-danger)")}
+                              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+ 
+        {/* ── SUB-ABA PARTIDAS (ou fase classificatória) ── */}
+        {(!isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") || jobsSubTab === "partidas") && (
+          filteredMatches.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
+              <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
+                {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "")
+                  ? "Adicione partidas pelos confrontos na aba Confrontos."
+                  : "Clique em \"Nova partida\" para começar."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {Object.values(filteredMatchesByRound)
+                .sort((a, b) => a.order - b.order)
+                .map(group => (
                   <div key={group.label}>
-                    <p className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{group.label}</p>
-                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                      {group.matches.map((m, idx) => <MatchRow key={m.id} match={m} idx={idx} onDelete={() => handleDeleteMatch(m.id)} />)}
+                    <p className="mb-3 font-mono text-xs uppercase tracking-widest"
+                      style={{ color: "var(--color-text-secondary)" }}>
+                      {group.label}
+                    </p>
+                    <div className="rounded-xl border overflow-hidden"
+                      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                      {group.matches.map((m, idx) => (
+                        <MatchRow key={m.id} match={m} idx={idx} onDelete={() => handleDeleteMatch(m.id)} />
+                      ))}
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </div>
+            </div>
+          )
         )}
+      </>
+    )}
+  </div>
+)}
 
         {/* ABA CLASSIFICAÇÃO */}
         {activeTab === "classificacao" && (
           <div>
             {phases.length > 1 && (
               <div className="mb-4 flex gap-2 flex-wrap">
-                {phases.map(p => (
+                {sortedPhases.map(p => (
                   <button key={p.id} type="button" onClick={() => setSelectedPhaseId(p.id)}
                     className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
                     style={{ borderColor: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: selectedPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent", color: selectedPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6" }}>
@@ -1504,6 +1750,9 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
 }
 
 // ─── BracketView ──────────────────────────────────────────────────────────────
+// Substitui todo o bloco anterior a partir deste comentário.
+// Requer: useState, useEffect, useRef (já importados no topo do arquivo),
+//         createClient (já importado), useRouter (já importado).
 
 const KNOCKOUT_ORDER = [
   "Décimas de Final", "Oitavas de Final", "Quartas de Final",
@@ -1514,120 +1763,407 @@ function sortRoundLabels(labels: string[]): string[] {
   const thirds = labels.filter(l => l === "Disputa de Terceiro Lugar");
   const rest = labels.filter(l => l !== "Disputa de Terceiro Lugar");
   const sorted = rest.sort((a, b) => {
-    const ia = KNOCKOUT_ORDER.indexOf(a); const ib = KNOCKOUT_ORDER.indexOf(b);
+    const ia = KNOCKOUT_ORDER.indexOf(a);
+    const ib = KNOCKOUT_ORDER.indexOf(b);
     if (ia === -1 && ib === -1) return 0;
-    if (ia === -1) return -1; if (ib === -1) return 1;
+    if (ia === -1) return -1;
+    if (ib === -1) return 1;
     return ia - ib;
   });
   return [...sorted, ...thirds];
 }
 
 type MatchupData = {
-  id: string; round_label: string; round_id: string | null;
-  team_a_id: string | null; team_b_id: string | null;
-  is_completed: boolean; display_order: number;
+  id: string;
+  round_label: string;
+  round_id: string | null;
+  team_a_id: string | null;
+  team_b_id: string | null;
+  is_completed: boolean;
+  display_order: number;
   teams_a: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   teams_b: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
   matches?: MatchItemData[];
 };
+
 type MatchItemData = {
-  id: string; score_a: number; score_b: number; status: string;
-  match_date: string | null; pen_a?: number; pen_b?: number;
+  id: string;
+  score_a: number;
+  score_b: number;
+  status: string;
+  match_date: string | null;
+  pen_a?: number | null;
+  pen_b?: number | null;
 };
 
-function BracketView({ phaseId, matchups, phaseRounds }: {
-  phaseId: string; matchups: MatchupData[]; phaseRounds: Round[];
-}) {
-  const [enriched, setEnriched] = useState<MatchupData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [modalMatchup, setModalMatchup] = useState<MatchupData | null>(null);
-  const [modalLegs, setModalLegs] = useState({ legs: false, aggregateScore: false });
-  const matchupIdsKey = matchups.map(m => m.id).join(",");
+type MatchupResult = {
+  scoreA: number | null;
+  scoreB: number | null;
+  penA: number | null;
+  penB: number | null;
+  winner: "a" | "b" | null;
+  hasShootout: boolean;
+};
 
-  useEffect(() => {
-    if (!phaseId) return;
-    async function load() {
-      setLoading(true);
-      const supabase = createClient();
-      const matchupIds = matchups.map(m => m.id);
-      if (matchupIds.length === 0) { setEnriched([]); setLoading(false); return; }
-      const { data: matchesData } = await supabase
-        .from("matches").select("id, matchup_id, score_a, score_b, status, match_date, team_a_id")
-        .in("matchup_id", matchupIds).order("match_date", { ascending: true });
-      const matchIds = (matchesData ?? []).map((m: any) => m.id);
-      let shootouts: any[] = [];
-      if (matchIds.length > 0) {
-        const { data: soData } = await supabase
-          .from("match_penalty_shootout").select("match_id, team_id, result").in("match_id", matchIds);
-        shootouts = soData ?? [];
+function computeMatchupResult(
+  matchup: MatchupData,
+  legs: boolean,
+  aggregateScore: boolean,
+): MatchupResult {
+  const finished = (matchup.matches ?? []).filter(m => m.status === "finished");
+  if (!finished.length) return { scoreA: null, scoreB: null, penA: null, penB: null, winner: null, hasShootout: false };
+
+  let scoreA: number | null = null;
+  let scoreB: number | null = null;
+  let penA: number | null = null;
+  let penB: number | null = null;
+  let hasShootout = false;
+
+  if (!legs) {
+    const m = finished[0];
+    scoreA = m.score_a; scoreB = m.score_b;
+    penA = m.pen_a ?? null; penB = m.pen_b ?? null;
+    hasShootout = penA !== null;
+  } else if (aggregateScore) {
+    scoreA = finished.reduce((s, m) => s + m.score_a, 0);
+    scoreB = finished.reduce((s, m) => s + m.score_b, 0);
+    const last = finished[finished.length - 1];
+    penA = last?.pen_a ?? null;
+    penB = last?.pen_b ?? null;
+    hasShootout = penA !== null;
+  } else {
+    // Sem agregado: conta vitórias na série
+    let wA = 0, wB = 0;
+    finished.forEach(m => {
+      const pa = m.pen_a ?? null, pb = m.pen_b ?? null;
+      if (pa !== null && pb !== null) {
+        hasShootout = true;
+        if (pa > pb) wA++; else if (pb > pa) wB++;
+      } else {
+        if (m.score_a > m.score_b) wA++; else if (m.score_b > m.score_a) wB++;
       }
-      const matchTeamAMap: Record<string, string> = {};
-      (matchesData ?? []).forEach((m: any) => { matchTeamAMap[m.id] = m.team_a_id; });
-      const shootoutMap: Record<string, { team_a: number; team_b: number }> = {};
-      shootouts.forEach((s: any) => {
-        if (!shootoutMap[s.match_id]) shootoutMap[s.match_id] = { team_a: 0, team_b: 0 };
-        if (s.result === "scored") {
-          if (s.team_id === matchTeamAMap[s.match_id]) shootoutMap[s.match_id].team_a++;
-          else shootoutMap[s.match_id].team_b++;
-        }
-      });
-      const matchesByMatchup: Record<string, MatchItemData[]> = {};
-      (matchesData ?? []).forEach((m: any) => {
-        if (!m.matchup_id) return;
-        if (!matchesByMatchup[m.matchup_id]) matchesByMatchup[m.matchup_id] = [];
-        const so = shootoutMap[m.id];
-        matchesByMatchup[m.matchup_id].push({
-          id: m.id, score_a: m.score_a, score_b: m.score_b,
-          status: m.status, match_date: m.match_date,
-          pen_a: so?.team_a, pen_b: so?.team_b,
-        });
-      });
-      setEnriched(matchups.map(m => ({ ...m, matches: matchesByMatchup[m.id] ?? [] })));
-      setLoading(false);
-    }
-    void load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phaseId, matchupIdsKey]);
+    });
+    scoreA = wA; scoreB = wB;
+  }
 
-  if (loading) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando bracket…</p>;
-  if (enriched.length === 0) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>matchups recebidos: {matchups.length} | enriched: {enriched.length}</p>;
+  let winner: "a" | "b" | null = null;
+  if (penA !== null && penB !== null) {
+    winner = penA > penB ? "a" : penB > penA ? "b" : null;
+  } else if (scoreA !== null && scoreB !== null && scoreA !== scoreB) {
+    winner = scoreA > scoreB ? "a" : "b";
+  }
 
-  const byLabel: Record<string, MatchupData[]> = {};
-  enriched.forEach(m => {
-    const key = m.round_label ?? "—";
-    if (!byLabel[key]) byLabel[key] = [];
-    byLabel[key].push(m);
-  });
-  const sortedLabels = sortRoundLabels(Object.keys(byLabel));
+  return { scoreA, scoreB, penA, penB, winner, hasShootout };
+}
+
+// ── Linha de time dentro do card ───────────────────────────────────────────
+function BracketTeamRow({
+  team, score, penScore, isWinner, isLoser, hasBorderTop,
+}: {
+  team: MatchupData["teams_a"];
+  score: number | null;
+  penScore: number | null;
+  isWinner: boolean;
+  isLoser: boolean;
+  hasBorderTop: boolean;
+}) {
+  const nameColor = isWinner
+    ? "var(--color-brand)"
+    : isLoser
+    ? "rgba(255,255,255,0.18)"
+    : "var(--color-text-primary)";
+  const scoreColor = isWinner
+    ? "var(--color-brand)"
+    : isLoser
+    ? "rgba(255,255,255,0.12)"
+    : "var(--color-text-primary)";
+  const isTbd = !team;
 
   return (
-    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
-      {modalMatchup && (
-        <BracketSeriesModal matchup={modalMatchup} legs={modalLegs.legs} aggregateScore={modalLegs.aggregateScore} onClose={() => setModalMatchup(null)} />
+    <div style={{
+      display: "flex", alignItems: "center", gap: 7, padding: "7px 9px", minHeight: 34,
+      borderTop: hasBorderTop ? "1px solid var(--color-border)" : "none",
+      backgroundColor: isWinner ? "rgba(191,242,5,0.04)" : "transparent",
+    }}>
+      {/* Logo */}
+      {team?.logo_url ? (
+        <img src={team.logo_url} alt="" style={{ width: 18, height: 18, borderRadius: 3, objectFit: "contain", flexShrink: 0, filter: isLoser ? "grayscale(1) opacity(0.25)" : "none" }} />
+      ) : (
+        <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-border)", flexShrink: 0 }} />
       )}
-      <div style={{ display: "flex", gap: 0, alignItems: "stretch", minWidth: sortedLabels.length * 220 }}>
-        {sortedLabels.map((label, colIdx) => {
-          const colMatchups = [...(byLabel[label] ?? [])].sort((a, b) => a.display_order - b.display_order);
-          const isThird = label === "Disputa de Terceiro Lugar";
-          const isLast = colIdx === sortedLabels.length - 1 || isThird;
+
+      {/* Nome */}
+      <span style={{
+        flex: 1, fontFamily: "var(--font-mono)", fontSize: 11,
+        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        color: nameColor, fontWeight: isWinner ? 700 : 500,
+        fontStyle: isTbd ? "italic" : "normal",
+      }}>
+        {isTbd ? "A definir" : (team?.abbreviation ?? team?.full_name ?? "A definir")}
+      </span>
+
+      {/* Placar */}
+      {score !== null && (
+        <div style={{ display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0 }}>
+          {penScore !== null && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(191,242,5,0.65)", lineHeight: 1 }}>
+              ({penScore})
+            </span>
+          )}
+          <span style={{ fontFamily: "var(--font-display)", fontSize: 17, lineHeight: 1, minWidth: 14, textAlign: "right", color: scoreColor }}>
+            {score}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Card de confronto ──────────────────────────────────────────────────────
+function BracketMatchupCard({
+  matchup, legs, aggregateScore, showOrder, onOpenModal,
+}: {
+  matchup: MatchupData;
+  legs: boolean;
+  aggregateScore: boolean;
+  showOrder: boolean;
+  onOpenModal: () => void;
+}) {
+  const finished = (matchup.matches ?? []).filter(m => m.status === "finished");
+  const allMatches = matchup.matches ?? [];
+  const hasMatches = allMatches.length > 0;
+  const res = computeMatchupResult(matchup, legs, aggregateScore);
+
+  // Barra de placar agregado (só se ida e volta com aggregate e 2+ jogos finalizados)
+  const showAggBar = legs && aggregateScore && finished.length > 1;
+  const aggA = showAggBar ? finished.reduce((s, m) => s + m.score_a, 0) : null;
+  const aggB = showAggBar ? finished.reduce((s, m) => s + m.score_b, 0) : null;
+  const lastGame = finished[finished.length - 1];
+  const aggPenA = showAggBar ? (lastGame?.pen_a ?? null) : null;
+  const aggPenB = showAggBar ? (lastGame?.pen_b ?? null) : null;
+  const aggWinnerA = showAggBar && (
+    aggPenA !== null ? aggPenA > (aggPenB ?? 0) : (aggA ?? 0) > (aggB ?? 0)
+  );
+  const aggWinnerB = showAggBar && (
+    aggPenB !== null ? aggPenB > (aggPenA ?? 0) : (aggB ?? 0) > (aggA ?? 0)
+  );
+
+  const tA = matchup.teams_a?.abbreviation ?? matchup.teams_a?.full_name ?? "A def.";
+  const tB = matchup.teams_b?.abbreviation ?? matchup.teams_b?.full_name ?? "A def.";
+
+  return (
+    <div
+      onClick={hasMatches ? onOpenModal : undefined}
+      style={{
+        borderRadius: 10,
+        border: "1px solid var(--color-border)",
+        backgroundColor: "var(--color-surface)",
+        overflow: "hidden",
+        cursor: hasMatches ? "pointer" : "default",
+        transition: "border-color 0.15s",
+      }}
+      onMouseEnter={e => { if (hasMatches) (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.35)"; }}
+      onMouseLeave={e => { if (hasMatches) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
+    >
+      {/* Barra de agregado */}
+      {showAggBar && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 9px", backgroundColor: "rgba(191,242,5,0.05)", borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)" }}>
+            Agregado
+          </span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+            <span style={{ color: aggWinnerA ? "var(--color-brand)" : "var(--color-text-secondary)", fontWeight: aggWinnerA ? 700 : 400 }}>{tA} {aggA}</span>
+            <span style={{ margin: "0 3px", color: "var(--color-border)" }}>–</span>
+            <span style={{ color: aggWinnerB ? "var(--color-brand)" : "var(--color-text-secondary)", fontWeight: aggWinnerB ? 700 : 400 }}>{aggB} {tB}</span>
+            {aggPenA !== null && (
+              <span style={{ marginLeft: 4, color: "rgba(191,242,5,0.6)", fontSize: 8 }}>
+                pen {aggPenA}–{aggPenB}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      <BracketTeamRow
+        team={matchup.teams_a}
+        score={res.scoreA}
+        penScore={res.penA}
+        isWinner={res.winner === "a"}
+        isLoser={res.winner === "b" && hasMatches}
+        hasBorderTop={false}
+      />
+      <BracketTeamRow
+        team={matchup.teams_b}
+        score={res.scoreB}
+        penScore={res.penB}
+        isWinner={res.winner === "b"}
+        isLoser={res.winner === "a" && hasMatches}
+        hasBorderTop
+      />
+
+      {/* Footer */}
+      {hasMatches && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 9px", borderTop: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand)", letterSpacing: "0.04em" }}>
+            VER JOGOS ›
+          </span>
+          {showOrder && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(191,242,5,0.4)", background: "rgba(191,242,5,0.07)", borderRadius: 3, padding: "2px 5px" }}>
+              #{matchup.display_order}
+            </span>
+          )}
+        </div>
+      )}
+      {!hasMatches && showOrder && (
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 9px", borderTop: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(191,242,5,0.4)", background: "rgba(191,242,5,0.07)", borderRadius: 3, padding: "2px 5px" }}>
+            #{matchup.display_order}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Modal de detalhe dos jogos ────────────────────────────────────────────
+function BracketSeriesModal({
+  matchup, legs, aggregateScore, onClose,
+}: {
+  matchup: MatchupData;
+  legs: boolean;
+  aggregateScore: boolean;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const finished = (matchup.matches ?? []).filter(m => m.status === "finished");
+  const isLegs = legs && finished.length > 1;
+  const tA = matchup.teams_a?.abbreviation ?? matchup.teams_a?.full_name ?? "Time A";
+  const tB = matchup.teams_b?.abbreviation ?? matchup.teams_b?.full_name ?? "Time B";
+
+  // Linha de resumo no topo
+  let summaryLabel = "";
+  let summaryValue = "";
+  if (isLegs && aggregateScore) {
+    const totA = finished.reduce((s, m) => s + m.score_a, 0);
+    const totB = finished.reduce((s, m) => s + m.score_b, 0);
+    const last = finished[finished.length - 1];
+    const pen = last?.pen_a != null ? ` · Pên: ${last.pen_a}–${last.pen_b}` : "";
+    summaryLabel = "Placar agregado";
+    summaryValue = `${tA} ${totA}–${totB} ${tB}${pen}`;
+  } else if (isLegs && !aggregateScore) {
+    let wA = 0, wB = 0;
+    finished.forEach(m => {
+      const pa = m.pen_a ?? null, pb = m.pen_b ?? null;
+      if (pa !== null && pb !== null) { if (pa > pb) wA++; else if (pb > pa) wB++; }
+      else { if (m.score_a > m.score_b) wA++; else if (m.score_b > m.score_a) wB++; }
+    });
+    summaryLabel = "Vitórias na série";
+    summaryValue = `${tA} ${wA}–${wB} ${tB}`;
+  }
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div style={{ width: "100%", maxWidth: 340, borderRadius: 12, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+
+        {/* Cabeçalho */}
+        <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <span style={{ fontFamily: "var(--font-display)", fontSize: 15, color: "var(--color-text-accent)", flex: 1 }}>
+            {tA} × {tB}
+          </span>
+          <button
+            onClick={onClose}
+            style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid var(--color-border)", background: "transparent", color: "var(--color-text-secondary)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, lineHeight: 1, flexShrink: 0 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-brand)"; (e.currentTarget as HTMLElement).style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Resumo agregado / série */}
+        {summaryLabel && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", backgroundColor: "rgba(191,242,5,0.05)", borderBottom: "1px solid var(--color-border)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)" }}>
+              {summaryLabel}
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)", fontWeight: 700 }}>
+              {summaryValue}
+            </span>
+          </div>
+        )}
+
+        {/* Jogos */}
+        {finished.map((m, i) => {
+          const hasPen = (m.pen_a ?? null) !== null;
+          const wA = hasPen ? (m.pen_a! > m.pen_b!) : m.score_a > m.score_b;
+          const wB = hasPen ? (m.pen_b! > m.pen_a!) : m.score_b > m.score_a;
+          const gameLabel = isLegs
+            ? (i === 0 ? "Jogo de ida" : "Jogo de volta")
+            : "Jogo único";
+
           return (
-            <div key={label} style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 200 }}>
-              <div style={{ padding: "10px 16px 14px", borderBottom: "1px solid var(--color-border)" }}>
-                <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: isThird ? "var(--color-warning)" : "var(--color-brand)" }}>{label}</p>
+            <div key={m.id} style={{ borderBottom: i < finished.length - 1 ? "1px solid var(--color-border)" : "none" }}>
+              {/* Label do jogo */}
+              <div style={{ padding: "8px 14px 4px", fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--color-text-secondary)" }}>
+                {gameLabel}
               </div>
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", padding: "16px 12px", gap: 12 }}>
-                {colMatchups.map(matchup => {
-                  const round = phaseRounds.find(r => (r.custom_label ?? r.name) === matchup.round_label);
-                  const rLegs = round?.legs ?? false;
-                  const rAggregate = round?.aggregate_score ?? false;
-                  return (
-                    <BracketMatchupCard
-                      key={matchup.id} matchup={matchup} legs={rLegs} aggregateScore={rAggregate}
-                      showConnector={!isLast && !isThird}
-                      onOpenModal={() => { if ((matchup.matches?.length ?? 0) > 0) { setModalLegs({ legs: rLegs, aggregateScore: rAggregate }); setModalMatchup(matchup); } }}
-                    />
-                  );
-                })}
+
+              {/* Placar do Time A */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 14px" }}>
+                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 11, color: wA ? "var(--color-brand)" : wB ? "rgba(255,255,255,0.2)" : "var(--color-text-primary)" }}>
+                  {tA}
+                </span>
+                {hasPen && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "rgba(191,242,5,0.1)", color: "var(--color-brand)", padding: "2px 5px", borderRadius: 3 }}>
+                    pen
+                  </span>
+                )}
+                <span style={{ fontFamily: "var(--font-display)", fontSize: 18, lineHeight: 1, color: wA ? "var(--color-brand)" : wB ? "rgba(255,255,255,0.12)" : "var(--color-text-primary)" }}>
+                  {m.score_a}
+                </span>
+              </div>
+
+              {/* Placar do Time B */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 14px 6px" }}>
+                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 11, color: wB ? "var(--color-brand)" : wA ? "rgba(255,255,255,0.2)" : "var(--color-text-primary)" }}>
+                  {tB}
+                </span>
+                {hasPen && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "rgba(191,242,5,0.1)", color: "var(--color-brand)", padding: "2px 5px", borderRadius: 3 }}>
+                    pen
+                  </span>
+                )}
+                <span style={{ fontFamily: "var(--font-display)", fontSize: 18, lineHeight: 1, color: wB ? "var(--color-brand)" : wA ? "rgba(255,255,255,0.12)" : "var(--color-text-primary)" }}>
+                  {m.score_b}
+                </span>
+              </div>
+
+              {/* Bloco de pênaltis */}
+              {hasPen && (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 14px 8px", backgroundColor: "rgba(191,242,5,0.04)", borderTop: "1px solid var(--color-border)" }}>
+                  <span style={{ fontSize: 10 }}>⚽</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-secondary)" }}>
+                    Pênaltis:{" "}
+                    <span style={{ color: "var(--color-brand)", fontWeight: 700 }}>
+                      {tA} {m.pen_a} × {m.pen_b} {tB}
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {/* Link para a partida */}
+              <div style={{ padding: "6px 14px 8px", display: "flex", justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => router.push(`/partidas/${m.id}`)}
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-secondary)", background: "transparent", border: "1px solid var(--color-border)", borderRadius: 5, padding: "3px 8px", cursor: "pointer", letterSpacing: "0.05em", textTransform: "uppercase" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--color-brand)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
+                >
+                  Ver partida →
+                </button>
               </div>
             </div>
           );
@@ -1637,132 +2173,495 @@ function BracketView({ phaseId, matchups, phaseRounds }: {
   );
 }
 
-function BracketMatchupCard({ matchup, legs, aggregateScore, showConnector, onOpenModal }: {
-  matchup: MatchupData; legs: boolean; aggregateScore: boolean; showConnector: boolean; onOpenModal: () => void;
-}) {
-  const matches = matchup.matches ?? [];
-  const finished = matches.filter(m => m.status === "finished");
-  const hasMatches = finished.length > 0;
-  let scoreA: number | null = null, scoreB: number | null = null;
-  let penA: number | null = null, penB: number | null = null;
-  let winnerSide: "a" | "b" | null = null;
-  if (hasMatches) {
-    if (!legs) {
-      const m = finished[0];
-      if (m) { scoreA = m.score_a; scoreB = m.score_b; penA = m.pen_a ?? null; penB = m.pen_b ?? null; }
-    } else if (aggregateScore) {
-      scoreA = finished.reduce((s, m) => s + m.score_a, 0);
-      scoreB = finished.reduce((s, m) => s + m.score_b, 0);
-      const last = finished[finished.length - 1];
-      penA = last?.pen_a ?? null; penB = last?.pen_b ?? null;
-    } else {
-      let wA = 0, wB = 0;
-      finished.forEach(m => {
-        const pa = m.pen_a ?? null, pb = m.pen_b ?? null;
-        if (pa !== null && pb !== null) { if (pa > pb) wA++; else if (pb > pa) wB++; }
-        else { if (m.score_a > m.score_b) wA++; else if (m.score_b > m.score_a) wB++; }
+// ── Connector SVG entre colunas ───────────────────────────────────────────
+function drawBracketConnectors(
+  svgEl: SVGSVGElement,
+  canvasEl: HTMLElement,
+  orderedLabels: string[],
+  byRound: Record<string, MatchupData[]>,
+  direction: "ltr" | "rtl" = "ltr",
+) {
+  const cr = canvasEl.getBoundingClientRect();
+  svgEl.style.width = canvasEl.scrollWidth + "px";
+  svgEl.style.height = canvasEl.scrollHeight + "px";
+  // Limpa somente os paths desta direção para não apagar paths do lado oposto
+  const color = direction === "ltr" ? "rgba(191,242,5,0.14)" : "rgba(191,242,5,0.14)";
+
+  const mainLabels = orderedLabels.filter(l => l !== "Disputa de Terceiro Lugar");
+  for (let ci = 0; ci < mainLabels.length - 1; ci++) {
+    const fromMs = [...(byRound[mainLabels[ci]] ?? [])].sort((a, b) => a.display_order - b.display_order);
+    const toMs = [...(byRound[mainLabels[ci + 1]] ?? [])].sort((a, b) => a.display_order - b.display_order);
+
+    toMs.forEach((dst, ti) => {
+      const srcA = fromMs[ti * 2];
+      const srcB = fromMs[ti * 2 + 1];
+      const dstEl = canvasEl.querySelector<HTMLElement>(`[data-matchup-id="${dst.id}"]`);
+      if (!dstEl) return;
+      const dr = dstEl.getBoundingClientRect();
+      const dstMidY = dr.top - cr.top + dr.height / 2;
+      const dstX = direction === "ltr" ? dr.left - cr.left : dr.right - cr.left;
+
+      [srcA, srcB].forEach(src => {
+        if (!src) return;
+        const srcEl = canvasEl.querySelector<HTMLElement>(`[data-matchup-id="${src.id}"]`);
+        if (!srcEl) return;
+        const sr = srcEl.getBoundingClientRect();
+        const srcMidY = sr.top - cr.top + sr.height / 2;
+        const srcX = direction === "ltr" ? sr.right - cr.left : sr.left - cr.left;
+        const midX = (srcX + dstX) / 2;
+
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", `M ${srcX} ${srcMidY} L ${midX} ${srcMidY} L ${midX} ${dstMidY} L ${dstX} ${dstMidY}`);
+        path.setAttribute("fill", "none");
+        path.setAttribute("stroke", color);
+        path.setAttribute("stroke-width", "1.5");
+        path.setAttribute("stroke-linecap", "round");
+        svgEl.appendChild(path);
       });
-      scoreA = wA; scoreB = wB;
-    }
-    if (penA !== null && penB !== null) winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
-    else if (scoreA !== null && scoreB !== null) winnerSide = scoreA > scoreB ? "a" : scoreB > scoreA ? "b" : null;
+    });
   }
-  const isClickable = finished.length > 0;
-  return (
-    <div style={{ position: "relative" }}>
-      <div onClick={isClickable ? onOpenModal : undefined}
-        style={{ borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)",
-          overflow: "hidden", cursor: isClickable ? "pointer" : "default", transition: "border-color 0.15s" }}
-        onMouseEnter={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; }}
-        onMouseLeave={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}>
-        <BracketTeamRow team={matchup.teams_a} score={scoreA} penScore={penA} isWinner={winnerSide === "a"} isLoser={winnerSide === "b" && hasMatches} hasBorderTop={false} />
-        <BracketTeamRow team={matchup.teams_b} score={scoreB} penScore={penB} isWinner={winnerSide === "b"} isLoser={winnerSide === "a" && hasMatches} hasBorderTop />
-        {isClickable && <div style={{ padding: "3px 10px", borderTop: "1px solid var(--color-border)" }}><p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand)" }}>VER JOGOS ›</p></div>}
+}
+
+// ── BracketView principal ─────────────────────────────────────────────────
+function BracketView({
+  phaseId,
+  matchups,
+  phaseRounds,
+  phaseType,
+}: {
+  phaseId: string;
+  matchups: MatchupData[];
+  phaseRounds: Round[];
+  phaseType: "knockout" | "conference";
+}) {
+  const [enriched, setEnriched] = useState<MatchupData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalMatchup, setModalMatchup] = useState<MatchupData | null>(null);
+  const [modalRound, setModalRound] = useState<{ legs: boolean; aggregateScore: boolean }>({ legs: false, aggregateScore: false });
+  const [reorderMode, setReorderMode] = useState(false);
+  const [localMatchups, setLocalMatchups] = useState<MatchupData[]>([]);
+  const dragId = useRef<string | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const matchupIdsKey = matchups.map(m => m.id).join(",");
+
+  // Busca partidas e shootouts para cada matchup
+  useEffect(() => {
+    if (!phaseId) return;
+    async function load() {
+      setLoading(true);
+      const supabase = createClient();
+      const matchupIds = matchups.map(m => m.id);
+      if (!matchupIds.length) { setEnriched([]); setLoading(false); return; }
+
+      const { data: matchesData } = await supabase
+        .from("matches")
+        .select("id, matchup_id, score_a, score_b, status, match_date, team_a_id")
+        .in("matchup_id", matchupIds)
+        .order("match_date", { ascending: true });
+
+      const matchIds = (matchesData ?? []).map((m: any) => m.id);
+      let shootouts: any[] = [];
+      if (matchIds.length) {
+        const { data: soData } = await supabase
+          .from("match_penalty_shootout")
+          .select("match_id, team_id, result")
+          .in("match_id", matchIds);
+        shootouts = soData ?? [];
+      }
+
+      // Monta pen_a / pen_b por partida
+      const penByMatch: Record<string, { pen_a: number; pen_b: number }> = {};
+      const matchTeamAMap: Record<string, string> = {};
+      (matchesData ?? []).forEach((m: any) => { matchTeamAMap[m.id] = m.team_a_id; });
+
+      shootouts.forEach((s: any) => {
+        if (!penByMatch[s.match_id]) penByMatch[s.match_id] = { pen_a: 0, pen_b: 0 };
+        const isTeamA = matchTeamAMap[s.match_id] === s.team_id;
+        const goals = (s.result as string[]).filter(r => r === "goal").length;
+        if (isTeamA) penByMatch[s.match_id].pen_a = goals;
+        else penByMatch[s.match_id].pen_b = goals;
+      });
+
+      // Agrupa partidas por matchup
+      const matchesByMatchup: Record<string, MatchItemData[]> = {};
+      (matchesData ?? []).forEach((m: any) => {
+        if (!matchesByMatchup[m.matchup_id]) matchesByMatchup[m.matchup_id] = [];
+        matchesByMatchup[m.matchup_id].push({
+          id: m.id,
+          score_a: m.score_a ?? 0,
+          score_b: m.score_b ?? 0,
+          status: m.status,
+          match_date: m.match_date,
+          pen_a: penByMatch[m.id]?.pen_a ?? null,
+          pen_b: penByMatch[m.id]?.pen_b ?? null,
+        });
+      });
+
+      const result = matchups.map(mu => ({ ...mu, matches: matchesByMatchup[mu.id] ?? [] }));
+      setEnriched(result);
+      setLocalMatchups(result);
+      setLoading(false);
+    }
+    load();
+  }, [phaseId, matchupIdsKey]);
+
+  // Sincroniza localMatchups quando enriched muda
+  useEffect(() => { setLocalMatchups(enriched); }, [enriched]);
+
+  // Redesenha conectores após render
+  useEffect(() => {
+    if (loading || !canvasRef.current || !svgRef.current) return;
+    const timer = setTimeout(() => {
+      if (!canvasRef.current || !svgRef.current) return;
+      svgRef.current.innerHTML = "";
+      const byRound: Record<string, MatchupData[]> = {};
+      localMatchups.forEach(m => { if (!byRound[m.round_label]) byRound[m.round_label] = []; byRound[m.round_label].push(m); });
+
+      if (phaseType === "knockout") {
+        const labels = sortRoundLabels(Object.keys(byRound));
+        drawBracketConnectors(svgRef.current, canvasRef.current, labels, byRound, "ltr");
+      } else {
+        // Conference: redesenha os dois lados
+        // Os connectores são redesenhados pelo ConferenceBracket via seus próprios refs
+      }
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [localMatchups, loading, reorderMode, phaseType]);
+
+  function handleDragStart(id: string) { dragId.current = id; }
+  function handleDrop(targetId: string, round: string) {
+    if (!dragId.current || dragId.current === targetId) return;
+    const src = localMatchups.find(m => m.id === dragId.current);
+    const tgt = localMatchups.find(m => m.id === targetId);
+    if (!src || !tgt || src.round_label !== tgt.round_label) return;
+    const updated = localMatchups.map(m => {
+      if (m.id === src.id) return { ...m, display_order: tgt.display_order };
+      if (m.id === tgt.id) return { ...m, display_order: src.display_order };
+      return m;
+    });
+    setLocalMatchups(updated);
+    dragId.current = null;
+  }
+
+  function openModal(mu: MatchupData) {
+    const round = phaseRounds.find(r => (r.custom_label ?? r.name) === mu.round_label);
+    setModalRound({ legs: round?.legs ?? false, aggregateScore: round?.aggregate_score ?? false });
+    setModalMatchup(mu);
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: "32px 0", textAlign: "center" }}>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+          Carregando bracket…
+        </p>
       </div>
-      {showConnector && <div style={{ position: "absolute", right: -12, top: "50%", transform: "translateY(-50%)", width: 12, height: 1, backgroundColor: "var(--color-border)" }} />}
-    </div>
-  );
-}
+    );
+  }
 
-function BracketTeamRow({ team, score, penScore, isWinner, isLoser, hasBorderTop }: {
-  team: MatchupData["teams_a"]; score: number | null; penScore: number | null;
-  isWinner: boolean; isLoser: boolean; hasBorderTop: boolean;
-}) {
-  const textColor = isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.3)" : "var(--color-text-primary)";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
-      borderTop: hasBorderTop ? "1px solid var(--color-border)" : "none",
-      backgroundColor: isWinner ? "rgba(191,242,5,0.04)" : "transparent" }}>
-      {team?.logo_url
-        ? <img src={team.logo_url} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0, filter: isLoser ? "grayscale(1) opacity(0.35)" : "none" }} />
-        : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "var(--color-border)", flexShrink: 0 }} />}
-      <p style={{ margin: 0, flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: isWinner ? 700 : 500,
-        color: textColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {team ? (team.abbreviation ?? team.full_name) : <span style={{ opacity: 0.4 }}>A definir</span>}
+  if (!localMatchups.length && !phaseRounds.length) {
+    return (
+      <p style={{ padding: "32px 0", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>
+        Nenhuma rodada cadastrada nesta fase.
       </p>
-      {score !== null && (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0 }}>
-          {penScore != null && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", opacity: 0.8 }}>({penScore})</span>}
-          <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.25)" : "var(--color-text-primary)", minWidth: 16, textAlign: "right" }}>{score}</span>
-        </div>
+    );
+  }
+
+  return (
+    <>
+      {phaseType === "knockout" ? (
+        <KnockoutBracket
+          matchups={localMatchups}
+          phaseRounds={phaseRounds}
+          reorderMode={reorderMode}
+          onToggleReorder={() => setReorderMode(v => !v)}
+          onDragStart={handleDragStart}
+          onDrop={handleDrop}
+          onOpenModal={openModal}
+          canvasRef={canvasRef}
+          svgRef={svgRef}
+        />
+      ) : (
+        <ConferenceBracket
+          matchups={localMatchups}
+          phaseRounds={phaseRounds}
+          onOpenModal={openModal}
+        />
       )}
+
+      {modalMatchup && (
+        <BracketSeriesModal
+          matchup={modalMatchup}
+          legs={modalRound.legs}
+          aggregateScore={modalRound.aggregateScore}
+          onClose={() => setModalMatchup(null)}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Knockout (esquerda → direita) ─────────────────────────────────────────
+function KnockoutBracket({
+  matchups, phaseRounds, reorderMode, onToggleReorder,
+  onDragStart, onDrop, onOpenModal, canvasRef, svgRef,
+}: {
+  matchups: MatchupData[];
+  phaseRounds: Round[];
+  reorderMode: boolean;
+  onToggleReorder: () => void;
+  onDragStart: (id: string) => void;
+  onDrop: (targetId: string, round: string) => void;
+  onOpenModal: (mu: MatchupData) => void;
+  canvasRef: React.RefObject<HTMLDivElement>;
+  svgRef: React.RefObject<SVGSVGElement>;
+}) {
+  const byRound: Record<string, MatchupData[]> = {};
+  matchups.forEach(m => { if (!byRound[m.round_label]) byRound[m.round_label] = []; byRound[m.round_label].push(m); });
+
+  // Garante que rodadas sem confrontos aparecem como colunas vazias
+  phaseRounds.forEach(r => {
+    const label = r.custom_label ?? r.name;
+    if (!byRound[label]) byRound[label] = [];
+  });
+
+  // Ordena: primeiro pelo display_order da rodada, fallback para KNOCKOUT_ORDER
+  const sortedLabels = Object.keys(byRound).filter(label => {
+    // Remove "Disputa de Terceiro Lugar" se não existir rodada com esse nome
+    if (label === "Disputa de Terceiro Lugar") {
+      return phaseRounds.some(r => (r.custom_label ?? r.name) === "Disputa de Terceiro Lugar");
+    }
+    return true;
+  }).sort((a, b) => {
+
+    const ra = phaseRounds.find(r => (r.custom_label ?? r.name) === a);
+    const rb = phaseRounds.find(r => (r.custom_label ?? r.name) === b);
+    const isThirdA = a === "Disputa de Terceiro Lugar";
+    const isThirdB = b === "Disputa de Terceiro Lugar";
+    if (isThirdA && !isThirdB) return 1;
+    if (!isThirdA && isThirdB) return -1;
+    if (ra?.display_order && rb?.display_order) return ra.display_order - rb.display_order;
+    const ia = KNOCKOUT_ORDER.indexOf(a);
+    const ib = KNOCKOUT_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return 0;
+    if (ia === -1) return -1;
+    if (ib === -1) return 1;
+    return ia - ib;
+  });
+
+  return (
+    <div>
+      {/* Toolbar de reordenação */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <button
+          onClick={onToggleReorder}
+          style={{
+            padding: "5px 12px", borderRadius: 6,
+            border: `1px solid ${reorderMode ? "rgba(191,242,5,0.5)" : "var(--color-border)"}`,
+            background: reorderMode ? "rgba(191,242,5,0.08)" : "transparent",
+            color: reorderMode ? "var(--color-brand)" : "var(--color-text-secondary)",
+            fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.06em",
+            textTransform: "uppercase", cursor: "pointer",
+          }}
+        >
+          {reorderMode ? "Sair da reordenação" : "Reordenar confrontos"}
+        </button>
+        {reorderMode && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+            Arraste os cards dentro de cada fase para ajustar a ordem
+          </span>
+        )}
+      </div>
+
+      {/* Canvas do bracket */}
+      <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+        <div ref={canvasRef} style={{ position: "relative", display: "inline-flex", minWidth: "100%" }}>
+          <svg
+            ref={svgRef}
+            style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", overflow: "visible", zIndex: 0 }}
+          />
+          <div style={{ display: "flex", alignItems: "stretch", position: "relative", zIndex: 1 }}>
+            {sortedLabels.map(label => {
+              const isThird = label === "Disputa de Terceiro Lugar";
+              const round = phaseRounds.find(r => (r.custom_label ?? r.name) === label);
+              const legs = round?.legs ?? false;
+              const aggregateScore = round?.aggregate_score ?? false;
+              const sorted = [...(byRound[label] ?? [])].sort((a, b) => a.display_order - b.display_order);
+
+              return (
+                <div key={label} style={{ display: "flex", flexDirection: "column", minWidth: 196, flexShrink: 0, borderRight: "1px solid var(--color-border)" }}>
+                  <div style={{ padding: "10px 14px 12px", borderBottom: "1px solid var(--color-border)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: isThird ? "var(--color-warning)" : "var(--color-brand)" }}>
+                      {label}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", padding: "14px 10px", gap: 14 }}>
+                    {sorted.map(mu => (
+                      <div
+                        key={mu.id}
+                        data-matchup-id={mu.id}
+                        draggable={reorderMode}
+                        onDragStart={() => onDragStart(mu.id)}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={() => onDrop(mu.id, mu.round_label)}
+                        style={{ cursor: reorderMode ? "grab" : "default" }}
+                      >
+                        <BracketMatchupCard
+                          matchup={mu}
+                          legs={legs}
+                          aggregateScore={aggregateScore}
+                          showOrder={reorderMode}
+                          onOpenModal={() => onOpenModal(mu)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function BracketSeriesModal({ matchup, legs, aggregateScore, onClose }: {
-  matchup: MatchupData; legs: boolean; aggregateScore: boolean; onClose: () => void;
+// ── Conference (Oeste → centro ← Leste) ──────────────────────────────────
+function ConferenceBracket({
+  matchups, phaseRounds, onOpenModal,
+}: {
+  matchups: MatchupData[];
+  phaseRounds: Round[];
+  onOpenModal: (mu: MatchupData) => void;
 }) {
-  const matches = (matchup.matches ?? []).filter(m => m.status === "finished");
-  const teamA = matchup.teams_a; const teamB = matchup.teams_b;
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+
+  // Detecta o matchup da grande final (sem par / único na fase mais avançada)
+  // Convenção: round_label que contém "Final" e display_order = 1 e único
+  const allLabels = [...new Set(matchups.map(m => m.round_label))];
+  const finalLabelFromRounds = phaseRounds.find(r => /grande\s*final|gf|grand\s*final/i.test(r.custom_label ?? r.name));
+  const finalLabel = allLabels.find(l => /grande\s*final|gf|grand\s*final/i.test(l)) ?? null;
+  const showFinalColumn = !!finalLabel || !!finalLabelFromRounds;
+  const finalColumnLabel = finalLabel ?? (finalLabelFromRounds ? (finalLabelFromRounds.custom_label ?? finalLabelFromRounds.name) : null);
+  const finalMatchup = finalLabel ? matchups.find(m => m.round_label === finalLabel) : null;
+
+  // Separa os dois lados pela convenção: metade display_order par/ímpar, ou por campo "conference_side"
+  // Como o banco não tem conference_side no matchup, usamos a convenção de split por display_order
+  // Oeste: display_order ímpar, Leste: par — OU podemos detectar automaticamente pelo número de rounds
+  // Abordagem mais robusta: divide os não-finais em dois grupos de mesmo tamanho (metade esquerda, metade direita)
+  const nonFinal = matchups.filter(m => m.round_label !== finalLabel);
+  
+  // Inclui rodadas sem confrontos como colunas vazias
+  const roundLabelsFromMatchups = nonFinal.map(m => m.round_label);
+  const roundLabelsFromRounds = phaseRounds
+    .filter(r => (r.custom_label ?? r.name) !== finalLabel)
+    .map(r => r.custom_label ?? r.name);
+  const roundLabels = [...new Set([...roundLabelsFromMatchups, ...roundLabelsFromRounds])];
+
+  // Se houver um campo de conferência no futuro, usar aqui.
+  // Por ora, lado Oeste = display_order ≤ metade dos matchups de cada rodada
+  // Detectamos os dois lados por display_order em cada round
+  function splitSide(roundLabel: string): { west: MatchupData[]; east: MatchupData[] } {
+    const ms = nonFinal.filter(m => m.round_label === roundLabel).sort((a, b) => a.display_order - b.display_order);
+    const half = Math.ceil(ms.length / 2);
+    return { west: ms.slice(0, half), east: ms.slice(half) };
+  }
+
+  const westRounds = roundLabels.map(l => ({ label: l, matchups: splitSide(l).west }));
+  const eastRounds = roundLabels.map(l => ({ label: l, matchups: splitSide(l).east })).reverse();
+
+  useEffect(() => {
+    if (!canvasRef.current || !svgRef.current) return;
+    const timer = setTimeout(() => {
+      if (!canvasRef.current || !svgRef.current) return;
+      svgRef.current.innerHTML = "";
+      const byRoundWest: Record<string, MatchupData[]> = {};
+      const byRoundEast: Record<string, MatchupData[]> = {};
+      westRounds.forEach(r => { byRoundWest[r.label] = r.matchups; });
+      eastRounds.forEach(r => { byRoundEast[r.label] = r.matchups; });
+      drawBracketConnectors(svgRef.current!, canvasRef.current!, westRounds.map(r => r.label), byRoundWest, "ltr");
+      drawBracketConnectors(svgRef.current!, canvasRef.current!, eastRounds.map(r => r.label), byRoundEast, "rtl");
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [matchups]);
+
+  function renderCol(label: string, ms: MatchupData[], side: "west" | "east") {
+    const round = phaseRounds.find(r => (r.custom_label ?? r.name) === label);
+    const legs = round?.legs ?? false;
+    const aggregateScore = round?.aggregate_score ?? false;
+    const sorted = [...ms].sort((a, b) => a.display_order - b.display_order);
+    const labelColor = side === "west" ? "#60a5fa" : "#f472b6";
+    return (
+      <div key={`${side}-${label}`} style={{ display: "flex", flexDirection: "column", minWidth: 190, flexShrink: 0, borderRight: "1px solid var(--color-border)" }}>
+        <div style={{ padding: "10px 14px 12px", borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: labelColor }}>
+            {label}
+          </span>
+        </div>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-around", padding: "14px 10px", gap: 14 }}>
+          {sorted.map(mu => (
+            <div key={mu.id} data-matchup-id={mu.id}>
+              <BracketMatchupCard matchup={mu} legs={legs} aggregateScore={aggregateScore} showOrder={false} onOpenModal={() => onOpenModal(mu)} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 16 }}>
-      <div style={{ width: "100%", maxWidth: 380, borderRadius: 14, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{teamA?.abbreviation ?? teamA?.full_name ?? "—"}</p>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>vs</span>
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{teamB?.abbreviation ?? teamB?.full_name ?? "—"}</p>
-            {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
+    <div style={{ overflowX: "auto", paddingBottom: 8 }}>
+      <div ref={canvasRef} style={{ position: "relative", display: "inline-flex", minWidth: "100%" }}>
+        <svg
+          ref={svgRef}
+          style={{ position: "absolute", top: 0, left: 0, pointerEvents: "none", overflow: "visible", zIndex: 0 }}
+        />
+        <div style={{ display: "flex", alignItems: "stretch", position: "relative", zIndex: 1 }}>
+          {/* Tag Oeste */}
+          <div style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontFamily: "var(--font-mono)", fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 5px", color: "#60a5fa", borderRight: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            Oeste
           </div>
-          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 18 }}>×</button>
-        </div>
-        <div>
-          {matches.length === 0
-            ? <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>Nenhuma partida finalizada.</p>
-            : matches.map((m, idx) => {
-                const date = m.match_date ? new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null;
-                const hasPen = m.pen_a != null && m.pen_b != null;
-                const winSide = hasPen ? ((m.pen_a ?? 0) > (m.pen_b ?? 0) ? "a" : (m.pen_b ?? 0) > (m.pen_a ?? 0) ? "b" : null) : (m.score_a > m.score_b ? "a" : m.score_b > m.score_a ? "b" : null);
-                const gameLabel = matches.length > 1 ? ({ 0: "Ida", 1: "Volta" }[idx] ?? `Jogo ${idx + 1}`) : "Jogo único";
-                return (
-                  <div key={m.id} style={{ padding: "12px 18px", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", textTransform: "uppercase" }}>{gameLabel}</span>
-                      {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>{date}</span>}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                        {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "b" ? "grayscale(1) opacity(0.4)" : "none" }} />}
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "a" ? 700 : 400, color: winSide === "a" ? "#BFF205" : winSide === "b" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>{teamA?.abbreviation ?? "—"}</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                        <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, color: winSide === "a" ? "#BFF205" : "var(--color-text-primary)" }}>{hasPen ? `${m.score_a}(${m.pen_a})` : m.score_a}</span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>×</span>
-                        <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, color: winSide === "b" ? "#BFF205" : "var(--color-text-primary)" }}>{hasPen ? `${m.score_b}(${m.pen_b})` : m.score_b}</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "b" ? 700 : 400, color: winSide === "b" ? "#BFF205" : winSide === "a" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>{teamB?.abbreviation ?? "—"}</span>
-                        {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "a" ? "grayscale(1) opacity(0.4)" : "none" }} />}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-        </div>
-        <div style={{ padding: "10px 18px", borderTop: "1px solid var(--color-border)", textAlign: "right" }}>
-          <button type="button" onClick={onClose} style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-brand)", background: "none", border: "none", cursor: "pointer" }}>FECHAR</button>
+
+          {/* Colunas Oeste */}
+          {westRounds.map(r => renderCol(r.label, r.matchups, "west"))}
+
+          {/* Grande Final (centro) — só aparece se existir rodada com esse nome */}
+          {showFinalColumn && (
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 190, flexShrink: 0, borderRight: "1px solid var(--color-border)", borderLeft: "1px solid var(--color-border)" }}>
+            <div style={{ padding: "10px 14px 12px", borderBottom: "1px solid var(--color-border)" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.09em", color: "var(--color-brand)" }}>
+                {finalColumnLabel ?? "Grande Final"}
+              </span>
+            </div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", padding: "14px 10px" }}>
+              {finalMatchup ? (
+                <div data-matchup-id={finalMatchup.id}>
+                  <BracketMatchupCard
+                    matchup={finalMatchup}
+                    legs={phaseRounds.find(r => (r.custom_label ?? r.name) === finalLabel)?.legs ?? false}
+                    aggregateScore={phaseRounds.find(r => (r.custom_label ?? r.name) === finalLabel)?.aggregate_score ?? false}
+                    showOrder={false}
+                    onOpenModal={() => onOpenModal(finalMatchup)}
+                  />
+                </div>
+              ) : (
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)", textAlign: "center" }}>
+                  A definir
+                </p>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* Colunas Leste (ordem invertida) */}
+          {eastRounds.map(r => renderCol(r.label, r.matchups, "east"))}
+
+          {/* Tag Leste */}
+          <div style={{ writingMode: "vertical-lr", fontFamily: "var(--font-mono)", fontSize: 8, letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 5px", color: "#f472b6", borderLeft: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            Leste
+          </div>
         </div>
       </div>
     </div>
@@ -2007,257 +2906,7 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
   );
 }
 
-// ─── MatchupCard ──────────────────────────────────────────────────────────────
 
-function MatchupCard({ matchup, legs, aggregateScore, showConnector, onOpenModal }: {
-  matchup: MatchupData;
-  legs: boolean;
-  aggregateScore: boolean;
-  showConnector: boolean;
-  onOpenModal: () => void;
-}) {
-  const matches = matchup.matches ?? [];
-  const hasMatches = matches.some(m => m.status === "finished");
-  const isClickable = legs && matches.length > 0;
-
-  // Compute display scores
-  let scoreA: number | null = null;
-  let scoreB: number | null = null;
-  let penA: number | null = null;
-  let penB: number | null = null;
-  let winnerSide: "a" | "b" | null = null;
-
-  if (hasMatches) {
-    const finished = matches.filter(m => m.status === "finished");
-    if (!legs) {
-      // Single match
-      const m = finished[0];
-      if (m) {
-        scoreA = m.score_a; scoreB = m.score_b;
-        penA = m.pen_a ?? null; penB = m.pen_b ?? null;
-        if (penA !== null && penB !== null) {
-          winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
-        } else {
-          winnerSide = scoreA > scoreB ? "a" : scoreB > scoreA ? "b" : null;
-        }
-      }
-    } else if (aggregateScore) {
-      // Sum goals
-      scoreA = finished.reduce((s, m) => s + m.score_a, 0);
-      scoreB = finished.reduce((s, m) => s + m.score_b, 0);
-      // Check last match for penalties
-      const last = finished[finished.length - 1];
-      if (last?.pen_a !== undefined && last?.pen_b !== undefined) {
-        penA = last.pen_a ?? null; penB = last.pen_b ?? null;
-      }
-      if (penA !== null && penB !== null) {
-        winnerSide = penA > penB ? "a" : penB > penA ? "b" : null;
-      } else {
-        winnerSide = (scoreA ?? 0) > (scoreB ?? 0) ? "a" : (scoreB ?? 0) > (scoreA ?? 0) ? "b" : null;
-      }
-    } else {
-      // Ida e volta sem agregado — count wins
-      let winsA = 0, winsB = 0;
-      finished.forEach(m => {
-        if (m.pen_a !== undefined && m.pen_b !== undefined && m.pen_a !== null && m.pen_b !== null) {
-          if (m.pen_a > m.pen_b) winsA++; else if (m.pen_b > m.pen_a) winsB++;
-        } else {
-          if (m.score_a > m.score_b) winsA++; else if (m.score_b > m.score_a) winsB++;
-        }
-      });
-      scoreA = winsA; scoreB = winsB;
-      winnerSide = winsA > winsB ? "a" : winsB > winsA ? "b" : null;
-    }
-  }
-
-  const teamA = matchup.teams_a;
-  const teamB = matchup.teams_b;
-  const aWins = winnerSide === "a";
-  const bWins = winnerSide === "b";
-
-  return (
-    <div style={{ position: "relative" }}>
-      <div
-        onClick={isClickable ? onOpenModal : undefined}
-        style={{
-          borderRadius: 10, border: `1px solid ${matchup.is_completed ? "var(--color-border)" : "var(--color-border)"}`,
-          backgroundColor: "var(--color-surface)", overflow: "hidden",
-          cursor: isClickable ? "pointer" : "default",
-          transition: "border-color 0.15s",
-        }}
-        onMouseEnter={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; }}
-        onMouseLeave={e => { if (isClickable) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
-      >
-        <TeamRow team={teamA} score={scoreA} penScore={penA} isWinner={aWins} isLoser={!aWins && bWins && hasMatches} hasBorder />
-        <TeamRow team={teamB} score={scoreB} penScore={penB} isWinner={bWins} isLoser={!bWins && aWins && hasMatches} hasBorder={false} />
-        {isClickable && (
-          <div style={{ padding: "4px 10px", borderTop: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 4 }}>
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand)", letterSpacing: "0.04em" }}>
-              VER JOGOS ›
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Connector line to next round */}
-      {showConnector && (
-        <div style={{
-          position: "absolute", right: -12, top: "50%", transform: "translateY(-50%)",
-          width: 12, height: 1, backgroundColor: "var(--color-border)",
-        }} />
-      )}
-    </div>
-  );
-}
-
-// ─── TeamRow ──────────────────────────────────────────────────────────────────
-
-function TeamRow({ team, score, penScore, isWinner, isLoser, hasBorder }: {
-  team: MatchupData["teams_a"];
-  score: number | null;
-  penScore: number | null;
-  isWinner: boolean;
-  isLoser: boolean;
-  hasBorder: boolean;
-}) {
-  const name = team?.full_name ?? team?.abbreviation ?? "A definir";
-  const textColor = isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.35)" : "var(--color-text-primary)";
-
-  return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 8, padding: "8px 10px",
-      borderTop: hasBorder ? "none" : "1px solid var(--color-border)",
-      backgroundColor: isWinner ? "rgba(191,242,5,0.04)" : "transparent",
-    }}>
-      {/* Logo */}
-      {team?.logo_url ? (
-        <img src={team.logo_url} alt="" style={{
-          width: 20, height: 20, objectFit: "contain", flexShrink: 0,
-          filter: isLoser ? "grayscale(1) opacity(0.4)" : isWinner ? "drop-shadow(0 0 4px rgba(191,242,5,0.5))" : "none",
-          transition: "filter 0.15s",
-        }} />
-      ) : (
-        <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "var(--color-border)", flexShrink: 0 }} />
-      )}
-
-      {/* Name */}
-      <p style={{ margin: 0, flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: isWinner ? 700 : 500,
-        color: textColor, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {team ? name : <span style={{ opacity: 0.4 }}>A definir</span>}
-      </p>
-
-      {/* Score */}
-      {score !== null && (
-        <div style={{ display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0 }}>
-          {penScore !== null && (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", opacity: 0.8 }}>
-              ({penScore})
-            </span>
-          )}
-          <span style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 700, color: isWinner ? "#BFF205" : isLoser ? "rgba(255,255,255,0.3)" : "var(--color-text-primary)", minWidth: 16, textAlign: "right" }}>
-            {score}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── SeriesModal ──────────────────────────────────────────────────────────────
-
-function SeriesModal({ matchup, legs, aggregateScore, onClose }: {
-  matchup: MatchupData;
-  legs: boolean;
-  aggregateScore: boolean;
-  onClose: () => void;
-}) {
-  const matches = (matchup.matches ?? []).filter(m => m.status === "finished");
-  const teamA = matchup.teams_a;
-  const teamB = matchup.teams_b;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 16 }}>
-      <div style={{ width: "100%", maxWidth: 380, borderRadius: 14, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-        {/* Header */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>
-              {teamA?.abbreviation ?? teamA?.full_name ?? "—"}
-            </p>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>vs</span>
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>
-              {teamB?.abbreviation ?? teamB?.full_name ?? "—"}
-            </p>
-            {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
-          </div>
-          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 18, lineHeight: 1 }}>×</button>
-        </div>
-
-        {/* Match list */}
-        <div>
-          {matches.length === 0 ? (
-            <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)", margin: 0 }}>
-              Nenhuma partida finalizada.
-            </p>
-          ) : matches.map((m, idx) => {
-            const date = m.match_date ? new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : null;
-            const hasPen = m.pen_a !== undefined && m.pen_b !== undefined && m.pen_a !== null && m.pen_b !== null;
-            let winSide: "a" | "b" | null = null;
-            if (hasPen) winSide = (m.pen_a ?? 0) > (m.pen_b ?? 0) ? "a" : (m.pen_b ?? 0) > (m.pen_a ?? 0) ? "b" : null;
-            else winSide = m.score_a > m.score_b ? "a" : m.score_b > m.score_a ? "b" : null;
-
-            const labelMap: Record<number, string> = { 0: "Ida", 1: "Volta" };
-            const gameLabel = matches.length > 1 ? (labelMap[idx] ?? `Jogo ${idx + 1}`) : "Jogo único";
-
-            return (
-              <div key={m.id} style={{ padding: "12px 18px", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{gameLabel}</span>
-                  {date && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>{date}</span>}
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {/* Team A */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-                    {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "b" ? "grayscale(1) opacity(0.4)" : "none" }} />}
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "a" ? 700 : 400, color: winSide === "a" ? "#BFF205" : winSide === "b" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>
-                      {teamA?.abbreviation ?? "—"}
-                    </span>
-                  </div>
-                  {/* Score */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-                    <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, minWidth: 18, textAlign: "right", color: winSide === "a" ? "#BFF205" : "var(--color-text-primary)" }}>
-                      {hasPen ? `${m.score_a}(${m.pen_a})` : m.score_a}
-                    </span>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>×</span>
-                    <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 700, minWidth: 18, textAlign: "left", color: winSide === "b" ? "#BFF205" : "var(--color-text-primary)" }}>
-                      {hasPen ? `${m.score_b}(${m.pen_b})` : m.score_b}
-                    </span>
-                  </div>
-                  {/* Team B */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "flex-end" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: winSide === "b" ? 700 : 400, color: winSide === "b" ? "#BFF205" : winSide === "a" ? "rgba(255,255,255,0.4)" : "var(--color-text-primary)" }}>
-                      {teamB?.abbreviation ?? "—"}
-                    </span>
-                    {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 16, height: 16, objectFit: "contain", filter: winSide === "a" ? "grayscale(1) opacity(0.4)" : "none" }} />}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: "10px 18px", borderTop: "1px solid var(--color-border)", textAlign: "right" }}>
-          <button type="button" onClick={onClose}
-            style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-brand)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.05em" }}>
-            FECHAR
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ─── PremiacoesTab ────────────────────────────────────────────────────────────
 
@@ -2402,4 +3051,673 @@ function PremiacoesTab({
       </div>
     </div>
   );
+}
+
+
+// ─── NovoConfrontoModal ───────────────────────────────────────────────────────
+type MatchupStep = {
+  id: string;
+  teamAId: string | null;
+  teamBId: string | null;
+  teamA: Team | null;
+  teamB: Team | null;
+  legs: boolean;
+  aggregateScore: boolean;
+  phaseId: string;
+  roundLabel: string;
+};
+
+export function NovoConfrontoModal({
+  phases,
+  initialPhaseId,
+  rounds,
+  editionTeams,
+  venues,
+  onClose,
+  onSuccess,
+  inputClass,
+  inputStyle,
+}: {
+  phases: Phase[];
+  initialPhaseId?: string;
+  rounds: Round[];
+  editionTeams: EditionTeam[];
+  venues: { id: string; full_name: string }[];
+  onClose: () => void;
+  onSuccess: () => void;
+  inputClass: string;
+  inputStyle: React.CSSProperties;
+}) {
+  // ── Step 1: Definir confronto ──────────────────────────────────────────────
+  const [step, setStep] = useState<1 | 2>(1);
+  const [phaseId, setPhaseId] = useState(initialPhaseId || (phases[0]?.id ?? ""));
+  const [roundId, setRoundId] = useState("");
+  const [teamAId, setTeamAId] = useState<string>("tbd");
+  const [teamBId, setTeamBId] = useState<string>("tbd");
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // ── Step 2: Adicionar partidas ─────────────────────────────────────────────
+  const [matchup, setMatchup] = useState<MatchupStep | null>(null);
+  const [idaDate, setIdaDate] = useState("");
+  const [idaTime, setIdaTime] = useState("");
+  const [idaVenue, setIdaVenue] = useState("");
+  const [voltaDate, setVoltaDate] = useState("");
+  const [voltaTime, setVoltaTime] = useState("");
+  const [voltaVenue, setVoltaVenue] = useState("");
+  const [addingIda, setAddingIda] = useState(false);
+  const [addingVolta, setAddingVolta] = useState(false);
+  const [idaAdded, setIdaAdded] = useState(false);
+  const [voltaAdded, setVoltaAdded] = useState(false);
+
+  // ── Times da fase selecionada ──────────────────────────────────────────────
+  const [phaseTeamIds, setPhaseTeamIds] = useState<string[]>([]);
+  const [loadingPhaseTeams, setLoadingPhaseTeams] = useState(false);
+
+  const roundsForPhase = rounds.filter(r => r.phase_id === phaseId);
+  const selectedRound = rounds.find(r => r.id === roundId);
+  const isLegs = selectedRound?.legs ?? false;
+
+  // Carrega teams da fase ao mudar a fase
+  useEffect(() => {
+    if (!phaseId) return;
+    async function load() {
+      setLoadingPhaseTeams(true);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("phase_teams")
+        .select("edition_team_id")
+        .eq("phase_id", phaseId);
+      const etIds = (data ?? []).map((r: any) => r.edition_team_id);
+      const teamIds = editionTeams
+        .filter(et => etIds.includes(et.id) && !et.is_free_agent_pool)
+        .map(et => et.team_id);
+      setPhaseTeamIds(teamIds);
+      setLoadingPhaseTeams(false);
+    }
+    load();
+  }, [phaseId, editionTeams]);
+
+  // Reset round ao mudar fase
+  useEffect(() => {
+    setRoundId("");
+    setTeamAId("tbd");
+    setTeamBId("tbd");
+    setError(null);
+  }, [phaseId]);
+
+  const teamsForPhase: (Team & { _tbd?: boolean })[] = [
+    { id: "tbd", full_name: "A definir", abbreviation: "TBD", logo_url: null, _tbd: true },
+    ...editionTeams
+      .filter(et => !et.is_free_agent_pool && et.teams && phaseTeamIds.includes(et.team_id))
+      .map(et => et.teams as Team),
+  ];
+
+  // ── Criar confronto ────────────────────────────────────────────────────────
+  async function handleCriarConfronto() {
+    if (!phaseId || !roundId) { setError("Selecione a fase e o estágio."); return; }
+    if (teamAId === teamBId && teamAId !== "tbd") { setError("Os dois times não podem ser iguais."); return; }
+    setCreating(true); setError(null);
+
+    const aId = teamAId === "tbd" ? null : teamAId;
+    const bId = teamBId === "tbd" ? null : teamBId;
+    const result = await criarConfronto(phaseId, roundId, aId, bId);
+
+    setCreating(false);
+    if ("error" in result) { setError(result.error); return; }
+
+    const teamA = teamsForPhase.find(t => t.id === teamAId) ?? null;
+    const teamB = teamsForPhase.find(t => t.id === teamBId) ?? null;
+    const round = rounds.find(r => r.id === roundId)!;
+
+    setMatchup({
+      id: result.id,
+      teamAId: aId,
+      teamBId: bId,
+      teamA: teamA?._tbd ? null : teamA,
+      teamB: teamB?._tbd ? null : teamB,
+      legs: round.legs,
+      aggregateScore: round.aggregate_score,
+      phaseId,
+      roundLabel: round.custom_label ?? round.name,
+    });
+    setStep(2);
+  }
+
+  // ── Adicionar partida de ida ───────────────────────────────────────────────
+  async function handleAddIda() {
+    if (!matchup) return;
+    if (!matchup.teamAId || !matchup.teamBId) {
+      toast("error", "Defina os dois times antes de adicionar partidas.");
+      return;
+    }
+    setAddingIda(true);
+    const fd = new FormData();
+    fd.append("is_second_leg", "false");
+    if (idaDate) fd.append("match_date", idaDate);
+    if (idaTime) fd.append("match_time", idaTime);
+    if (idaVenue) fd.append("venue_id", idaVenue);
+    const result = await criarPartidaNoConfronto(matchup.phaseId, matchup.id, fd);
+    setAddingIda(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    setIdaAdded(true);
+    toast("success", isLegs ? "Jogo de ida criado." : "Partida criada.");
+  }
+
+  // ── Adicionar partida de volta ─────────────────────────────────────────────
+  async function handleAddVolta() {
+    if (!matchup) return;
+    setAddingVolta(true);
+    const fd = new FormData();
+    fd.append("is_second_leg", "true");
+    if (voltaDate) fd.append("match_date", voltaDate);
+    if (voltaTime) fd.append("match_time", voltaTime);
+    if (voltaVenue) fd.append("venue_id", voltaVenue);
+    const result = await criarPartidaNoConfronto(matchup.phaseId, matchup.id, fd);
+    setAddingVolta(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    setVoltaAdded(true);
+    toast("success", "Jogo de volta criado.");
+  }
+
+  const tA = matchup?.teamA?.abbreviation ?? matchup?.teamA?.full_name ?? "A definir";
+  const tB = matchup?.teamB?.abbreviation ?? matchup?.teamB?.full_name ?? "A definir";
+  const hasBothTeams = !!matchup?.teamAId && !!matchup?.teamBId;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+      <div className="w-full max-w-md rounded-xl border shadow-xl"
+        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-6 py-4"
+          style={{ borderColor: "var(--color-border)" }}>
+          <div>
+            <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
+              {step === 1 ? "Novo confronto" : "Adicionar partidas"}
+            </h2>
+            {step === 2 && matchup && (
+              <p className="font-mono text-xs mt-0.5" style={{ color: "var(--color-brand)" }}>
+                {tA} × {tB} · {matchup.roundLabel}
+              </p>
+            )}
+          </div>
+          <button type="button" onClick={onClose} style={{ color: "var(--color-text-secondary)" }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* ── STEP 1: Definir confronto ── */}
+        {step === 1 && (
+          <div className="px-6 py-4 space-y-4">
+
+            {/* Fase */}
+            {phases.length > 1 && (
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fase *</span>
+                <select value={phaseId} onChange={e => setPhaseId(e.target.value)}
+                  className={inputClass} style={inputStyle}>
+                  {phases.map(p => (
+                    <option key={p.id} value={p.id}>{p.custom_label ?? p.full_name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            {/* Estágio (rodada) */}
+            <label className="flex flex-col gap-1">
+              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Estágio *</span>
+              {roundsForPhase.length === 0 ? (
+                <p className="rounded-lg border px-3 py-2 text-sm"
+                  style={{ color: "var(--color-warning)", borderColor: "rgba(242,167,5,0.3)", backgroundColor: "rgba(242,167,5,0.08)" }}>
+                  Esta fase não tem rodadas. Crie rodadas na página da fase antes de adicionar confrontos.
+                </p>
+              ) : (
+                <select value={roundId} onChange={e => setRoundId(e.target.value)}
+                  className={inputClass} style={inputStyle}>
+                  <option value="">Selecione o estágio…</option>
+                  {roundsForPhase.map(r => (
+                    <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>
+                  ))}
+                </select>
+              )}
+            </label>
+
+            {/* Times */}
+            {roundId && (
+              <>
+                {loadingPhaseTeams ? (
+                  <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                    Carregando equipes…
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Time A *</span>
+                      <select value={teamAId} onChange={e => setTeamAId(e.target.value)}
+                        className={inputClass} style={inputStyle}>
+                        {teamsForPhase.map(t => (
+                          <option key={t.id} value={t.id} disabled={t.id === teamBId && t.id !== "tbd"}>
+                           {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
+                           </option>
+                          ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Time B *</span>
+                      <select value={teamBId} onChange={e => setTeamBId(e.target.value)}
+                        className={inputClass} style={inputStyle}>
+                        {teamsForPhase.map(t => (
+                          <option key={t.id} value={t.id} disabled={t.id === teamBId && t.id !== "tbd"}>
+                           {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
+                           </option>
+                          ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+
+                {/* Info sobre o estágio selecionado */}
+                {selectedRound && (
+                  <div className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                    style={{ borderColor: "var(--color-border)" }}>
+                    <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                      {isLegs
+                        ? `Jogo de ida e volta${selectedRound.aggregate_score ? " · placar agregado" : " · contagem de vitórias"}`
+                        : "Jogo único"}
+                    </span>
+                  </div>
+                )}
+              </>
+            )}
+
+            {error && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{error}</p>}
+
+            <div className="flex gap-3 justify-end pt-1">
+              <button type="button" onClick={onClose}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handleCriarConfronto}
+                disabled={creating || !phaseId || !roundId}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                {creating ? "Criando…" : "Criar confronto"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: Adicionar partidas ── */}
+        {step === 2 && matchup && (
+          <div className="px-6 py-4 space-y-5">
+
+            {/* Aviso se times não definidos */}
+            {!hasBothTeams && (
+              <div className="rounded-lg border px-3 py-2.5"
+                style={{ borderColor: "rgba(242,167,5,0.3)", backgroundColor: "rgba(242,167,5,0.06)" }}>
+                <p className="font-mono text-xs" style={{ color: "var(--color-warning)" }}>
+                  Um ou mais times estão "A definir". Defina os times para poder adicionar partidas.
+                </p>
+              </div>
+            )}
+
+            {/* Jogo de ida (ou jogo único) */}
+            <div className="rounded-xl border overflow-hidden"
+              style={{ borderColor: idaAdded ? "rgba(191,242,5,0.3)" : "var(--color-border)" }}>
+              <div className="flex items-center justify-between px-4 py-3 border-b"
+                style={{ borderColor: "var(--color-border)", backgroundColor: idaAdded ? "rgba(191,242,5,0.05)" : "transparent" }}>
+                <span className="font-mono text-xs font-bold" style={{ color: "var(--color-brand)", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                  {isLegs ? "Jogo de ida" : "Jogo único"}
+                </span>
+                {idaAdded && (
+                  <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>✓ Criado</span>
+                )}
+              </div>
+              <div className="px-4 py-3 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Data</span>
+                    <input type="date" value={idaDate} onChange={e => setIdaDate(e.target.value)}
+                      className={inputClass} style={inputStyle} disabled={idaAdded} />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Horário</span>
+                    <input type="time" value={idaTime} onChange={e => setIdaTime(e.target.value)}
+                      className={inputClass} style={inputStyle} disabled={idaAdded} />
+                  </label>
+                </div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Local</span>
+                  <select value={idaVenue} onChange={e => setIdaVenue(e.target.value)}
+                    className={inputClass} style={inputStyle} disabled={idaAdded}>
+                    <option value="">Nenhum</option>
+                    {venues.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
+                  </select>
+                </label>
+                {!idaAdded && (
+                  <button type="button" onClick={handleAddIda}
+                    disabled={addingIda || !hasBothTeams}
+                    className="w-full rounded-lg border py-2 text-sm font-medium disabled:opacity-40"
+                    style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.06)" }}>
+                    {addingIda ? "Criando…" : `+ ${isLegs ? "Criar jogo de ida" : "Criar partida"}`}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Jogo de volta (só se legs = true) */}
+            {isLegs && (
+              <div className="rounded-xl border overflow-hidden"
+                style={{ borderColor: voltaAdded ? "rgba(191,242,5,0.3)" : "var(--color-border)" }}>
+                <div className="flex items-center justify-between px-4 py-3 border-b"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: voltaAdded ? "rgba(191,242,5,0.05)" : "transparent" }}>
+                  <span className="font-mono text-xs font-bold" style={{ color: "var(--color-brand)", letterSpacing: "0.07em", textTransform: "uppercase" }}>
+                    Jogo de volta
+                  </span>
+                  {voltaAdded && (
+                    <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>✓ Criado</span>
+                  )}
+                </div>
+                <div className="px-4 py-3 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Data</span>
+                      <input type="date" value={voltaDate} onChange={e => setVoltaDate(e.target.value)}
+                        className={inputClass} style={inputStyle} disabled={voltaAdded} />
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Horário</span>
+                      <input type="time" value={voltaTime} onChange={e => setVoltaTime(e.target.value)}
+                        className={inputClass} style={inputStyle} disabled={voltaAdded} />
+                    </label>
+                  </div>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Local</span>
+                    <select value={voltaVenue} onChange={e => setVoltaVenue(e.target.value)}
+                      className={inputClass} style={inputStyle} disabled={voltaAdded}>
+                      <option value="">Nenhum</option>
+                      {venues.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
+                    </select>
+                  </label>
+                  {!voltaAdded && (
+                    <button type="button" onClick={handleAddVolta}
+                      disabled={addingVolta || !hasBothTeams || !idaAdded}
+                      className="w-full rounded-lg border py-2 text-sm font-medium disabled:opacity-40"
+                      style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.06)" }}>
+                      {addingVolta ? "Criando…" : "+ Criar jogo de volta"}
+                    </button>
+                  )}
+                  {!idaAdded && (
+                    <p className="font-mono text-xs text-center" style={{ color: "var(--color-text-secondary)" }}>
+                      Crie o jogo de ida primeiro.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-between pt-1">
+              <button type="button"
+                onClick={() => setStep(1)}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                ← Novo confronto
+              </button>
+              <button type="button" onClick={onSuccess}
+                className="rounded-lg px-4 py-2 text-sm font-medium"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                Concluir
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+function MatchupEditModal({
+  matchup,
+  rounds,
+  editionTeams,
+  venues,
+  phaseId,
+  onClose,
+  onSuccess,
+  inputClass,
+  inputStyle,
+}: {
+  matchup: any;
+  rounds: Round[];
+  editionTeams: EditionTeam[];
+  venues: { id: string; full_name: string }[];
+  phaseId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+  inputClass: string;
+  inputStyle: React.CSSProperties;
+}) {
+  const [teamAId, setTeamAId] = useState<string>(matchup.team_a_id ?? "tbd");
+  const [teamBId, setTeamBId] = useState<string>(matchup.team_b_id ?? "tbd");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+ 
+  // Partidas do confronto
+  const [matchesLocal, setMatchesLocal] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(true);
+ 
+  // Times da fase
+  const [phaseTeamIds, setPhaseTeamIds] = useState<string[]>([]);
+ 
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const [{ data: ptData }, { data: mData }] = await Promise.all([
+        supabase.from("phase_teams").select("edition_team_id").eq("phase_id", phaseId),
+        supabase.from("matches").select("id, match_date, match_time, venue_id, status, is_second_leg, score_a, score_b").eq("matchup_id", matchup.id).order("match_date", { ascending: true }),
+      ]);
+      const etIds = (ptData ?? []).map((r: any) => r.edition_team_id);
+      const teamIds = editionTeams.filter(et => etIds.includes(et.id) && !et.is_free_agent_pool).map(et => et.team_id);
+      setPhaseTeamIds(teamIds);
+      setMatchesLocal(mData ?? []);
+      setLoadingMatches(false);
+    }
+    load();
+  }, [matchup.id, phaseId, editionTeams]);
+ 
+  const teamsForPhase: (Team & { _tbd?: boolean })[] = [
+    { id: "tbd", full_name: "A definir", abbreviation: "TBD", logo_url: null, _tbd: true },
+    ...editionTeams
+      .filter(et => !et.is_free_agent_pool && et.teams && phaseTeamIds.includes(et.team_id))
+      .map(et => et.teams as Team),
+  ];
+ 
+  async function handleSaveTeams() {
+    setSaving(true); setError(null);
+    const result = await editarTimesConfronto(
+      matchup.id,
+      teamAId === "tbd" ? null : teamAId,
+      teamBId === "tbd" ? null : teamBId,
+    );
+    setSaving(false);
+    if ("error" in result) { setError(result.error); return; }
+    toast("success", "Times atualizados.");
+    onSuccess();
+  }
+ 
+  async function handleUpdateMatch(matchId: string, field: string, value: string) {
+    const supabase = createClient();
+    await supabase.from("matches").update({ [field]: value || null }).eq("id", matchId);
+    setMatchesLocal(prev => prev.map(m => m.id === matchId ? { ...m, [field]: value } : m));
+  }
+ 
+  async function handleAddMatch(isSecondLeg: boolean) {
+    const fd = new FormData();
+    fd.append("is_second_leg", String(isSecondLeg));
+    const result = await criarPartidaNoConfronto(phaseId, matchup.id, fd);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", isSecondLeg ? "Jogo de volta criado." : "Jogo de ida criado.");
+    // Recarrega partidas
+    const supabase = createClient();
+    const { data } = await supabase.from("matches").select("id, match_date, match_time, venue_id, status, is_second_leg, score_a, score_b").eq("matchup_id", matchup.id).order("match_date", { ascending: true });
+    setMatchesLocal(data ?? []);
+  }
+ 
+  async function handleDeleteMatch(matchId: string) {
+    if (!confirm("Remover esta partida?")) return;
+    const { deletarPartida } = await import("@/app/(lab)/partidas/[matchId]/actions");
+    const result = await deletarPartida(matchId);
+    if ("error" in result) { toast("error", result.error); return; }
+    setMatchesLocal(prev => prev.filter(m => m.id !== matchId));
+    toast("success", "Partida removida.");
+  }
+ 
+  const round = rounds.find(r => r.phase_id === phaseId && (r.custom_label ?? r.name) === matchup.round_label);
+  const isLegs = round?.legs ?? false;
+  const hasTeams = matchup.team_a_id && matchup.team_b_id;
+  const tA = matchup.teams_a?.abbreviation ?? matchup.teams_a?.full_name ?? "A definir";
+  const tB = matchup.teams_b?.abbreviation ?? matchup.teams_b?.full_name ?? "A definir";
+ 
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.6)", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: "100%", maxWidth: 460, borderRadius: 14, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
+ 
+        {/* Header */}
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
+              Editar confronto
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", margin: 0, letterSpacing: "0.06em" }}>
+              {matchup.round_label}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-text-secondary)", fontSize: 20, lineHeight: 1 }}>×</button>
+        </div>
+ 
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
+ 
+          {/* Seção times */}
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)", marginBottom: 10 }}>Times</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Time A</span>
+                <select value={teamAId} onChange={e => setTeamAId(e.target.value)} className={inputClass} style={inputStyle as any}>
+                  {teamsForPhase.map(t => (
+                    <option key={t.id} value={t.id} disabled={t.id === teamBId && t.id !== "tbd"}>
+                      {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Time B</span>
+                <select value={teamBId} onChange={e => setTeamBId(e.target.value)} className={inputClass} style={inputStyle as any}>
+                  {teamsForPhase.map(t => (
+                    <option key={t.id} value={t.id} disabled={t.id === teamAId && t.id !== "tbd"}>
+                      {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {error && <p style={{ fontSize: 12, color: "var(--color-danger)", marginBottom: 8 }}>{error}</p>}
+            <button onClick={handleSaveTeams} disabled={saving}
+              style={{ padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+              {saving ? "Salvando…" : "Salvar times"}
+            </button>
+          </div>
+ 
+          {/* Seção partidas */}
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              Partidas {isLegs ? "(Ida e Volta)" : "(Jogo único)"}
+            </p>
+ 
+            {loadingMatches ? (
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Carregando…</p>
+            ) : matchesLocal.length === 0 ? (
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>
+                {hasTeams ? "Nenhuma partida adicionada." : "Defina os times para adicionar partidas."}
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {matchesLocal.map((m, i) => (
+                  <div key={m.id} style={{ borderRadius: 10, border: "1px solid var(--color-border)", overflow: "hidden" }}>
+                    <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(255,255,255,0.02)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand)", textTransform: "uppercase", letterSpacing: "0.07em" }}>
+                        {isLegs ? (m.is_second_leg ? "Volta" : "Ida") : "Jogo único"}
+                      </span>
+                      <button onClick={() => handleDeleteMatch(m.id)}
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)", fontSize: 11, fontFamily: "var(--font-mono)" }}>
+                        Remover
+                      </button>
+                    </div>
+                    <div style={{ padding: "10px 12px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Data</span>
+                        <input type="date" defaultValue={m.match_date ?? ""} onBlur={e => handleUpdateMatch(m.id, "match_date", e.target.value)}
+                          className={inputClass} style={{ ...inputStyle as any, fontSize: 11 }} />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Horário</span>
+                        <input type="time" defaultValue={m.match_time?.slice(0,5) ?? ""} onBlur={e => handleUpdateMatch(m.id, "match_time", e.target.value)}
+                          className={inputClass} style={{ ...inputStyle as any, fontSize: 11 }} />
+                      </label>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Local</span>
+                        <select defaultValue={m.venue_id ?? ""} onChange={e => handleUpdateMatch(m.id, "venue_id", e.target.value)}
+                          className={inputClass} style={{ ...inputStyle as any, fontSize: 11 }}>
+                          <option value="">—</option>
+                          {venues.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+ 
+            {/* Botões de adicionar partida */}
+            {hasTeams && !loadingMatches && (
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {!isLegs && matchesLocal.length === 0 && (
+                  <button onClick={() => handleAddMatch(false)}
+                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-brand)", backgroundColor: "rgba(191,242,5,0.06)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer" }}>
+                    + Adicionar partida
+                  </button>
+                )}
+                {isLegs && !matchesLocal.find(m => !m.is_second_leg) && (
+                  <button onClick={() => handleAddMatch(false)}
+                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-brand)", backgroundColor: "rgba(191,242,5,0.06)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer" }}>
+                    + Jogo de ida
+                  </button>
+                )}
+                {isLegs && matchesLocal.find(m => !m.is_second_leg) && !matchesLocal.find(m => m.is_second_leg) && (
+                  <button onClick={() => handleAddMatch(true)}
+                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-brand)", backgroundColor: "rgba(191,242,5,0.06)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer" }}>
+                    + Jogo de volta
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+ 
+        {/* Footer */}
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--color-border)", display: "flex", justifyContent: "flex-end", flexShrink: 0 }}>
+          <button onClick={onSuccess}
+            style={{ padding: "8px 20px", borderRadius: 8, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700 }}>
+            Concluir
+          </button>
+        </div>
+      </div>
+    </div>
+);
 }

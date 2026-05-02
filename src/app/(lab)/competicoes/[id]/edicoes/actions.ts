@@ -619,3 +619,144 @@ export async function deletarSquad(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function criarConfronto(
+  phaseId: string,
+  roundId: string,
+  teamAId: string | null,
+  teamBId: string | null,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+ 
+  // Busca a rodada para obter o label e display_order base
+  const { data: round } = await supabase
+    .from("rounds")
+    .select("name, custom_label, display_order")
+    .eq("id", roundId)
+    .maybeSingle();
+ 
+  if (!round) return { error: "Rodada não encontrada." };
+ 
+  const roundLabel = round.name ?? "";
+  const roundDisplayLabel = round.custom_label ?? round.name ?? "";
+ 
+  // Calcula o próximo display_order dentro desta rodada
+  const { data: existing } = await supabase
+    .from("matchups")
+    .select("display_order")
+    .eq("phase_id", phaseId)
+    .eq("round_label", roundLabel)
+    .order("display_order", { ascending: false })
+    .limit(1);
+ 
+  const maxOrder = existing?.[0]?.display_order ?? 0;
+  const nextOrder = maxOrder + 1;
+ 
+  const { data: inserted, error } = await supabase
+    .from("matchups")
+    .insert({
+      phase_id: phaseId,
+      round_id: roundId,
+      round_label: roundDisplayLabel,
+      team_a_id: teamAId || null,
+      team_b_id: teamBId || null,
+      display_order: nextOrder,
+      is_completed: false,
+    })
+    .select("id")
+    .single();
+ 
+  if (error) return { error: error.message };
+  return { id: inserted.id };
+}
+ 
+/**
+ * Cria uma partida dentro de um matchup já existente.
+ * Não cria matchup implicitamente — o matchup deve existir.
+ * Para fases classificatórias, use criarPartida() em partidas/actions.ts.
+ */
+export async function criarPartidaNoConfronto(
+  phaseId: string,
+  matchupId: string,
+  formData: FormData,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+ 
+  // Busca dados do matchup para obter os times e a rodada
+  const { data: matchup } = await supabase
+    .from("matchups")
+    .select("team_a_id, team_b_id, round_id, phase_id")
+    .eq("id", matchupId)
+    .maybeSingle();
+ 
+  if (!matchup) return { error: "Confronto não encontrado." };
+  if (!matchup.team_a_id || !matchup.team_b_id) {
+    return { error: "Defina os dois times antes de adicionar partidas." };
+  }
+ 
+  const match_date = String(formData.get("match_date") ?? "").trim() || null;
+  const match_time = String(formData.get("match_time") ?? "").trim() || null;
+  const venue_id = String(formData.get("venue_id") ?? "").trim() || null;
+  const is_second_leg = formData.get("is_second_leg") === "true";
+ 
+  const { data: inserted, error } = await supabase
+    .from("matches")
+    .insert({
+      phase_id: phaseId,
+      round_id: null, // em mata-mata o agrupamento é pelo matchup, não pela rodada
+      matchup_id: matchupId,
+      team_a_id: matchup.team_a_id,
+      team_b_id: matchup.team_b_id,
+      team_a_is_home: !is_second_leg, // na volta o mandante inverte
+      match_date,
+      match_time,
+      venue_id,
+      is_second_leg,
+      status: "scheduled",
+      score_a: 0,
+      score_b: 0,
+      result_only_mode: false,
+    })
+    .select("id")
+    .single();
+ 
+  if (error) return { error: error.message };
+  return { id: inserted.id };
+}
+ 
+/**
+ * Atualiza os times de um matchup existente.
+ * Usado quando o admin define os times de um confronto "A definir".
+ */
+export async function editarTimesConfronto(
+  matchupId: string,
+  teamAId: string | null,
+  teamBId: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+ 
+  // Verifica se já há partidas — se sim, não permite trocar os times
+  const { data: partidas } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("matchup_id", matchupId)
+    .limit(1);
+ 
+  if (partidas && partidas.length > 0) {
+    return { error: "Não é possível alterar os times de um confronto que já possui partidas." };
+  }
+ 
+  const { error } = await supabase
+    .from("matchups")
+    .update({ team_a_id: teamAId || null, team_b_id: teamBId || null })
+    .eq("id", matchupId);
+ 
+  if (error) return { error: error.message };
+  return { success: true };
+}
