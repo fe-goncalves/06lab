@@ -1,3 +1,5 @@
+// EDIÇÕES / ACTIONS
+
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
@@ -137,12 +139,14 @@ export async function adicionarEquipeEdicao(
 
   if (existing) return { error: "Equipe já está inscrita nesta edição." };
 
-  const { error } = await supabase
+  const { data: inserted, error } = await supabase
     .from("edition_teams")
-    .insert({ edition_id: edicaoId, team_id: teamId, arrival_origin: arrivalOrigin || null });
+    .insert({ edition_id: edicaoId, team_id: teamId, arrival_origin: arrivalOrigin || null })
+    .select("id")
+    .single();
 
   if (error) return { error: error.message };
-  return { success: true };
+  return { id: inserted.id };
 }
 
 export async function removerEquipeEdicao(

@@ -39,8 +39,8 @@ export default async function EquipeEdicaoPage({
     { data: positions },
   ] = await Promise.all([
     supabase.from("competitions")
-      .select("id, full_name, short_name")
-      .eq("id", competitionId).maybeSingle(),
+     .select("id, full_name, short_name, gender")
+     .eq("id", competitionId).maybeSingle(),
 
     supabase.from("competition_editions")
       .select("id, seasons(name)")
@@ -54,7 +54,7 @@ export default async function EquipeEdicaoPage({
 
     // Todos os atletas da organização para o modal de adicionar
     supabase.from("athletes")
-      .select("id, full_name, surname, photo_url, position_id, player_positions(full_name, abbreviation)")
+      .select("id, full_name, surname, photo_url, gender, position_id, player_positions(full_name, abbreviation)")
       .eq("organization_id", orgId)
       .order("full_name"),
 
@@ -92,8 +92,11 @@ export default async function EquipeEdicaoPage({
   );
 
   // Atletas disponíveis = todos da org que ainda não estão inscritos nesta edition_team
+  const competitionGender = (competition as any)?.gender ?? null;
+
   const availableAthletes = (allAthletes ?? [])
-    .filter((a: any) => !inscribedAthleteIds.has(a.id));
+    .filter((a: any) => !inscribedAthleteIds.has(a.id))
+    .filter((a: any) => !competitionGender || a.gender === competitionGender);
 
   // Comissão disponível = vínculo atual na equipe, não inscritos ainda
   const availableStaff = (currentStaff ?? [])

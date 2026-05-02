@@ -1,7 +1,5 @@
 import Link from "next/link";
-import {
-  Users, UserCheck, MapPin, Shield,
-} from "lucide-react";
+import { Users, UserCheck, MapPin, Shield, Calendar, Tag } from "lucide-react";
 
 const items = [
   {
@@ -33,6 +31,18 @@ const items = [
     icon: MapPin,
     label: "Locais",
     description: "Estádios e campos utilizados",
+  },
+  {
+    href: "/temporadas",
+    icon: Calendar,
+    label: "Temporadas",
+    description: "Anos e períodos globais da organização",
+  },
+  {
+    href: "/categorias",
+    icon: Tag,
+    label: "Categorias",
+    description: "Categorias de competição (Sub-11, Adulto, etc.)",
   },
 ];
 

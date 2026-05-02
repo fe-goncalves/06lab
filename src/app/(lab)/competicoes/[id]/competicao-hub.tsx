@@ -114,6 +114,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [phaseTeamIds, setPhaseTeamIds] = useState<string[]>([]);
   const [loadingPhaseTeams, setLoadingPhaseTeams] = useState(false);
 
+  // Modal adicionar equipe
+  const [showAddTeamModal, setShowAddTeamModal] = useState(false);
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [addingTeamId, setAddingTeamId] = useState<string | null>(null);
+
   const [jobsSubTab, setJobsSubTab] = useState<"confrontos" | "partidas">("confrontos");
   const [editingMatchup, setEditingMatchup] = useState<any | null>(null);
 
@@ -322,6 +327,50 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Inscrição removida.");
     setRosterEntries(prev => prev.filter((e: any) => e.id !== entryId));
+  }
+
+  async function handleAdicionarEquipeHub(teamId: string) {
+    setAddingTeamId(teamId);
+    const result = await adicionarEquipeEdicao(selectedEditionId, teamId, "");
+    setAddingTeamId(null);
+    if ("error" in result) { toast("error", (result as any).error); return; }
+    const team = allTeams.find(t => t.id === teamId);
+    if (team) {
+      setEditionTeams(prev => [...prev, {
+        id: crypto.randomUUID(),
+        team_id: teamId,
+        arrival_origin: null,
+        is_free_agent_pool: false,
+        teams: team,
+      }]);
+    }
+    setShowAddTeamModal(false);
+    toast("success", "Equipe adicionada.");
+  }
+
+  async function handleRemoverEquipeHub(editionTeamId: string) {
+    if (!confirm("Remover esta equipe da edição? Esta ação é irreversível.")) return;
+    const result = await removerEquipeEdicao(editionTeamId);
+    if ("error" in result) { toast("error", (result as any).error); return; }
+    setEditionTeams(prev => prev.filter(et => et.id !== editionTeamId));
+    toast("success", "Equipe removida.");
+  }
+
+  async function handleDesativarEquipeHub(editionTeamId: string) {
+    if (!confirm("Desativar esta equipe? Ela ficará oculta na classificação, mas o histórico será preservado.")) return;
+    const supabase = createClient();
+    const { error } = await supabase.from("edition_teams").update({ is_active: false }).eq("id", editionTeamId);
+    if (error) { toast("error", error.message); return; }
+    setEditionTeams(prev => prev.map(et => et.id === editionTeamId ? { ...et, is_active: false } as any : et));
+    toast("success", "Equipe desativada.");
+  }
+
+  async function handleReativarEquipeHub(editionTeamId: string) {
+    const supabase = createClient();
+    const { error } = await supabase.from("edition_teams").update({ is_active: true }).eq("id", editionTeamId);
+    if (error) { toast("error", error.message); return; }
+    setEditionTeams(prev => prev.map(et => et.id === editionTeamId ? { ...et, is_active: true } as any : et));
+    toast("success", "Equipe reativada.");
   }
 
   async function handleCreateEdition() {
@@ -1150,42 +1199,139 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               </div>
             )}
             {activeCompTab === "equipes" && (
-              <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-                  <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Equipes ({editionTeams.length})</h2>
+              <div>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                    {editionTeams.filter(et => !et.is_free_agent_pool).length} equipes
+                  </p>
+                  <button type="button"
+                    onClick={() => { setShowAddTeamModal(true); setTeamSearchQuery(""); }}
+                    className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
+                    style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+                    <Plus size={12} /> Adicionar equipe
+                  </button>
                 </div>
-                {editionTeams.length === 0 ? (
-                  <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe adicionada.</p>
-                ) : (
-                  editionTeams.map((et, idx) => (
-                    <div key={et.id} className="flex items-center gap-4 px-5 py-3 group"
-                      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: 0.55, transition: "opacity 0.15s" }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = "0.55")}>
-                      {et.teams?.logo_url ? (
-                        <img src={et.teams.logo_url} alt="" className="h-9 w-9 rounded object-contain shrink-0" />
-                      ) : (
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border text-xs font-bold"
-                          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                          {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
+
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                  {editionTeams.filter(et => !et.is_free_agent_pool).length === 0 ? (
+                    <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe adicionada.</p>
+                  ) : (
+                    editionTeams.filter(et => !et.is_free_agent_pool).map((et, idx) => {
+                      const isInactive = (et as any).is_active === false;
+                      return (
+                        <div key={et.id} className="flex items-center gap-4 px-5 py-3 group"
+                          style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: isInactive ? 0.4 : 0.7, transition: "opacity 0.15s" }}
+                          onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.4" : "0.7")}>
+                          {et.teams?.logo_url ? (
+                            <img src={et.teams.logo_url} alt="" className="h-9 w-9 rounded object-contain shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border text-xs font-bold"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                              {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>{et.teams?.abbreviation?.toUpperCase() ?? "—"}</p>
+                              {isInactive && <span className="font-mono text-xs rounded px-1.5 py-0.5" style={{ backgroundColor: "rgba(242,192,5,0.15)", color: "#F2C005" }}>Desativada</span>}
+                            </div>
+                            <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
+                          </div>
+                          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                            <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
+                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-brand)]"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
+                              <Users size={12} /> Elenco
+                            </Link>
+                            {isInactive ? (
+                              <button type="button" onClick={() => handleReativarEquipeHub(et.id)}
+                                className="rounded border px-2 py-1 font-mono text-xs"
+                                style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                                Reativar
+                              </button>
+                            ) : (
+                              <button type="button" onClick={() => handleDesativarEquipeHub(et.id)}
+                                className="rounded border px-2 py-1 font-mono text-xs"
+                                style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
+                                Desativar
+                              </button>
+                            )}
+                            <button type="button" onClick={() => handleRemoverEquipeHub(et.id)}
+                              className="rounded border px-2 py-1 font-mono text-xs"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>{et.teams?.abbreviation?.toUpperCase() ?? "—"}</p>
-                        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Modal adicionar equipe */}
+                {showAddTeamModal && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+                    <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col"
+                      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "70vh" }}>
+                      <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
+                        style={{ borderColor: "var(--color-border)" }}>
+                        <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Adicionar equipe</h2>
+                        <button type="button" onClick={() => setShowAddTeamModal(false)}
+                          style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
                       </div>
-                      {et.arrival_origin && (
-                        <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                          {et.arrival_origin}
-                        </span>
-                      )}
-                      <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
-                        className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs opacity-0 group-hover:opacity-100 transition-opacity hover:border-[var(--color-brand)]"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                        <Users size={12} /> Elenco
-                      </Link>
+                      <div className="px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
+                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                          <Search size={14} style={{ color: "var(--color-text-secondary)" }} />
+                          <input autoFocus type="text" placeholder="Buscar equipe…"
+                            value={teamSearchQuery}
+                            onChange={e => setTeamSearchQuery(e.target.value)}
+                            className="flex-1 bg-transparent font-mono text-sm outline-none"
+                            style={{ color: "var(--color-text-primary)" }} />
+                        </div>
+                      </div>
+                      <div className="overflow-y-auto flex-1">
+                        {(() => {
+                          const enrolledIds = new Set(editionTeams.map(et => et.team_id));
+                          const q = teamSearchQuery.toLowerCase();
+                          const available = allTeams.filter(t =>
+                            !enrolledIds.has(t.id) &&
+                            (!q || t.full_name.toLowerCase().includes(q) || (t.abbreviation ?? "").toLowerCase().includes(q))
+                          );
+                          if (available.length === 0) return (
+                            <p className="px-6 py-8 text-center font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                              Nenhuma equipe disponível.
+                            </p>
+                          );
+                          return available.map((team, idx) => (
+                            <button key={team.id} type="button"
+                              onClick={() => handleAdicionarEquipeHub(team.id)}
+                              disabled={addingTeamId === team.id}
+                              className="flex items-center gap-3 w-full px-6 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)] disabled:opacity-50"
+                              style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                              {team.logo_url ? (
+                                <img src={team.logo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0 border"
+                                  style={{ borderColor: "var(--color-border)" }} />
+                              ) : (
+                                <div className="h-8 w-8 rounded-full shrink-0 border flex items-center justify-center"
+                                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                                  <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
+                                    {(team.abbreviation ?? team.full_name).slice(0, 2).toUpperCase()}
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>{team.full_name}</p>
+                                {team.abbreviation && <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{team.abbreviation}</p>}
+                              </div>
+                              {addingTeamId === team.id && <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>Adicionando…</span>}
+                            </button>
+                          ));
+                        })()}
+                      </div>
                     </div>
-                  ))
+                  </div>
                 )}
               </div>
             )}

@@ -1,3 +1,5 @@
+// EQUIPE EDICAO CLIENT
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -62,11 +64,92 @@ function applyDateMask(value: string): string {
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
 }
 
+function RosterCard({
+  photoUrl, displayName, fullName, subtitle, teamColor, statusEl, actionsEl,
+}: {
+  photoUrl: string | null;
+  displayName: string;
+  fullName: string;
+  subtitle: string;
+  teamColor: string;
+  statusEl: React.ReactNode;
+  actionsEl: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="group flex items-center gap-4 px-5 transition-all duration-200"
+      style={{
+        paddingTop: hovered ? 14 : 10,
+        paddingBottom: hovered ? 14 : 10,
+        borderTop: "1px solid var(--color-border)",
+        backgroundColor: hovered ? "rgba(255,255,255,0.02)" : "transparent",
+      }}
+    >
+      {/* Foto */}
+      <div
+        className="shrink-0 overflow-hidden rounded-full transition-all duration-200"
+        style={{
+          width: hovered ? 42 : 34,
+          height: hovered ? 42 : 34,
+          border: `2px solid ${hovered ? teamColor : "var(--color-border)"}`,
+          backgroundColor: `${teamColor}22`,
+        }}
+      >
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center font-mono text-xs font-bold"
+            style={{ color: teamColor }}>
+            {displayName.slice(0, 2).toUpperCase()}
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="font-mono text-sm font-bold leading-tight" style={{ color: "var(--color-text-primary)" }}>
+            {displayName.toUpperCase()}
+          </p>
+          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            {subtitle}
+          </span>
+        </div>
+        <p
+          className="font-mono text-xs transition-all duration-200 overflow-hidden"
+          style={{
+            color: "var(--color-text-secondary)",
+            maxHeight: hovered ? "20px" : "0px",
+            opacity: hovered ? 0.7 : 0,
+            marginTop: hovered ? 2 : 0,
+          }}
+        >
+          {fullName}
+        </p>
+      </div>
+
+      {/* Status */}
+      <div className="shrink-0">{statusEl}</div>
+
+      {/* Ações — aparecem no hover */}
+      <div
+        className="flex items-center gap-1 transition-all duration-200 overflow-hidden shrink-0"
+        style={{ maxWidth: hovered ? 200 : 0, opacity: hovered ? 1 : 0 }}
+      >
+        {actionsEl}
+      </div>
+    </div>
+  );
+}
+
 export default function EquipeEdicaoClient({
   competitionId, competitionName, edicaoId, edicaoName,
   editionTeam, rosterEntries: initialEntries,
   availableAthletes: initialAvailable, availableStaff: initialStaff,
-  allEditionTeams, freeAgentPoolId, positions,
+  allEditionTeams, freeAgentPoolId, positions, competitionGender,
 }: {
   competitionId: string; competitionName: string;
   edicaoId: string; edicaoName: string;
@@ -77,17 +160,20 @@ export default function EquipeEdicaoClient({
   allEditionTeams: EditionTeam[];
   freeAgentPoolId: string | null;
   positions: Position[];
+  competitionGender: string | null;
 }) {
   const [entries, setEntries] = useState<RosterEntry[]>(initialEntries);
   const [availableAthletes, setAvailableAthletes] = useState<Athlete[]>(initialAvailable);
   const [activeTab, setActiveTab] = useState<"atletas" | "comissao">("atletas");
   const [processing, setProcessing] = useState<string | null>(null);
 
-  // Modal busca atleta
+  // Modal busca atleta/comissão
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Athlete[]>([]);
+  const [staffSearchResults, setStaffSearchResults] = useState<Staff[]>([]);
   const [searching, setSearching] = useState(false);
+  const [availableStaff, setAvailableStaff] = useState<Staff[]>(initialStaff);
 
   // Modal criar atleta
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -116,27 +202,49 @@ export default function EquipeEdicaoClient({
 
   const inscribedAthleteIds = new Set(entries.filter(e => e.member_type === "athlete").map(e => e.athlete_id));
 
+  // Aplica filtro de gênero da competição nos atletas disponíveis (apenas exibição no modal)
+  const filteredAvailableAthletes = competitionGender
+    ? availableAthletes.filter((a: any) => a.gender === competitionGender)
+    : availableAthletes;
+
   // Busca em tempo real
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults(availableAthletes.slice(0, 20));
-      return;
+    if (activeTab === "comissao") {
+      if (!searchQuery.trim()) {
+        setStaffSearchResults(availableStaff.slice(0, 20));
+        return;
+      }
+      const q = searchQuery.toLowerCase();
+      const filtered = availableStaff.filter((s: Staff) => {
+        const name = `${s.full_name} ${s.surname ?? ""}`.toLowerCase();
+        return name.includes(q);
+      });
+      setStaffSearchResults(filtered.slice(0, 20));
+    } else {
+      if (!searchQuery.trim()) {
+        setSearchResults(filteredAvailableAthletes.slice(0, 20));
+        return;
+      }
+      const q = searchQuery.toLowerCase();
+      const filtered = filteredAvailableAthletes.filter(a => {
+        const name = `${a.full_name} ${a.surname ?? ""}`.toLowerCase();
+        return name.includes(q);
+      });
+      setSearchResults(filtered.slice(0, 20));
     }
-    const q = searchQuery.toLowerCase();
-    const filtered = availableAthletes.filter(a => {
-      const name = `${a.full_name} ${a.surname ?? ""}`.toLowerCase();
-      return name.includes(q);
-    });
-    setSearchResults(filtered.slice(0, 20));
-  }, [searchQuery, availableAthletes]);
+  }, [searchQuery, availableAthletes, availableStaff, activeTab]);
 
   // Inicializa resultados ao abrir
   useEffect(() => {
     if (showSearchModal) {
-      setSearchResults(availableAthletes.slice(0, 20));
       setSearchQuery("");
+      if (activeTab === "comissao") {
+        setStaffSearchResults(availableStaff.slice(0, 20));
+      } else {
+        setSearchResults(filteredAvailableAthletes.slice(0, 20));
+      }
     }
-  }, [showSearchModal]);
+  }, [showSearchModal, activeTab]);
 
   function resetCreateForm() {
     setCreateFullName(""); setCreateSurname(""); setCreateGender("male");
@@ -215,6 +323,57 @@ export default function EquipeEdicaoClient({
     setSearchResults(prev => prev.filter(a => a.id !== athlete.id));
   }
 
+  async function handleInscreverStaff(member: Staff) {
+    setProcessing(member.id);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { toast("error", "Não autenticado."); setProcessing(null); return; }
+
+    const { data: existing } = await supabase
+      .from("edition_roster_entries")
+      .select("id")
+      .eq("edition_team_id", editionTeam.id)
+      .eq("staff_member_id", member.id)
+      .maybeSingle();
+
+    if (existing) {
+      toast("error", "Membro já inscrito nesta edição.");
+      setProcessing(null);
+      return;
+    }
+
+    const { data: inserted, error } = await supabase
+      .from("edition_roster_entries")
+      .insert({
+        edition_team_id: editionTeam.id,
+        member_type: "staff",
+        staff_member_id: member.id,
+        status: "approved",
+        submitter_type: "admin",
+        submitted_at: new Date().toISOString(),
+        reviewed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+
+    setProcessing(null);
+    if (error) { toast("error", error.message); return; }
+
+    toast("success", "Membro inscrito.");
+    setEntries(prev => [...prev, {
+      id: inserted.id,
+      member_type: "staff",
+      status: "approved",
+      athlete_id: null,
+      staff_member_id: member.id,
+      position_label_at_inscription: null,
+      athletes: null,
+      staff_members: member as any,
+    }]);
+    setAvailableStaff(prev => prev.filter(s => s.id !== member.id));
+    setStaffSearchResults(prev => prev.filter(s => s.id !== member.id));
+  }
+
   async function handleCriarAtleta() {
     if (!createFullName.trim()) { setCreateError("Nome completo é obrigatório."); return; }
     setCreateLoading(true); setCreateError(null);
@@ -281,7 +440,7 @@ export default function EquipeEdicaoClient({
             { label: edicaoName, href: `/competicoes/${competitionId}?edicao=${edicaoId}` },
             { label: team?.full_name ?? "Equipe" },
           ]} />
-          <div className="mb-4 flex items-center gap-4">
+          <div className="mb-6 flex items-center gap-6">
             <div className="relative shrink-0">
               {team?.logo_url ? (
                 <img src={team.logo_url} alt="" className="h-14 w-14 rounded-xl object-contain"
@@ -359,79 +518,59 @@ export default function EquipeEdicaoClient({
                 Nenhum atleta inscrito. Clique em "Novo atleta" para começar.
               </p>
             ) : (
-              athletes.map((entry, idx) => (
-                <div key={entry.id} className="flex items-center gap-4 px-5 py-3 group"
-                  style={{
-                    borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-                    opacity: entry.status === "inactive" ? 0.4 : 1,
-                    transition: "opacity 0.15s",
-                  }}>
-                  {entry.athletes?.photo_url ? (
-                    <img src={entry.athletes.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                      style={{ backgroundColor: `${teamColor}22`, color: teamColor }}>
-                      {(entry.athletes?.surname ?? entry.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {entry.athletes?.surname ?? entry.athletes?.full_name ?? "—"}
-                    </p>
-                    <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      {entry.position_label_at_inscription ?? entry.athletes?.player_positions?.full_name ?? "—"}
-                    </p>
-                  </div>
-                  <span className="shrink-0 font-mono text-xs rounded px-2 py-0.5"
-                    style={{
-                      backgroundColor: `${STATUS_COLOR[entry.status] ?? "#555"}22`,
-                      color: STATUS_COLOR[entry.status] ?? "#555",
-                    }}>
-                    {STATUS_LABEL[entry.status] ?? entry.status}
-                  </span>
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {entry.status === "pending" && (
-                      <button type="button" onClick={() => handleAprovar(entry.id)}
-                        disabled={processing === entry.id}
-                        className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                        style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                        <Check size={11} /> Aprovar
-                      </button>
-                    )}
-                    {entry.status === "approved" && (
+              athletes.map((entry) => (
+                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? 0.45 : 1, transition: "opacity 0.15s" }}>
+                  <RosterCard
+                    photoUrl={entry.athletes?.photo_url ?? null}
+                    displayName={entry.athletes?.surname ?? entry.athletes?.full_name ?? "?"}
+                    fullName={entry.athletes?.full_name ?? "—"}
+                    subtitle={entry.position_label_at_inscription ?? entry.athletes?.player_positions?.full_name ?? "—"}
+                    teamColor={teamColor}
+                    statusEl={
+                      <span className="font-mono text-xs rounded px-2 py-0.5"
+                        style={{ backgroundColor: `${STATUS_COLOR[entry.status] ?? "#555"}22`, color: STATUS_COLOR[entry.status] ?? "#555" }}>
+                        {STATUS_LABEL[entry.status] ?? entry.status}
+                      </span>
+                    }
+                    actionsEl={
                       <>
-                        <button type="button"
-                          onClick={() => { setTransferEntryId(entry.id); setTransferTargetId(""); }}
-                          disabled={processing === entry.id}
-                          className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
-                          title="Transferir">
-                          <ArrowRightLeft size={11} />
-                        </button>
-                        <button type="button" onClick={() => handleDesativar(entry.id)}
-                          disabled={processing === entry.id}
+                        {entry.status === "pending" && (
+                          <button type="button" onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                            className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                            <Check size={11} /> Aprovar
+                          </button>
+                        )}
+                        {entry.status === "approved" && (
+                          <>
+                            <button type="button" onClick={() => { setTransferEntryId(entry.id); setTransferTargetId(""); }}
+                              disabled={processing === entry.id}
+                              className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }} title="Transferir">
+                              <ArrowRightLeft size={11} />
+                            </button>
+                            <button type="button" onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
+                              className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                              style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
+                              Desativar
+                            </button>
+                          </>
+                        )}
+                        {entry.status === "inactive" && (
+                          <button type="button" onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
+                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                            Reativar
+                          </button>
+                        )}
+                        <button type="button" onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
                           className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                          style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
-                          Desativar
+                          style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                          <X size={11} />
                         </button>
                       </>
-                    )}
-                    {entry.status === "inactive" && (
-                      <button type="button" onClick={() => handleReativar(entry.id)}
-                        disabled={processing === entry.id}
-                        className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                        style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                        Reativar
-                      </button>
-                    )}
-                    <button type="button" onClick={() => handleRemover(entry.id)}
-                      disabled={processing === entry.id}
-                      className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                      style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}
-                      title="Remover permanentemente">
-                      <X size={11} />
-                    </button>
-                  </div>
+                    }
+                  />
                 </div>
               ))
             )}
@@ -450,57 +589,51 @@ export default function EquipeEdicaoClient({
                 Nenhum membro inscrito.
               </p>
             ) : (
-              staff.map((entry, idx) => (
-                <div key={entry.id} className="flex items-center gap-4 px-5 py-3 group"
-                  style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: entry.status === "inactive" ? 0.4 : 1 }}>
-                  {entry.staff_members?.photo_url ? (
-                    <img src={entry.staff_members.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                      style={{ backgroundColor: `${teamColor}22`, color: teamColor }}>
-                      {(entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "—"}
-                    </p>
-                    <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      {entry.staff_members?.staff_roles?.full_name ?? "—"}
-                    </p>
-                  </div>
-                  <span className="shrink-0 font-mono text-xs rounded px-2 py-0.5"
-                    style={{ backgroundColor: `${STATUS_COLOR[entry.status]}22`, color: STATUS_COLOR[entry.status] ?? "#555" }}>
-                    {STATUS_LABEL[entry.status] ?? entry.status}
-                  </span>
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    {entry.status === "pending" && (
-                      <button type="button" onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
-                        className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs"
-                        style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                        <Check size={11} /> Aprovar
-                      </button>
-                    )}
-                    {entry.status === "approved" && (
-                      <button type="button" onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
-                        className="rounded border px-2 py-1 font-mono text-xs"
-                        style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
-                        Desativar
-                      </button>
-                    )}
-                    {entry.status === "inactive" && (
-                      <button type="button" onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
-                        className="rounded border px-2 py-1 font-mono text-xs"
-                        style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                        Reativar
-                      </button>
-                    )}
-                    <button type="button" onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
-                      className="rounded border px-2 py-1 font-mono text-xs"
-                      style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                      <X size={11} />
-                    </button>
-                  </div>
+              staff.map((entry) => (
+                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? 0.45 : 1, transition: "opacity 0.15s" }}>
+                  <RosterCard
+                    photoUrl={entry.staff_members?.photo_url ?? null}
+                    displayName={entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "?"}
+                    fullName={entry.staff_members?.full_name ?? "—"}
+                    subtitle={entry.staff_members?.staff_roles?.full_name ?? "—"}
+                    teamColor={teamColor}
+                    statusEl={
+                      <span className="font-mono text-xs rounded px-2 py-0.5"
+                        style={{ backgroundColor: `${STATUS_COLOR[entry.status] ?? "#555"}22`, color: STATUS_COLOR[entry.status] ?? "#555" }}>
+                        {STATUS_LABEL[entry.status] ?? entry.status}
+                      </span>
+                    }
+                    actionsEl={
+                      <>
+                        {entry.status === "pending" && (
+                          <button type="button" onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                            className="flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                            <Check size={11} /> Aprovar
+                          </button>
+                        )}
+                        {entry.status === "approved" && (
+                          <button type="button" onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
+                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                            style={{ borderColor: "var(--color-border)", color: "#F2C005" }}>
+                            Desativar
+                          </button>
+                        )}
+                        {entry.status === "inactive" && (
+                          <button type="button" onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
+                            className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                            Reativar
+                          </button>
+                        )}
+                        <button type="button" onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
+                          className="rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
+                          style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                          <X size={11} />
+                        </button>
+                      </>
+                    }
+                  />
                 </div>
               ))
             )}
@@ -547,7 +680,8 @@ export default function EquipeEdicaoClient({
 
             {/* Resultados */}
             <div className="overflow-y-auto flex-1">
-              {searchResults.length === 0 ? (
+            {activeTab === "atletas" ? (
+              searchResults.length === 0 ? (
                 <p className="px-6 py-6 text-sm text-center" style={{ color: "var(--color-text-secondary)" }}>
                   {searchQuery ? "Nenhum atleta encontrado com este nome." : "Todos os atletas já estão inscritos."}
                 </p>
@@ -580,7 +714,43 @@ export default function EquipeEdicaoClient({
                     </button>
                   </div>
                 ))
-              )}
+              )
+            ) : (
+              staffSearchResults.length === 0 ? (
+                <p className="px-6 py-6 text-sm text-center" style={{ color: "var(--color-text-secondary)" }}>
+                  {searchQuery ? "Nenhum membro encontrado com este nome." : "Toda a comissão já está inscrita."}
+                </p>
+              ) : (
+                staffSearchResults.map((member, idx) => (
+                  <div key={member.id} className="flex items-center gap-3 px-6 py-3 group transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                    {member.photo_url ? (
+                      <img src={member.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                        style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        {(member.surname ?? member.full_name).slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
+                        {member.full_name}
+                      </p>
+                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                        {member.surname ? `"${member.surname}" · ` : ""}{member.staff_roles?.full_name ?? "—"}
+                      </p>
+                    </div>
+                    <button type="button"
+                      onClick={() => handleInscreverStaff(member)}
+                      disabled={processing === member.id}
+                      className="shrink-0 rounded border px-3 py-1.5 font-mono text-xs disabled:opacity-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ borderColor: teamColor, color: teamColor }}>
+                      {processing === member.id ? "…" : "Inscrever"}
+                    </button>
+                  </div>
+                ))
+              )
+            )}
             </div>
 
             {/* Rodapé — criar novo */}

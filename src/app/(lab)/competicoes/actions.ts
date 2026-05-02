@@ -28,7 +28,7 @@ export async function criarCompeticao(
 
   if (file && file.size > 0) {
     const safe = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `competitions/${Date.now()}-${safe}`;
+    const path = "competitions/" + Date.now() + "-" + safe;
     const { error: uploadError } = await supabase.storage
       .from("logo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -39,10 +39,7 @@ export async function criarCompeticao(
   const { data: inserted, error } = await supabase
     .from("competitions")
     .insert({
-      full_name,
-      short_name,
-      gender,
-      logo_url,
+      full_name, short_name, gender, logo_url,
       sport_slug: "football7",
       organization_id: profile.organization_id,
     })
@@ -81,8 +78,7 @@ export async function editarCompeticao(
   const gender = String(formData.get("gender") ?? "").trim() || "male";
   const pinned_in_sidebar = formData.get("pinned_in_sidebar") === "true";
   const primary_color = String(formData.get("primary_color") ?? "").trim() || null;
-
-  // Divisões — múltiplas, separadas por vírgula
+  const category_id = String(formData.get("category_id") ?? "").trim() || null;
   const division_above_ids = String(formData.get("division_above_ids") ?? "").trim() || null;
   const division_below_ids = String(formData.get("division_below_ids") ?? "").trim() || null;
   const division_same_ids = String(formData.get("division_same_ids") ?? "").trim() || null;
@@ -92,7 +88,7 @@ export async function editarCompeticao(
 
   if (file && file.size > 0) {
     const safe = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `competitions/${Date.now()}-${safe}`;
+    const path = "competitions/" + Date.now() + "-" + safe;
     const { error: uploadError } = await supabase.storage
       .from("logo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -103,14 +99,9 @@ export async function editarCompeticao(
   const { error } = await supabase
     .from("competitions")
     .update({
-      full_name,
-      short_name,
-      gender,
-      pinned_in_sidebar,
-      primary_color,
-      division_above_ids,
-      division_below_ids,
-      division_same_ids,
+      full_name, short_name, gender, pinned_in_sidebar,
+      primary_color, category_id,
+      division_above_ids, division_below_ids, division_same_ids,
       logo_url,
     })
     .eq("id", id);
@@ -118,15 +109,14 @@ export async function editarCompeticao(
   if (error) return { error: error.message };
   revalidatePath("/", "layout");
   revalidatePath("/competicoes");
-  revalidatePath(`/competicoes/${id}`);
-  revalidatePath(`/competicoes/${id}/configuracoes`);
+  revalidatePath("/competicoes/" + id);
+  revalidatePath("/competicoes/" + id + "/configuracoes");
   return { success: true };
 }
 
-// ─── Categorias ───────────────────────────────────────────────────────────────
+// ─── Categorias globais ───────────────────────────────────────────────────────
 
-export async function criarCategoria(
-  competitionId: string,
+export async function criarCategoriaGlobal(
   label: string,
 ): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
@@ -142,35 +132,26 @@ export async function criarCategoria(
   const trimmed = label.trim();
   if (!trimmed) return { error: "Nome da categoria é obrigatório." };
 
-  const { data: existing } = await supabase
-    .from("competition_categories")
+  const { data: last } = await supabase
+    .from("categories")
     .select("display_order")
-    .eq("competition_id", competitionId)
+    .eq("organization_id", profile.organization_id)
     .order("display_order", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const nextOrder = (existing?.display_order ?? 0) + 1;
+    .limit(1).maybeSingle();
 
   const { data: inserted, error } = await supabase
-    .from("competition_categories")
-    .insert({
-      competition_id: competitionId,
-      organization_id: profile.organization_id,
-      label: trimmed,
-      display_order: nextOrder,
-    })
+    .from("categories")
+    .insert({ organization_id: profile.organization_id, label: trimmed, display_order: (last?.display_order ?? 0) + 1 })
     .select("id").single();
 
   if (error) return { error: error.message };
-  revalidatePath(`/competicoes/${competitionId}/configuracoes`);
+  revalidatePath("/competicoes");
   return { id: inserted.id };
 }
 
-export async function editarCategoria(
+export async function editarCategoriaGlobal(
   categoryId: string,
   label: string,
-  competitionId: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -179,18 +160,125 @@ export async function editarCategoria(
   const trimmed = label.trim();
   if (!trimmed) return { error: "Nome é obrigatório." };
 
-  const { error } = await supabase
-    .from("competition_categories")
-    .update({ label: trimmed })
-    .eq("id", categoryId);
-
+  const { error } = await supabase.from("categories").update({ label: trimmed }).eq("id", categoryId);
   if (error) return { error: error.message };
-  revalidatePath(`/competicoes/${competitionId}/configuracoes`);
+  revalidatePath("/competicoes");
   return { success: true };
 }
 
-export async function deletarCategoria(
+export async function deletarCategoriaGlobal(
   categoryId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase.from("categories").delete().eq("id", categoryId);
+  if (error) return { error: error.message };
+  revalidatePath("/competicoes");
+  return { success: true };
+}
+
+// ─── Edições da competição ────────────────────────────────────────────────────
+
+export async function criarEdicaoNaConfiguracao(
+  competitionId: string,
+  seasonId: string,
+  customName: string,
+  isCurrent: boolean,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+  if (!seasonId) return { error: "Temporada é obrigatória." };
+
+  const { data: existing } = await supabase
+    .from("competition_editions")
+    .select("id").eq("competition_id", competitionId).eq("season_id", seasonId).maybeSingle();
+
+  if (existing) return { error: "Já existe uma edição desta competição nesta temporada." };
+
+  // Se is_current, remove is_current das outras edições desta competição
+  if (isCurrent) {
+    await supabase
+      .from("competition_editions")
+      .update({ is_current: false })
+      .eq("competition_id", competitionId);
+  }
+
+  const { data: inserted, error } = await supabase
+    .from("competition_editions")
+    .insert({
+      competition_id: competitionId,
+      season_id: seasonId,
+      status: "planned",
+      custom_name: customName.trim() || null,
+      is_current: isCurrent,
+    })
+    .select("id").single();
+
+  if (error) return { error: error.message };
+
+  await supabase.from("edition_settings").insert({ edition_id: inserted.id });
+
+  const { data: freeAgentTeam } = await supabase
+    .from("teams").select("id")
+    .eq("organization_id", profile.organization_id)
+    .eq("full_name", "Sem Clube").maybeSingle();
+
+  if (freeAgentTeam) {
+    await supabase.from("edition_teams").insert({
+      edition_id: inserted.id, team_id: freeAgentTeam.id,
+      is_free_agent_pool: true, display_order: 999,
+    });
+  }
+
+  revalidatePath("/competicoes/" + competitionId + "/configuracoes");
+  return { id: inserted.id };
+}
+
+export async function editarEdicaoNaConfiguracao(
+  edicaoId: string,
+  competitionId: string,
+  status: string,
+  customName: string,
+  isCurrent: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  // Se is_current, remove is_current das outras edições desta competição
+  if (isCurrent) {
+    await supabase
+      .from("competition_editions")
+      .update({ is_current: false })
+      .eq("competition_id", competitionId)
+      .neq("id", edicaoId);
+  }
+
+  const { error } = await supabase
+    .from("competition_editions")
+    .update({
+      status,
+      custom_name: customName.trim() || null,
+      is_current: isCurrent,
+    })
+    .eq("id", edicaoId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/competicoes/" + competitionId + "/configuracoes");
+  return { success: true };
+}
+
+export async function deletarEdicao(
+  edicaoId: string,
   competitionId: string,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
@@ -198,11 +286,9 @@ export async function deletarCategoria(
   if (!user) return { error: "Não autenticado." };
 
   const { error } = await supabase
-    .from("competition_categories")
-    .delete()
-    .eq("id", categoryId);
+    .from("competition_editions").delete().eq("id", edicaoId);
 
   if (error) return { error: error.message };
-  revalidatePath(`/competicoes/${competitionId}/configuracoes`);
+  revalidatePath("/competicoes/" + competitionId + "/configuracoes");
   return { success: true };
 }
