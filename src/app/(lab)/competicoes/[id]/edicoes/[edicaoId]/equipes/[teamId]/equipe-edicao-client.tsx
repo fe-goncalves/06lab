@@ -268,6 +268,10 @@ export default function EquipeEdicaoClient({
   const [removeBlocked, setRemoveBlocked] = useState(false);
   const [checkingRemove, setCheckingRemove] = useState(false);
 
+  // Modal rejeitar
+  const [rejectEntryId, setRejectEntryId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
   const team = editionTeam.teams;
   const teamColor = team?.primary_color ?? "var(--color-brand)";
 
@@ -349,6 +353,21 @@ export default function EquipeEdicaoClient({
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: "approved" } : e));
   }
 
+  async function handleRejeitar(entryId: string, reason: string) {
+    setProcessing(entryId);
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("edition_roster_entries")
+      .update({ status: "rejected", rejection_reason: reason || null })
+      .eq("id", entryId);
+    setProcessing(null);
+    if (error) { toast("error", error.message); return; }
+    toast("success", "Inscrição rejeitada.");
+    setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: "rejected" } : e));
+    setRejectEntryId(null);
+    setRejectReason("");
+  }
+
   async function handleDesativar(entryId: string) {
     setProcessing(entryId);
     const result = await desativarInscricao(entryId);
@@ -418,7 +437,7 @@ export default function EquipeEdicaoClient({
     const result = await inscreverAtletaQualquer(editionTeam.id, athlete.id, null);
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Atleta inscrito.");
+    toast("success", "Atleta submetido para aprovação.");
     setEntries(prev => [...prev, {
       id: (result as any).id ?? crypto.randomUUID(),
       member_type: "athlete",
@@ -435,42 +454,13 @@ export default function EquipeEdicaoClient({
 
   async function handleInscreverStaff(member: Staff) {
     setProcessing(member.id);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { toast("error", "Não autenticado."); setProcessing(null); return; }
-
-    const { data: existing } = await supabase
-      .from("edition_roster_entries")
-      .select("id")
-      .eq("edition_team_id", editionTeam.id)
-      .eq("staff_member_id", member.id)
-      .maybeSingle();
-
-    if (existing) {
-      toast("error", "Membro já inscrito nesta edição.");
-      setProcessing(null);
-      return;
-    }
-
-    const { data: inserted, error } = await supabase
-        .from("edition_roster_entries")
-        .insert({
-          edition_team_id: editionTeam.id,
-          member_type: "staff",
-          staff_member_id: member.id,
-          status: "pending",
-          submitter_type: "admin",
-          submitted_at: new Date().toISOString(),
-        })
-      .select("id")
-      .single();
-
+    const result = await inscreverAtletaQualquer(editionTeam.id, member.id, null, "staff");
     setProcessing(null);
-    if (error) { toast("error", error.message); return; }
+    if ("error" in result) { toast("error", result.error); return; }
 
-    toast("success", "Membro inscrito.");
+    toast("success", "Membro submetido para aprovação.");
     setEntries(prev => [...prev, {
-      id: inserted.id,
+      id: (result as any).id ?? crypto.randomUUID(),
       member_type: "staff",
       status: "pending",
       athlete_id: null,
@@ -505,7 +495,7 @@ export default function EquipeEdicaoClient({
     if ("error" in inscResult) {
       toast("error", `Atleta criado mas erro ao inscrever: ${inscResult.error}`);
     } else {
-      toast("success", "Atleta criado e inscrito.");
+      toast("success", "Atleta criado e submetido para aprovação.");
       const newAthlete: Athlete = {
         id: result.id,
         full_name: createFullName.trim(),
@@ -519,7 +509,7 @@ export default function EquipeEdicaoClient({
       setEntries(prev => [...prev, {
         id: (inscResult as any).id ?? crypto.randomUUID(),
         member_type: "athlete",
-        status: "approved",
+        status: "pending",
         athlete_id: result.id,
         staff_member_id: null,
         position_label_at_inscription: newAthlete.player_positions?.full_name ?? null,
@@ -652,9 +642,15 @@ export default function EquipeEdicaoClient({
                     actionsEl={
                       <>
                         {entry.status === "pending" && (
-                          <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
-                            onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
-                            color="var(--color-brand)" />
+                          <>
+                            <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
+                              onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                              color="var(--color-brand)" />
+                            <ActionButton icon={<X size={14} strokeWidth={2.5} />} label="Rejeitar"
+                              onClick={() => { setRejectEntryId(entry.id); setRejectReason(""); }}
+                              disabled={processing === entry.id}
+                              color="var(--color-danger)" />
+                          </>
                         )}
                         {entry.status === "approved" && (
                           <>
@@ -715,9 +711,15 @@ export default function EquipeEdicaoClient({
                     actionsEl={
                       <>
                         {entry.status === "pending" && (
-                          <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
-                            onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
-                            color="var(--color-brand)" />
+                          <>
+                            <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
+                              onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                              color="var(--color-brand)" />
+                            <ActionButton icon={<X size={14} strokeWidth={2.5} />} label="Rejeitar"
+                              onClick={() => { setRejectEntryId(entry.id); setRejectReason(""); }}
+                              disabled={processing === entry.id}
+                              color="var(--color-danger)" />
+                          </>
                         )}
                         {entry.status === "approved" && (
                           <ActionButton icon={<Ban size={14} strokeWidth={2.5} />} label="Desativar"
@@ -792,6 +794,73 @@ export default function EquipeEdicaoClient({
                 className="rounded-lg border px-4 py-2 text-sm"
                 style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                 Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL REJEITAR ── */}
+      {rejectEntryId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-sm rounded-xl border shadow-xl"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <div className="flex items-center justify-between border-b px-5 py-4"
+              style={{ borderColor: "var(--color-border)" }}>
+              <h2 className="font-display text-base" style={{ color: "var(--color-text-primary)" }}>Rejeitar inscrição</h2>
+              <button type="button" onClick={() => setRejectEntryId(null)}
+                style={{ color: "var(--color-text-secondary)" }}><X size={16} /></button>
+            </div>
+            <div className="px-5 py-4 space-y-3">
+              <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Motivo da rejeição:</p>
+              <div className="space-y-2">
+                {[
+                  "Documento inválido ou ilegível",
+                  "Documento não corresponde ao membro",
+                  "Fora da faixa etária permitida",
+                  "Informações cadastrais incompletas",
+                  "Foto de perfil inadequada ou ausente",
+                  "Outro motivo",
+                ].map(reason => (
+                  <button key={reason} type="button"
+                    onClick={() => setRejectReason(reason)}
+                    className="flex items-center gap-2 w-full rounded-lg border px-3 py-2.5 text-left transition-colors"
+                    style={{
+                      borderColor: rejectReason === reason ? "var(--color-danger)" : "var(--color-border)",
+                      backgroundColor: rejectReason === reason ? "rgba(255,68,68,0.06)" : "transparent",
+                      color: rejectReason === reason ? "var(--color-danger)" : "var(--color-text-primary)",
+                    }}>
+                    <div className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border"
+                      style={{ borderColor: rejectReason === reason ? "var(--color-danger)" : "var(--color-border)" }}>
+                      {rejectReason === reason && (
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: "var(--color-danger)" }} />
+                      )}
+                    </div>
+                    <span className="font-mono text-xs">{reason}</span>
+                  </button>
+                ))}
+              </div>
+              {rejectReason === "Outro motivo" && (
+                <input type="text" placeholder="Descreva o motivo…"
+                  value={rejectReason === "Outro motivo" ? "" : rejectReason}
+                  onChange={e => setRejectReason(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2 text-sm outline-none"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }} />
+              )}
+            </div>
+            <div className="flex gap-2 justify-end border-t px-5 py-4"
+              style={{ borderColor: "var(--color-border)" }}>
+              <button type="button" onClick={() => setRejectEntryId(null)}
+                className="rounded-lg border px-4 py-2 font-mono text-xs"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button"
+                onClick={() => rejectEntryId && handleRejeitar(rejectEntryId, rejectReason)}
+                disabled={processing === rejectEntryId || !rejectReason}
+                className="rounded-lg px-4 py-2 font-mono text-xs font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-danger)", color: "#fff" }}>
+                {processing === rejectEntryId ? "Rejeitando…" : "Confirmar"}
               </button>
             </div>
           </div>
