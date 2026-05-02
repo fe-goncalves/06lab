@@ -28,6 +28,13 @@ export default async function EquipeEdicaoPage({
 
   if (!editionTeam) redirect(`/competicoes/${competitionId}`);
 
+  // Busca IDs de todos os edition_teams desta edição para filtrar inscritos globalmente
+  const { data: allEditionTeamsForFilter } = await supabase
+    .from("edition_teams")
+    .select("id")
+    .eq("edition_id", edicaoId);
+  const allEditionTeamIds = (allEditionTeamsForFilter ?? []).map((e: any) => e.id);
+
   const [
     { data: competition },
     { data: edition },
@@ -37,6 +44,7 @@ export default async function EquipeEdicaoPage({
     { data: allEditionTeams },
     { data: freeAgentPool },
     { data: positions },
+    { data: allEditionRosterEntries },
   ] = await Promise.all([
     supabase.from("competitions")
      .select("id, full_name, short_name, gender")
@@ -58,11 +66,11 @@ export default async function EquipeEdicaoPage({
       .eq("organization_id", orgId)
       .order("full_name"),
 
-    // Comissão com vínculo atual na equipe
-    supabase.from("staff_team_stints")
-      .select("staff_member_id, staff_members(id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name))")
-      .eq("team_id", teamId)
-      .eq("is_current", true),
+    // Toda a comissão da organização (sem filtro por equipe — pode ser inscrita em qualquer equipe)
+    supabase.from("staff_members")
+      .select("id, full_name, surname, photo_url, staff_role_id, staff_roles(full_name)")
+      .eq("organization_id", orgId)
+      .order("full_name"),
 
     // Todas as edition_teams desta edição exceto a atual e sem clube (para transferência)
     supabase.from("edition_teams")
@@ -78,10 +86,17 @@ export default async function EquipeEdicaoPage({
       .eq("is_free_agent_pool", true)
       .maybeSingle(),
 
-    supabase.from("player_positions")
+      supabase.from("player_positions")
       .select("id, full_name, abbreviation")
       .eq("sport_slug", "football7")
       .order("display_order"),
+
+      allEditionTeamIds.length > 0
+      ? supabase.from("edition_roster_entries")
+          .select("athlete_id, staff_member_id, member_type")
+          .in("edition_team_id", allEditionTeamIds)
+          .neq("status", "inactive")
+      : Promise.resolve({ data: [] }),
   ]);
 
   const inscribedAthleteIds = new Set(
@@ -94,15 +109,25 @@ export default async function EquipeEdicaoPage({
   // Atletas disponíveis = todos da org que ainda não estão inscritos nesta edition_team
   const competitionGender = (competition as any)?.gender ?? null;
 
+  // IDs de atletas e staff já inscritos em QUALQUER equipe ativa desta edição
+  const globalInscribedAthleteIds = new Set(
+    (allEditionRosterEntries ?? [])
+      .filter((e: any) => e.member_type === "athlete" && e.athlete_id)
+      .map((e: any) => e.athlete_id)
+  );
+  const globalInscribedStaffIds = new Set(
+    (allEditionRosterEntries ?? [])
+      .filter((e: any) => e.member_type === "staff" && e.staff_member_id)
+      .map((e: any) => e.staff_member_id)
+  );
+
   const availableAthletes = (allAthletes ?? [])
-    .filter((a: any) => !inscribedAthleteIds.has(a.id))
+    .filter((a: any) => !globalInscribedAthleteIds.has(a.id))
     .filter((a: any) => !competitionGender || a.gender === competitionGender);
 
-  // Comissão disponível = vínculo atual na equipe, não inscritos ainda
   const availableStaff = (currentStaff ?? [])
-    .map((s: any) => s.staff_members)
     .filter(Boolean)
-    .filter((s: any) => !inscribedStaffIds.has(s.id));
+    .filter((s: any) => !globalInscribedStaffIds.has(s.id));
 
   return (
     <EquipeEdicaoClient

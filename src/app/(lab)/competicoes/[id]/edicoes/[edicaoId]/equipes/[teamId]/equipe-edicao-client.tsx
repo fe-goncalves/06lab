@@ -193,6 +193,11 @@ export default function EquipeEdicaoClient({
   const [transferEntryId, setTransferEntryId] = useState<string | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
 
+  // Modal remover
+  const [removeConfirmEntryId, setRemoveConfirmEntryId] = useState<string | null>(null);
+  const [removeBlocked, setRemoveBlocked] = useState(false);
+  const [checkingRemove, setCheckingRemove] = useState(false);
+
   const team = editionTeam.teams;
   const teamColor = team?.primary_color ?? "var(--color-brand)";
 
@@ -280,15 +285,36 @@ export default function EquipeEdicaoClient({
   }
 
   async function handleRemover(entryId: string) {
-    if (!confirm("Remover permanentemente desta edição?")) return;
-    setProcessing(entryId);
-    const result = await removerAtletaEdicao(entryId);
+    setCheckingRemove(true);
+    setRemoveConfirmEntryId(entryId);
+    // Verifica se o atleta tem dados na edição (partidas jogadas)
+    const entry = entries.find(e => e.id === entryId);
+    if (entry?.athlete_id) {
+      const supabase = createClient();
+      const { data: lineups } = await supabase
+        .from("match_lineups")
+        .select("id")
+        .eq("athlete_id", entry.athlete_id)
+        .limit(1);
+      setRemoveBlocked((lineups ?? []).length > 0);
+    } else {
+      setRemoveBlocked(false);
+    }
+    setCheckingRemove(false);
+  }
+
+  async function handleConfirmarRemocao() {
+    if (!removeConfirmEntryId) return;
+    setProcessing(removeConfirmEntryId);
+    const result = await removerAtletaEdicao(removeConfirmEntryId);
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Removido.");
-    const removed = entries.find(e => e.id === entryId);
-    setEntries(prev => prev.filter(e => e.id !== entryId));
+    const removed = entries.find(e => e.id === removeConfirmEntryId);
+    setEntries(prev => prev.filter(e => e.id !== removeConfirmEntryId));
     if (removed?.athletes) setAvailableAthletes(prev => [...prev, removed.athletes as Athlete]);
+    setRemoveConfirmEntryId(null);
+    setRemoveBlocked(false);
   }
 
   async function handleTransferir() {
@@ -443,20 +469,23 @@ export default function EquipeEdicaoClient({
           <div className="mb-6 flex items-center gap-6">
             <div className="relative shrink-0">
               {team?.logo_url ? (
-                <img src={team.logo_url} alt="" className="h-14 w-14 rounded-xl object-contain"
-                  style={{ filter: `drop-shadow(0 0 8px ${teamColor}66)` }} />
+                <img src={team.logo_url} alt="" className="h-20 w-20 rounded-xl object-contain"
+                  style={{ filter: `drop-shadow(0 0 12px ${teamColor}77)` }} />
               ) : (
-                <div className="flex h-14 w-14 items-center justify-center rounded-xl border font-display text-lg font-bold"
+                <div className="flex h-20 w-20 items-center justify-center rounded-xl border font-display text-2xl font-bold"
                   style={{ borderColor: teamColor, backgroundColor: `${teamColor}11`, color: teamColor }}>
                   {team?.abbreviation?.slice(0, 2) ?? "?"}
                 </div>
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="font-display text-2xl font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                {team?.full_name ?? "Equipe"}
+              <p className="font-mono text-xs truncate mb-0.5" style={{ color: "var(--color-text-secondary)" }}>
+                {team?.full_name ?? ""}
+              </p>
+              <h1 className="font-display text-3xl font-bold truncate leading-tight" style={{ color: "var(--color-text-primary)" }}>
+                {team?.abbreviation?.toUpperCase() ?? team?.full_name ?? "Equipe"}
               </h1>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className="font-mono text-xs font-bold" style={{ color: teamColor }}>{competitionName}</span>
                 <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>· {edicaoName}</span>
                 {pendingCount > 0 && (
@@ -640,6 +669,62 @@ export default function EquipeEdicaoClient({
           </div>
         )}
       </div>
+
+      {/* ── MODAL CONFIRMAR REMOÇÃO ── */}
+      {removeConfirmEntryId && !removeBlocked && !checkingRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-sm rounded-xl border shadow-xl p-6"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <h2 className="mb-2 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Remover membro</h2>
+            <p className="mb-5 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+              Esta ação é permanente. O membro será removido da inscrição desta edição.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => { setRemoveConfirmEntryId(null); setRemoveBlocked(false); }}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handleConfirmarRemocao}
+                disabled={processing === removeConfirmEntryId}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-danger)", color: "#fff" }}>
+                {processing === removeConfirmEntryId ? "Removendo…" : "Confirmar remoção"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL REMOÇÃO BLOQUEADA ── */}
+      {removeConfirmEntryId && removeBlocked && !checkingRemove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="w-full max-w-sm rounded-xl border shadow-xl p-6"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: "rgba(255,68,68,0.12)" }}>
+                <span style={{ fontSize: 18 }}>⚠️</span>
+              </div>
+              <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Remoção bloqueada</h2>
+            </div>
+            <p className="mb-2 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+              Este membro possui dados registrados na competição (partidas, ações, etc.) e não pode ser removido.
+            </p>
+            <p className="mb-5 font-mono text-sm rounded-lg border px-3 py-2"
+              style={{ color: "#F2C005", borderColor: "rgba(242,192,5,0.2)", backgroundColor: "rgba(242,192,5,0.06)" }}>
+              Para removê-lo da visibilidade, <strong>desative a inscrição</strong> ou <strong>transfira para "Sem clube"</strong>.
+            </p>
+            <div className="flex justify-end">
+              <button type="button" onClick={() => { setRemoveConfirmEntryId(null); setRemoveBlocked(false); }}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── MODAL DE BUSCA ── */}
       {showSearchModal && !showCreateModal && (

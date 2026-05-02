@@ -9,7 +9,7 @@ import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2 } from "lucide-react";
-import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto } from "./edicoes/actions";
+import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad } from "./edicoes/actions";
 import { Star, Search } from "lucide-react";
@@ -1162,7 +1162,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {activeTab === "competicao" && (
           <div>
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-              {[{ key: "fases", label: "FASES" }, { key: "equipes", label: "EQUIPES" }].map(sub => (
+            {[{ key: "equipes", label: "EQUIPES" }, { key: "fases", label: "FASES" }].map(sub => (
                 <button key={sub.key} type="button" onClick={() => setActiveCompTab(sub.key as any)}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeCompTab === sub.key ? "var(--color-brand)" : "transparent", color: activeCompTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
@@ -1223,20 +1223,30 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                           style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: isInactive ? 0.4 : 0.7, transition: "opacity 0.15s" }}
                           onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                           onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.4" : "0.7")}>
+                          {/* Logo */}
                           {et.teams?.logo_url ? (
-                            <img src={et.teams.logo_url} alt="" className="h-9 w-9 rounded object-contain shrink-0" />
+                            <img src={et.teams.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain shrink-0" />
                           ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border text-xs font-bold"
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border font-mono text-xs font-bold"
                               style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                               {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
                             </div>
                           )}
+                          {/* Sigla (mesmo tamanho da logo) */}
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center">
+                            <p className="font-mono text-sm font-bold leading-none" style={{ color: "var(--color-text-primary)" }}>
+                              {et.teams?.abbreviation?.toUpperCase() ?? "—"}
+                            </p>
+                          </div>
+                          {/* Nome */}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>{et.teams?.abbreviation?.toUpperCase() ?? "—"}</p>
+                              <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
+                                {et.teams?.full_name?.split(" ").slice(0, 2).join(" ") ?? "—"}
+                              </p>
                               {isInactive && <span className="font-mono text-xs rounded px-1.5 py-0.5" style={{ backgroundColor: "rgba(242,192,5,0.15)", color: "#F2C005" }}>Desativada</span>}
                             </div>
-                            <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
+                            <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{et.teams?.full_name ?? "—"}</p>
                           </div>
                           <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                             <Link href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`}
@@ -1271,67 +1281,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
                 {/* Modal adicionar equipe */}
                 {showAddTeamModal && (
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-                    <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col"
-                      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "70vh" }}>
-                      <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
-                        style={{ borderColor: "var(--color-border)" }}>
-                        <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Adicionar equipe</h2>
-                        <button type="button" onClick={() => setShowAddTeamModal(false)}
-                          style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
-                      </div>
-                      <div className="px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
-                        <div className="flex items-center gap-2 rounded-lg border px-3 py-2"
-                          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                          <Search size={14} style={{ color: "var(--color-text-secondary)" }} />
-                          <input autoFocus type="text" placeholder="Buscar equipe…"
-                            value={teamSearchQuery}
-                            onChange={e => setTeamSearchQuery(e.target.value)}
-                            className="flex-1 bg-transparent font-mono text-sm outline-none"
-                            style={{ color: "var(--color-text-primary)" }} />
-                        </div>
-                      </div>
-                      <div className="overflow-y-auto flex-1">
-                        {(() => {
-                          const enrolledIds = new Set(editionTeams.map(et => et.team_id));
-                          const q = teamSearchQuery.toLowerCase();
-                          const available = allTeams.filter(t =>
-                            !enrolledIds.has(t.id) &&
-                            (!q || t.full_name.toLowerCase().includes(q) || (t.abbreviation ?? "").toLowerCase().includes(q))
-                          );
-                          if (available.length === 0) return (
-                            <p className="px-6 py-8 text-center font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                              Nenhuma equipe disponível.
-                            </p>
-                          );
-                          return available.map((team, idx) => (
-                            <button key={team.id} type="button"
-                              onClick={() => handleAdicionarEquipeHub(team.id)}
-                              disabled={addingTeamId === team.id}
-                              className="flex items-center gap-3 w-full px-6 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)] disabled:opacity-50"
-                              style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                              {team.logo_url ? (
-                                <img src={team.logo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0 border"
-                                  style={{ borderColor: "var(--color-border)" }} />
-                              ) : (
-                                <div className="h-8 w-8 rounded-full shrink-0 border flex items-center justify-center"
-                                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                                  <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
-                                    {(team.abbreviation ?? team.full_name).slice(0, 2).toUpperCase()}
-                                  </span>
-                                </div>
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>{team.full_name}</p>
-                                {team.abbreviation && <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{team.abbreviation}</p>}
-                              </div>
-                              {addingTeamId === team.id && <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>Adicionando…</span>}
-                            </button>
-                          ));
-                        })()}
-                      </div>
-                    </div>
-                  </div>
+                  <AddTeamModal
+                    allTeams={allTeams}
+                    editionTeams={editionTeams}
+                    addingTeamId={addingTeamId}
+                    onAdd={handleAdicionarEquipeHub}
+                    onClose={() => { setShowAddTeamModal(false); setTeamSearchQuery(""); }}
+                    inputClass={inputClass}
+                    inputStyle={inputStyle}
+                  />
                 )}
               </div>
             )}
@@ -1381,6 +1339,143 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — configuração de pontos do ranking por categoria serão definidos aqui.</p>
               </div>
             )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── AddTeamModal ─────────────────────────────────────────────────────────────
+function AddTeamModal({
+  allTeams, editionTeams, addingTeamId, onAdd, onClose, inputClass, inputStyle,
+}: {
+  allTeams: Team[];
+  editionTeams: EditionTeam[];
+  addingTeamId: string | null;
+  onAdd: (teamId: string) => Promise<void>;
+  onClose: () => void;
+  inputClass: string;
+  inputStyle: any;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+
+  const enrolledIds = new Set(editionTeams.map(et => et.team_id));
+  const q = query.toLowerCase();
+  const available = allTeams.filter(t =>
+    !enrolledIds.has(t.id) &&
+    (!q || t.full_name.toLowerCase().includes(q) || (t.abbreviation ?? "").toLowerCase().includes(q))
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+      <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col"
+        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "72vh" }}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
+          style={{ borderColor: "var(--color-border)" }}>
+          <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
+            {selectedTeam ? "Confirmar adição" : "Adicionar equipe"}
+          </h2>
+          <button type="button" onClick={onClose} style={{ color: "var(--color-text-secondary)" }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Etapa 1 — busca */}
+        {!selectedTeam && (
+          <>
+            <div className="px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
+              <div className="flex items-center gap-2 rounded-lg border px-3 py-2"
+                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                <Search size={14} style={{ color: "var(--color-text-secondary)" }} />
+                <input autoFocus type="text" placeholder="Buscar equipe…"
+                  value={query} onChange={e => setQuery(e.target.value)}
+                  className="flex-1 bg-transparent font-mono text-sm outline-none"
+                  style={{ color: "var(--color-text-primary)" }} />
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {available.length === 0 ? (
+                <p className="px-6 py-8 text-center font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                  Nenhuma equipe disponível.
+                </p>
+              ) : (
+                available.map((team, idx) => (
+                  <button key={team.id} type="button"
+                    onClick={() => setSelectedTeam(team)}
+                    className="flex items-center gap-3 w-full px-6 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                    {team.logo_url ? (
+                      <img src={team.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain shrink-0 border"
+                        style={{ borderColor: "var(--color-border)" }} />
+                    ) : (
+                      <div className="h-10 w-10 rounded-lg shrink-0 border flex items-center justify-center"
+                        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
+                          {(team.abbreviation ?? team.full_name).slice(0, 2).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
+                        {team.abbreviation?.toUpperCase() ?? team.full_name}
+                      </p>
+                      <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
+                        {team.full_name}
+                      </p>
+                    </div>
+                    <ChevronRight size={14} style={{ color: "#555" }} />
+                  </button>
+                ))
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Etapa 2 — confirmação */}
+        {selectedTeam && (
+          <div className="px-6 py-6 flex flex-col gap-5">
+            <div className="flex items-center gap-4 rounded-xl border p-4"
+              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+              {selectedTeam.logo_url ? (
+                <img src={selectedTeam.logo_url} alt="" className="h-12 w-12 rounded-xl object-contain shrink-0" />
+              ) : (
+                <div className="h-12 w-12 rounded-xl shrink-0 border flex items-center justify-center"
+                  style={{ borderColor: "var(--color-border)" }}>
+                  <span className="font-mono text-sm font-bold" style={{ color: "var(--color-text-secondary)" }}>
+                    {(selectedTeam.abbreviation ?? selectedTeam.full_name).slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+                  {selectedTeam.abbreviation?.toUpperCase() ?? selectedTeam.full_name}
+                </p>
+                <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  {selectedTeam.full_name}
+                </p>
+              </div>
+            </div>
+            <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+              Confirma a adição desta equipe à edição atual?
+            </p>
+            <div className="flex gap-3 justify-between">
+              <button type="button" onClick={() => setSelectedTeam(null)}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                ← Voltar
+              </button>
+              <button type="button"
+                onClick={() => onAdd(selectedTeam.id)}
+                disabled={addingTeamId === selectedTeam.id}
+                className="rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                {addingTeamId === selectedTeam.id ? "Adicionando…" : "Confirmar"}
+              </button>
+            </div>
           </div>
         )}
       </div>
