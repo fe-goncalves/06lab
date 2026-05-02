@@ -366,27 +366,55 @@ export async function transferirAtletaNaEdicao(
 
   if (deactivateError) return { error: deactivateError.message };
 
-  const { data: newEntry, error: insertError } = await supabase
-    .from("edition_roster_entries")
-    .insert({
-      edition_team_id: newEditionTeamId,
-      member_type: original.member_type,
-      athlete_id: original.athlete_id,
-      staff_member_id: original.staff_member_id,
-      position_id_at_inscription: original.position_id_at_inscription,
-      position_label_at_inscription: original.position_label_at_inscription,
-      status: "approved",
-      submitted_by: profile?.id,
-      submitter_type: "admin",
-      submitted_at: new Date().toISOString(),
-      reviewed_by: profile?.id,
-      reviewed_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+  // Verifica se já existe um entry para este atleta neste destination team (mesmo inativo)
+  const lookupField = original.member_type === "athlete" ? "athlete_id" : "staff_member_id";
+  const lookupValue = original.member_type === "athlete" ? original.athlete_id : original.staff_member_id;
 
-  if (insertError) return { error: insertError.message };
-  return { success: true, newEntryId: newEntry.id };
+  const { data: existingInDest } = await supabase
+    .from("edition_roster_entries")
+    .select("id, status")
+    .eq("edition_team_id", newEditionTeamId)
+    .eq(lookupField, lookupValue)
+    .maybeSingle();
+
+  let newEntryId: string;
+
+  if (existingInDest) {
+    // Reativa o entry existente em vez de criar duplicata
+    const { error: reactivateError } = await supabase
+      .from("edition_roster_entries")
+      .update({
+        status: "approved",
+        reviewed_by: profile?.id,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", existingInDest.id);
+    if (reactivateError) return { error: reactivateError.message };
+    newEntryId = existingInDest.id;
+  } else {
+    const { data: newEntry, error: insertError } = await supabase
+      .from("edition_roster_entries")
+      .insert({
+        edition_team_id: newEditionTeamId,
+        member_type: original.member_type,
+        athlete_id: original.athlete_id,
+        staff_member_id: original.staff_member_id,
+        position_id_at_inscription: original.position_id_at_inscription,
+        position_label_at_inscription: original.position_label_at_inscription,
+        status: "approved",
+        submitted_by: profile?.id,
+        submitter_type: "admin",
+        submitted_at: new Date().toISOString(),
+        reviewed_by: profile?.id,
+        reviewed_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
+    if (insertError) return { error: insertError.message };
+    newEntryId = newEntry.id;
+  }
+
+  return { success: true, newEntryId: newEntryId };
 }
 
 export async function inscreverAtletaQualquer(

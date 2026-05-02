@@ -21,7 +21,7 @@ export default async function EquipeEdicaoPage({
   // Busca edition_team da equipe atual
   const { data: editionTeam } = await supabase
     .from("edition_teams")
-    .select("id, team_id, arrival_origin, teams(id, full_name, short_name, abbreviation, logo_url, primary_color, secondary_color)")
+    .select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, short_name, abbreviation, logo_url, primary_color, secondary_color)")
     .eq("edition_id", edicaoId)
     .eq("team_id", teamId)
     .maybeSingle();

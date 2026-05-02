@@ -237,6 +237,7 @@ export default function EquipeEdicaoClient({
   const [processing, setProcessing] = useState<string | null>(null);
 
   // Modal busca atleta/comissão
+  const isFreeAgentPool = editionTeam.is_free_agent_pool === true;
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Athlete[]>([]);
@@ -271,15 +272,15 @@ export default function EquipeEdicaoClient({
   const teamColor = team?.primary_color ?? "var(--color-brand)";
 
   const athletes = entries
-    .filter(e => e.member_type === "athlete")
+    .filter(e => e.member_type === "athlete" && (isFreeAgentPool ? e.status !== "inactive" : true))
     .sort((a, b) => {
       const nameA = (a.athletes?.surname ?? a.athletes?.full_name ?? "").toLowerCase();
       const nameB = (b.athletes?.surname ?? b.athletes?.full_name ?? "").toLowerCase();
       return nameA.localeCompare(nameB, "pt-BR");
     });
 
-  const staff = entries
-    .filter(e => e.member_type === "staff")
+    const staff = entries
+    .filter(e => e.member_type === "staff" && (isFreeAgentPool ? e.status !== "inactive" : true))
     .sort((a, b) => {
       const nameA = (a.staff_members?.surname ?? a.staff_members?.full_name ?? "").toLowerCase();
       const nameB = (b.staff_members?.surname ?? b.staff_members?.full_name ?? "").toLowerCase();
@@ -579,7 +580,7 @@ export default function EquipeEdicaoClient({
                 )}
               </div>
             </div>
-            {!editionTeam.is_free_agent_pool && (
+            {editionTeam.is_free_agent_pool !== true && (
               <button type="button" onClick={() => setShowSearchModal(true)}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shrink-0"
                 style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
@@ -799,7 +800,7 @@ export default function EquipeEdicaoClient({
       )}
 
       {/* ── MODAL DE BUSCA ── */}
-      {showSearchModal && !showCreateModal && (
+      {showSearchModal && !showCreateModal && !isFreeAgentPool && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "75vh" }}>
