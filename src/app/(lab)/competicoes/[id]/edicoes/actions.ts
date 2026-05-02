@@ -190,7 +190,7 @@ export async function inscreverAtleta(
       athlete_id: athleteId,
       member_type: "athlete",
       position_id_at_inscription: positionId,
-      status: "approved",
+      status: "pending",
       submitter_type: "admin",
     });
 
@@ -401,12 +401,10 @@ export async function transferirAtletaNaEdicao(
         staff_member_id: original.staff_member_id,
         position_id_at_inscription: original.position_id_at_inscription,
         position_label_at_inscription: original.position_label_at_inscription,
-        status: "approved",
+        status: "pending",
         submitted_by: profile?.id,
         submitter_type: "admin",
         submitted_at: new Date().toISOString(),
-        reviewed_by: profile?.id,
-        reviewed_at: new Date().toISOString(),
       })
       .select("id")
       .single();

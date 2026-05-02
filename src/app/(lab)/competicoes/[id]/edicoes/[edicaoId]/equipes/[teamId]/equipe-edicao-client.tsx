@@ -422,7 +422,7 @@ export default function EquipeEdicaoClient({
     setEntries(prev => [...prev, {
       id: (result as any).id ?? crypto.randomUUID(),
       member_type: "athlete",
-      status: "approved",
+      status: "pending",
       athlete_id: athlete.id,
       staff_member_id: null,
       position_label_at_inscription: athlete.player_positions?.full_name ?? null,
@@ -453,16 +453,15 @@ export default function EquipeEdicaoClient({
     }
 
     const { data: inserted, error } = await supabase
-      .from("edition_roster_entries")
-      .insert({
-        edition_team_id: editionTeam.id,
-        member_type: "staff",
-        staff_member_id: member.id,
-        status: "approved",
-        submitter_type: "admin",
-        submitted_at: new Date().toISOString(),
-        reviewed_at: new Date().toISOString(),
-      })
+        .from("edition_roster_entries")
+        .insert({
+          edition_team_id: editionTeam.id,
+          member_type: "staff",
+          staff_member_id: member.id,
+          status: "pending",
+          submitter_type: "admin",
+          submitted_at: new Date().toISOString(),
+        })
       .select("id")
       .single();
 
@@ -473,7 +472,7 @@ export default function EquipeEdicaoClient({
     setEntries(prev => [...prev, {
       id: inserted.id,
       member_type: "staff",
-      status: "approved",
+      status: "pending",
       athlete_id: null,
       staff_member_id: member.id,
       position_label_at_inscription: null,
