@@ -1603,9 +1603,6 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   inputClass: string;
   inputStyle: any;
 }) {
-  const [subTab, setSubTab] = useState<"config" | "janelas">("config");
-
-  // Config states
   const [athleteDocType, setAthleteDocType] = useState<"rg" | "cpf">("rg");
   const [staffDocType, setStaffDocType] = useState<"rg" | "cpf">("rg");
   const [maxAthletes, setMaxAthletes] = useState("");
@@ -1613,65 +1610,52 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   const [maxTransfers, setMaxTransfers] = useState("");
   const [minBirthYear, setMinBirthYear] = useState("");
   const [maxBirthYear, setMaxBirthYear] = useState("");
-  const [loadedConfig, setLoadedConfig] = useState(false);
-  const [savingConfig, setSavingConfig] = useState(false);
-
-  // Janelas states
-  const [windows, setWindows] = useState<any[]>([]);
-  const [loadedWindows, setLoadedWindows] = useState(false);
-  const [showNewWindow, setShowNewWindow] = useState(false);
-  const [newOpensAt, setNewOpensAt] = useState("");
-  const [newClosesAt, setNewClosesAt] = useState("");
-  const [savingWindow, setSavingWindow] = useState(false);
+  const [windowOpensAt, setWindowOpensAt] = useState("");
+  const [windowClosesAt, setWindowClosesAt] = useState("");
+  const [windowId, setWindowId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (!selectedEditionId) return;
-    setLoadedConfig(false);
-    setLoadedWindows(false);
+    setLoaded(false);
   }, [selectedEditionId]);
 
   useEffect(() => {
-    if (!selectedEditionId || loadedConfig) return;
+    if (!selectedEditionId || loaded) return;
     async function load() {
       const supabase = createClient();
-      const { data } = await supabase
-        .from("edition_settings")
-        .select("*")
-        .eq("edition_id", selectedEditionId)
-        .maybeSingle();
-      if (data) {
-        setAthleteDocType(data.athlete_doc_type ?? "rg");
-        setStaffDocType(data.staff_doc_type ?? "rg");
-        setMaxAthletes(data.max_athletes ? String(data.max_athletes) : "");
-        setMaxStaff(data.max_staff ? String(data.max_staff) : "");
-        setMaxTransfers(data.max_transfers ? String(data.max_transfers) : "");
-        setMinBirthYear(data.min_birth_year ? String(data.min_birth_year) : "");
-        setMaxBirthYear(data.max_birth_year ? String(data.max_birth_year) : "");
+      const [{ data: settings }, { data: windows }] = await Promise.all([
+        supabase.from("edition_settings").select("*").eq("edition_id", selectedEditionId).maybeSingle(),
+        supabase.from("edition_registration_windows").select("id, opens_at, closes_at")
+          .eq("edition_id", selectedEditionId).order("opens_at").limit(1),
+      ]);
+      if (settings) {
+        setAthleteDocType(settings.athlete_doc_type ?? "rg");
+        setStaffDocType(settings.staff_doc_type ?? "rg");
+        setMaxAthletes(settings.max_athletes ? String(settings.max_athletes) : "");
+        setMaxStaff(settings.max_staff ? String(settings.max_staff) : "");
+        setMaxTransfers(settings.max_transfers ? String(settings.max_transfers) : "");
+        setMinBirthYear(settings.min_birth_year ? String(settings.min_birth_year) : "");
+        setMaxBirthYear(settings.max_birth_year ? String(settings.max_birth_year) : "");
       }
-      setLoadedConfig(true);
+      const win = windows?.[0];
+      if (win) {
+        setWindowId(win.id);
+        // datetime-local espera "YYYY-MM-DDTHH:MM"
+        setWindowOpensAt(win.opens_at ? win.opens_at.slice(0, 16) : "");
+        setWindowClosesAt(win.closes_at ? win.closes_at.slice(0, 16) : "");
+      }
+      setLoaded(true);
     }
     void load();
-  }, [selectedEditionId, loadedConfig]);
+  }, [selectedEditionId, loaded]);
 
-  useEffect(() => {
-    if (!selectedEditionId || loadedWindows) return;
-    async function load() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("edition_registration_windows")
-        .select("id, opens_at, closes_at, is_active")
-        .eq("edition_id", selectedEditionId)
-        .order("opens_at");
-      setWindows(data ?? []);
-      setLoadedWindows(true);
-    }
-    void load();
-  }, [selectedEditionId, loadedWindows]);
-
-  async function handleSaveConfig() {
-    setSavingConfig(true);
+  async function handleSave() {
+    setSaving(true);
     const supabase = createClient();
-    const { error } = await supabase
+
+    // Salva edition_settings
+    const { error: settingsError } = await supabase
       .from("edition_settings")
       .upsert({
         edition_id: selectedEditionId,
@@ -1683,278 +1667,214 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
         min_birth_year: minBirthYear ? Number(minBirthYear) : null,
         max_birth_year: maxBirthYear ? Number(maxBirthYear) : null,
       }, { onConflict: "edition_id" });
-    setSavingConfig(false);
-    if (error) { toast("error", error.message); return; }
+
+    if (settingsError) { toast("error", settingsError.message); setSaving(false); return; }
+
+    // Salva/atualiza janela de inscrição (período único)
+    if (windowOpensAt && windowClosesAt) {
+      if (windowId) {
+        await supabase.from("edition_registration_windows")
+          .update({ opens_at: windowOpensAt, closes_at: windowClosesAt, is_active: true })
+          .eq("id", windowId);
+      } else {
+        const { data: inserted } = await supabase
+          .from("edition_registration_windows")
+          .insert({ edition_id: selectedEditionId, opens_at: windowOpensAt, closes_at: windowClosesAt, is_active: true })
+          .select("id").single();
+        if (inserted) setWindowId(inserted.id);
+      }
+    } else if (windowId && !windowOpensAt && !windowClosesAt) {
+      // Se o admin apagou as datas, desativa a janela
+      await supabase.from("edition_registration_windows")
+        .update({ is_active: false }).eq("id", windowId);
+    }
+
+    setSaving(false);
     toast("success", "Configurações de inscrição salvas.");
   }
 
-  async function handleCreateWindow() {
-    if (!newOpensAt || !newClosesAt) return;
-    setSavingWindow(true);
-    const supabase = createClient();
-    const { data, error } = await supabase
-      .from("edition_registration_windows")
-      .insert({ edition_id: selectedEditionId, opens_at: newOpensAt, closes_at: newClosesAt, is_active: true })
-      .select("id, opens_at, closes_at, is_active")
-      .single();
-    setSavingWindow(false);
-    if (error) { toast("error", error.message); return; }
-    setWindows(prev => [...prev, data]);
-    setNewOpensAt(""); setNewClosesAt(""); setShowNewWindow(false);
-    toast("success", "Janela criada.");
-  }
-
-  async function handleToggleWindow(windowId: string, current: boolean) {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("edition_registration_windows")
-      .update({ is_active: !current })
-      .eq("id", windowId);
-    if (error) { toast("error", error.message); return; }
-    setWindows(prev => prev.map(w => w.id === windowId ? { ...w, is_active: !current } : w));
-  }
-
-  async function handleDeleteWindow(windowId: string) {
-    if (!confirm("Excluir esta janela?")) return;
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("edition_registration_windows").delete().eq("id", windowId);
-    if (error) { toast("error", error.message); return; }
-    setWindows(prev => prev.filter(w => w.id !== windowId));
-    toast("success", "Janela excluída.");
-  }
-
-  function formatWindow(iso: string) {
-    try {
-      return new Date(iso).toLocaleString("pt-BR", {
-        day: "2-digit", month: "2-digit", year: "numeric",
-        hour: "2-digit", minute: "2-digit",
-      });
-    } catch { return iso; }
-  }
-
-  function windowStatus(w: any): { label: string; color: string } {
-    if (!w.is_active) return { label: "Inativa", color: "#555" };
+  // Status da janela atual
+  function getWindowStatus(): { label: string; color: string } | null {
+    if (!windowOpensAt || !windowClosesAt) return null;
     const now = new Date();
-    if (now < new Date(w.opens_at)) return { label: "Agendada", color: "#F2C005" };
-    if (now > new Date(w.closes_at)) return { label: "Encerrada", color: "#555" };
-    return { label: "Aberta", color: "var(--color-brand)" };
+    const opens = new Date(windowOpensAt);
+    const closes = new Date(windowClosesAt);
+    if (now < opens) return { label: "Agendada", color: "#F2C005" };
+    if (now > closes) return { label: "Encerrada", color: "#555" };
+    return { label: "Aberta agora", color: "var(--color-brand)" };
   }
 
-  if (!loadedConfig) return <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>;
+  const windowStatus = getWindowStatus();
+
+  if (!loaded) return <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>;
+
+  const sectionClass = "rounded-xl border p-5 space-y-4";
+  const sectionStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" };
+
+  const fieldStyle: React.CSSProperties = {
+    borderColor: "var(--color-border)",
+    backgroundColor: "var(--color-background)",
+    color: "var(--color-text-primary)",
+    borderRadius: 8,
+    border: "1px solid var(--color-border)",
+    padding: "8px 12px",
+    fontSize: 13,
+    fontFamily: "var(--font-mono)",
+    outline: "none",
+    width: "100%",
+    appearance: "none" as any,
+    MozAppearance: "textfield" as any,
+  };
 
   return (
-    <div className="max-w-2xl">
-      {/* Sub-abas */}
-      <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-        {[{ key: "config", label: "CONFIGURAÇÕES" }, { key: "janelas", label: "JANELAS" }].map(sub => (
-          <button key={sub.key} type="button" onClick={() => setSubTab(sub.key as any)}
-            className="border-b-2 pb-3 font-mono text-xs transition-colors"
-            style={{ borderColor: subTab === sub.key ? "var(--color-brand)" : "transparent", color: subTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
-            {sub.label}
-          </button>
-        ))}
+    <div className="max-w-2xl space-y-5">
+
+      {/* ── Janela de inscrição ── */}
+      <div className={sectionClass} style={sectionStyle}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+            Janela de inscrição
+          </h3>
+          {windowStatus && (
+            <span className="font-mono text-xs rounded px-2 py-0.5 font-bold"
+              style={{ backgroundColor: `${windowStatus.color}22`, color: windowStatus.color }}>
+              {windowStatus.label}
+            </span>
+          )}
+        </div>
+        <p className="font-mono text-xs" style={{ color: "#555" }}>
+          Representantes só podem submeter inscrições dentro deste período. Admins podem inscrever a qualquer momento.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Abertura</span>
+            <input
+              type="datetime-local"
+              value={windowOpensAt}
+              onChange={e => setWindowOpensAt(e.target.value)}
+              style={fieldStyle}
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Encerramento</span>
+            <input
+              type="datetime-local"
+              value={windowClosesAt}
+              onChange={e => setWindowClosesAt(e.target.value)}
+              style={fieldStyle}
+            />
+          </label>
+        </div>
+        {windowOpensAt && windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt) && (
+          <p className="font-mono text-xs" style={{ color: "var(--color-danger)" }}>
+            A data de abertura deve ser anterior ao encerramento.
+          </p>
+        )}
       </div>
 
-      {subTab === "config" && (
-        <div className="space-y-5">
-          {/* Documentos */}
-          <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <h3 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-              Documentos de controle
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <p className="mb-2 text-sm" style={{ color: "var(--color-text-primary)" }}>Atletas</p>
-                <div className="flex gap-2">
-                  {(["rg", "cpf"] as const).map(doc => (
-                    <button key={doc} type="button" onClick={() => setAthleteDocType(doc)}
-                      className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
-                      style={{
-                        borderColor: athleteDocType === doc ? "var(--color-brand)" : "var(--color-border)",
-                        backgroundColor: athleteDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
-                        color: athleteDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
-                      }}>
-                      {doc.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-sm" style={{ color: "var(--color-text-primary)" }}>Comissão técnica</p>
-                <div className="flex gap-2">
-                  {(["rg", "cpf"] as const).map(doc => (
-                    <button key={doc} type="button" onClick={() => setStaffDocType(doc)}
-                      className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
-                      style={{
-                        borderColor: staffDocType === doc ? "var(--color-brand)" : "var(--color-border)",
-                        backgroundColor: staffDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
-                        color: staffDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
-                      }}>
-                      {doc.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Limites */}
-          <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <h3 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-              Limites por equipe
-            </h3>
-            <div className="grid gap-4 sm:grid-cols-3">
-              <label className="flex flex-col gap-1">
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Máx. atletas</span>
-                <input type="number" min="0" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)}
-                  placeholder="Sem limite" className={inputClass} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Máx. comissão</span>
-                <input type="number" min="0" value={maxStaff} onChange={e => setMaxStaff(e.target.value)}
-                  placeholder="Sem limite" className={inputClass} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Máx. transferências</span>
-                <input type="number" min="0" value={maxTransfers} onChange={e => setMaxTransfers(e.target.value)}
-                  placeholder="Sem limite" className={inputClass} style={inputStyle} />
-              </label>
-            </div>
-          </div>
-
-          {/* Controle de nascimento */}
-          <div className="rounded-xl border p-5" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <h3 className="mb-1 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-              Controle por ano de nascimento
-            </h3>
-            <p className="mb-4 font-mono text-xs" style={{ color: "#555" }}>
-              Atletas nascidos fora dessa faixa não poderão ser inscritos.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="flex flex-col gap-1">
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Ano mínimo (mais antigo)</span>
-                <input type="number" min="1900" max="2030" value={minBirthYear}
-                  onChange={e => setMinBirthYear(e.target.value)} placeholder="Ex: 1990"
-                  className={inputClass} style={inputStyle} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Ano máximo (mais recente)</span>
-                <input type="number" min="1900" max="2030" value={maxBirthYear}
-                  onChange={e => setMaxBirthYear(e.target.value)} placeholder="Ex: 2008"
-                  className={inputClass} style={inputStyle} />
-              </label>
-            </div>
-            {minBirthYear && maxBirthYear && Number(minBirthYear) <= Number(maxBirthYear) && (
-              <p className="mt-3 font-mono text-xs rounded-lg border px-3 py-2"
-                style={{ color: "var(--color-brand)", borderColor: "rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)" }}>
-                Atletas elegíveis: nascidos entre {minBirthYear} e {maxBirthYear}
-              </p>
-            )}
-          </div>
-
-          <button type="button" onClick={handleSaveConfig} disabled={savingConfig}
-            className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            {savingConfig ? "Salvando…" : "Salvar configurações"}
-          </button>
-        </div>
-      )}
-
-      {subTab === "janelas" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-              Janelas definem quando representantes podem submeter inscrições.
-            </p>
-            <button type="button" onClick={() => setShowNewWindow(v => !v)}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors hover:border-[var(--color-brand)]"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-              <Plus size={12} /> Nova janela
-            </button>
-          </div>
-
-          {showNewWindow && (
-            <div className="rounded-xl border p-4 space-y-3"
-              style={{ borderColor: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.03)" }}>
-              <p className="font-mono text-xs font-bold" style={{ color: "var(--color-brand)" }}>Nova janela de inscrição</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Abertura</span>
-                  <input type="datetime-local" value={newOpensAt} onChange={e => setNewOpensAt(e.target.value)}
-                    className={inputClass} style={inputStyle} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Encerramento</span>
-                  <input type="datetime-local" value={newClosesAt} onChange={e => setNewClosesAt(e.target.value)}
-                    className={inputClass} style={inputStyle} />
-                </label>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button type="button" onClick={() => setShowNewWindow(false)}
-                  className="rounded-lg border px-3 py-1.5 font-mono text-xs"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                  Cancelar
+      {/* ── Documentos de controle ── */}
+      <div className={sectionClass} style={sectionStyle}>
+        <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+          Documentos de controle
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="mb-2 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Atletas</p>
+            <div className="flex gap-2">
+              {(["rg", "cpf"] as const).map(doc => (
+                <button key={doc} type="button" onClick={() => setAthleteDocType(doc)}
+                  className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
+                  style={{
+                    borderColor: athleteDocType === doc ? "var(--color-brand)" : "var(--color-border)",
+                    backgroundColor: athleteDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
+                    color: athleteDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
+                  }}>
+                  {doc.toUpperCase()}
                 </button>
-                <button type="button" onClick={handleCreateWindow}
-                  disabled={savingWindow || !newOpensAt || !newClosesAt}
-                  className="rounded-lg px-3 py-1.5 font-mono text-xs font-medium disabled:opacity-50"
-                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                  {savingWindow ? "Criando…" : "Criar janela"}
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="mb-2 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Comissão técnica</p>
+            <div className="flex gap-2">
+              {(["rg", "cpf"] as const).map(doc => (
+                <button key={doc} type="button" onClick={() => setStaffDocType(doc)}
+                  className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
+                  style={{
+                    borderColor: staffDocType === doc ? "var(--color-brand)" : "var(--color-border)",
+                    backgroundColor: staffDocType === doc ? "rgba(191,242,5,0.08)" : "transparent",
+                    color: staffDocType === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
+                  }}>
+                  {doc.toUpperCase()}
                 </button>
-              </div>
+              ))}
             </div>
-          )}
-
-          {!loadedWindows ? (
-            <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
-          ) : windows.length === 0 ? (
-            <div className="rounded-xl border px-5 py-8 text-center"
-              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-              <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma janela configurada.</p>
-              <p className="mt-1 font-mono text-xs" style={{ color: "#555" }}>
-                Sem janelas ativas, apenas admins podem inscrever.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-xl border overflow-hidden"
-              style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-              {windows.map((w, idx) => {
-                const ws = windowStatus(w);
-                return (
-                  <div key={w.id} className="flex items-center gap-4 px-5 py-4"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                    <div className="flex-1 min-w-0">
-                      <span className="font-mono text-xs rounded px-2 py-0.5 font-bold inline-block mb-1"
-                        style={{ backgroundColor: `${ws.color}22`, color: ws.color }}>
-                        {ws.label}
-                      </span>
-                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                        {formatWindow(w.opens_at)} → {formatWindow(w.closes_at)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button type="button" onClick={() => handleToggleWindow(w.id, w.is_active)}
-                        className="font-mono text-xs rounded-lg border px-2 py-1 transition-colors"
-                        style={{
-                          borderColor: w.is_active ? "var(--color-brand)" : "var(--color-border)",
-                          color: w.is_active ? "var(--color-brand)" : "var(--color-text-secondary)",
-                        }}>
-                        {w.is_active ? "Ativa" : "Inativa"}
-                      </button>
-                      <button type="button" onClick={() => handleDeleteWindow(w.id)}
-                        className="rounded-lg border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                        <Trash2 size={12} strokeWidth={2.5} />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* ── Limites por equipe ── */}
+      <div className={sectionClass} style={sectionStyle}>
+        <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+          Limites por equipe
+        </h3>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. atletas</span>
+            <input type="number" min="0" value={maxAthletes} onChange={e => setMaxAthletes(e.target.value)}
+              placeholder="Sem limite" style={fieldStyle} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. comissão</span>
+            <input type="number" min="0" value={maxStaff} onChange={e => setMaxStaff(e.target.value)}
+              placeholder="Sem limite" style={fieldStyle} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Máx. transferências</span>
+            <input type="number" min="0" value={maxTransfers} onChange={e => setMaxTransfers(e.target.value)}
+              placeholder="Sem limite" style={fieldStyle} />
+          </label>
+        </div>
+      </div>
+
+      {/* ── Controle de nascimento ── */}
+      <div className={sectionClass} style={sectionStyle}>
+        <div>
+          <h3 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+            Controle por ano de nascimento
+          </h3>
+          <p className="mt-1 font-mono text-xs" style={{ color: "#555" }}>
+            Atletas nascidos fora desta faixa não poderão ser inscritos.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Ano mínimo (mais antigo)</span>
+            <input type="number" min="1900" max="2030" value={minBirthYear}
+              onChange={e => setMinBirthYear(e.target.value)} placeholder="Ex: 1990"
+              style={fieldStyle} />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Ano máximo (mais recente)</span>
+            <input type="number" min="1900" max="2030" value={maxBirthYear}
+              onChange={e => setMaxBirthYear(e.target.value)} placeholder="Ex: 2008"
+              style={fieldStyle} />
+          </label>
+        </div>
+        {minBirthYear && maxBirthYear && Number(minBirthYear) <= Number(maxBirthYear) && (
+          <p className="font-mono text-xs rounded-lg border px-3 py-2"
+            style={{ color: "var(--color-brand)", borderColor: "rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+            Atletas elegíveis: nascidos entre {minBirthYear} e {maxBirthYear}
+          </p>
+        )}
+      </div>
+
+      <button type="button" onClick={handleSave}
+        disabled={saving || (!!windowOpensAt && !!windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt))}
+        className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
+        style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+        {saving ? "Salvando…" : "Salvar configurações"}
+      </button>
     </div>
   );
 }

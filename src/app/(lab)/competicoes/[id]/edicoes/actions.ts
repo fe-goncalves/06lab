@@ -459,27 +459,92 @@ export async function inscreverAtletaQualquer(
   const { data: currentET } = await supabase
     .from("edition_teams").select("edition_id").eq("id", editionTeamId).maybeSingle();
 
-  if (currentET?.edition_id) {
-    const { data: allETs } = await supabase
-      .from("edition_teams").select("id").eq("edition_id", currentET.edition_id);
-    const allETIds = (allETs ?? []).map((et: any) => et.id);
+  if (!currentET?.edition_id) return { error: "Edição não encontrada." };
 
-    if (allETIds.length > 0) {
-      const lookupField = memberType === "athlete" ? "athlete_id" : "staff_member_id";
-      const { data: existingActive } = await supabase
-        .from("edition_roster_entries")
-        .select("id")
-        .eq(lookupField, memberId)
-        .in("edition_team_id", allETIds)
-        .in("status", ["pending", "approved"])
-        .eq("is_transfer_origin", false)
+  const editionId = currentET.edition_id;
+
+  const { data: allETs } = await supabase
+    .from("edition_teams").select("id").eq("edition_id", editionId);
+  const allETIds = (allETs ?? []).map((et: any) => et.id);
+
+  // Verifica duplicata global na edição
+  if (allETIds.length > 0) {
+    const lookupField = memberType === "athlete" ? "athlete_id" : "staff_member_id";
+    const { data: existingActive } = await supabase
+      .from("edition_roster_entries")
+      .select("id")
+      .eq(lookupField, memberId)
+      .in("edition_team_id", allETIds)
+      .in("status", ["pending", "approved"])
+      .eq("is_transfer_origin", false)
+      .maybeSingle();
+
+    if (existingActive) {
+      return { error: memberType === "athlete"
+        ? "Atleta já inscrito em outra equipe nesta edição."
+        : "Membro já inscrito em outra equipe nesta edição."
+      };
+    }
+  }
+
+  // Busca configurações da edição
+  const { data: settings } = await supabase
+    .from("edition_settings")
+    .select("max_athletes, max_staff, min_birth_year, max_birth_year")
+    .eq("edition_id", editionId)
+    .maybeSingle();
+
+  if (settings && memberType === "athlete") {
+    // Verificação de ano de nascimento
+    if (settings.min_birth_year || settings.max_birth_year) {
+      const { data: athleteData } = await supabase
+        .from("athletes")
+        .select("birth_date, full_name, surname")
+        .eq("id", memberId)
         .maybeSingle();
 
-      if (existingActive) {
-        return { error: memberType === "athlete"
-          ? "Atleta já inscrito em outra equipe nesta edição."
-          : "Membro já inscrito em outra equipe nesta edição."
-        };
+      if (athleteData?.birth_date) {
+        const birthYear = new Date(athleteData.birth_date).getFullYear();
+        const name = athleteData.surname ?? athleteData.full_name ?? "Atleta";
+
+        if (settings.min_birth_year && birthYear < settings.min_birth_year) {
+          return { error: `${name} nasceu em ${birthYear}, mas o mínimo permitido é ${settings.min_birth_year}.` };
+        }
+        if (settings.max_birth_year && birthYear > settings.max_birth_year) {
+          return { error: `${name} nasceu em ${birthYear}, mas o máximo permitido é ${settings.max_birth_year}.` };
+        }
+      }
+    }
+
+    // Verificação de limite de atletas por equipe
+    if (settings.max_athletes) {
+      const { count } = await supabase
+        .from("edition_roster_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("edition_team_id", editionTeamId)
+        .eq("member_type", "athlete")
+        .in("status", ["pending", "approved"])
+        .eq("is_transfer_origin", false);
+
+      if ((count ?? 0) >= settings.max_athletes) {
+        return { error: `Limite de ${settings.max_athletes} atletas por equipe atingido.` };
+      }
+    }
+  }
+
+  if (settings && memberType === "staff") {
+    // Verificação de limite de comissão por equipe
+    if (settings.max_staff) {
+      const { count } = await supabase
+        .from("edition_roster_entries")
+        .select("id", { count: "exact", head: true })
+        .eq("edition_team_id", editionTeamId)
+        .eq("member_type", "staff")
+        .in("status", ["pending", "approved"])
+        .eq("is_transfer_origin", false);
+
+      if ((count ?? 0) >= settings.max_staff) {
+        return { error: `Limite de ${settings.max_staff} membros de comissão por equipe atingido.` };
       }
     }
   }
