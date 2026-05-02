@@ -270,8 +270,21 @@ export default function EquipeEdicaoClient({
   const team = editionTeam.teams;
   const teamColor = team?.primary_color ?? "var(--color-brand)";
 
-  const athletes = entries.filter(e => e.member_type === "athlete");
-  const staff = entries.filter(e => e.member_type === "staff");
+  const athletes = entries
+    .filter(e => e.member_type === "athlete")
+    .sort((a, b) => {
+      const nameA = (a.athletes?.surname ?? a.athletes?.full_name ?? "").toLowerCase();
+      const nameB = (b.athletes?.surname ?? b.athletes?.full_name ?? "").toLowerCase();
+      return nameA.localeCompare(nameB, "pt-BR");
+    });
+
+  const staff = entries
+    .filter(e => e.member_type === "staff")
+    .sort((a, b) => {
+      const nameA = (a.staff_members?.surname ?? a.staff_members?.full_name ?? "").toLowerCase();
+      const nameB = (b.staff_members?.surname ?? b.staff_members?.full_name ?? "").toLowerCase();
+      return nameA.localeCompare(nameB, "pt-BR");
+    });
   const pendingCount = entries.filter(e => e.status === "pending").length;
 
   const inscribedAthleteIds = new Set(entries.filter(e => e.member_type === "athlete").map(e => e.athlete_id));
@@ -393,7 +406,8 @@ export default function EquipeEdicaoClient({
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", transferTargetId === freeAgentPoolId ? "Atleta movido para sem clube." : "Transferência realizada.");
-    setEntries(prev => prev.map(e => e.id === transferEntryId ? { ...e, status: "inactive" } : e));
+    // Remove completamente da lista — atleta não pertence mais a esta equipe nesta edição
+    setEntries(prev => prev.filter(e => e.id !== transferEntryId));
     setTransferEntryId(null);
     setTransferTargetId("");
   }
@@ -529,11 +543,11 @@ export default function EquipeEdicaoClient({
         <div className="pointer-events-none absolute inset-0"
           style={{ background: `radial-gradient(ellipse at top left, ${teamColor}18 0%, transparent 60%)` }} />
         <div className="relative px-8 pt-6 pb-0">
-          <Breadcrumb items={[
+        <Breadcrumb items={[
             { label: "Competições", href: "/competicoes" },
             { label: competitionName, href: `/competicoes/${competitionId}` },
-            { label: edicaoName, href: `/competicoes/${competitionId}?edicao=${edicaoId}` },
-            { label: team?.full_name ?? "Equipe" },
+            { label: edicaoName, href: `/competicoes/${competitionId}?edicao=${edicaoId}&aba=competicao&comp=equipes` },
+            { label: (team?.short_name ?? team?.full_name ?? "Equipe") },
           ]} />
           <div className="mb-6 flex items-center gap-6">
             <div className="relative shrink-0">
@@ -565,12 +579,14 @@ export default function EquipeEdicaoClient({
                 )}
               </div>
             </div>
-            <button type="button" onClick={() => setShowSearchModal(true)}
-              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shrink-0"
-              style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
-              <Plus size={15} strokeWidth={2.5} />
-              {activeTab === "atletas" ? "Novo atleta" : "Nova comissão"}
-            </button>
+            {!editionTeam.is_free_agent_pool && (
+              <button type="button" onClick={() => setShowSearchModal(true)}
+                className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shrink-0"
+                style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
+                <Plus size={15} strokeWidth={2.5} />
+                {activeTab === "atletas" ? "Novo atleta" : "Nova comissão"}
+              </button>
+            )}
           </div>
           <div className="h-px w-full" style={{ background: `linear-gradient(90deg, ${teamColor}88 0%, transparent 60%)` }} />
           <div className="flex gap-6">

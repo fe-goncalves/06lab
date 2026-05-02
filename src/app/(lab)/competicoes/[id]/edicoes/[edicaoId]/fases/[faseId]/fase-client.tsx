@@ -286,6 +286,7 @@ export default function FaseClient({
             { label: "Competições", href: "/competicoes" },
             { label: competitionName, href: `/competicoes/${competitionId}` },
             { label: seasonName, href: `/competicoes/${competitionId}` },
+            { label: edicaoName, href: `/competicoes/${competitionId}?edicao=${edicaoId}&aba=competicao&comp=fases` },
             { label: fullName || "Fase" },
           ]} />
 

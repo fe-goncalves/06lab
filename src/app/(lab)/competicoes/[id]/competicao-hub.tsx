@@ -52,10 +52,18 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"jogos" | "classificacao" | "estatisticas" | "competicao" | "configuracoes">("jogos");
-  const [activeStatsTab, setActiveStatsTab] = useState<"geral" | "semanal">("geral");
-  const [activeCompTab, setActiveCompTab] = useState<"equipes" | "fases">("equipes");
-  const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking">("gerais");
+  const [activeTab, setActiveTab] = useState<"jogos" | "classificacao" | "estatisticas" | "competicao" | "configuracoes">(
+    (searchParams.get("aba") as any) ?? "jogos"
+  );
+  const [activeStatsTab, setActiveStatsTab] = useState<"geral" | "semanal">(
+    (searchParams.get("stats") as any) ?? "geral"
+  );
+  const [activeCompTab, setActiveCompTab] = useState<"equipes" | "fases">(
+    (searchParams.get("comp") as any) ?? "equipes"
+  );
+  const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking">(
+    (searchParams.get("config") as any) ?? "gerais"
+  );
   const [selectedEditionId, setSelectedEditionId] = useState<string>(searchParams.get("edicao") ?? editions[0]?.id ?? "");
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
@@ -123,6 +131,12 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [editingMatchup, setEditingMatchup] = useState<any | null>(null);
 
   const [novoMatchPreselectedPhaseId, setNovoMatchPreselectedPhaseId] = useState("");
+
+  function updateTab(param: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set(param, value);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
@@ -572,7 +586,13 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   <div className="absolute left-0 top-9 z-50 min-w-[180px] rounded-xl border shadow-lg"
                     style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
                     {editions.map(e => (
-                      <button key={e.id} type="button" onClick={() => { setSelectedEditionId(e.id); setShowEditionDropdown(false); }}
+                      <button key={e.id} type="button" onClick={() => {
+                        setSelectedEditionId(e.id);
+                        setShowEditionDropdown(false);
+                        const params = new URLSearchParams(searchParams.toString());
+                        params.set("edicao", e.id);
+                        router.replace(`?${params.toString()}`, { scroll: false });
+                      }}
                         className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm hover:bg-[rgba(255,255,255,0.05)]"
                         style={{ color: e.id === selectedEditionId ? "var(--color-brand)" : "var(--color-text-primary)" }}>
                         {e.season_name}
@@ -599,7 +619,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               { key: "competicao", label: "COMPETIÇÃO" },
               { key: "configuracoes", label: "CONFIGURAÇÕES" },
             ].map(tab => (
-              <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key as any)}
+              <button key={tab.key} type="button" onClick={() => { setActiveTab(tab.key as any); updateTab("aba", tab.key); }}
                 className="border-b-2 pb-3 font-mono text-xs transition-colors"
                 style={{ borderColor: activeTab === tab.key ? "var(--color-brand)" : "transparent", color: activeTab === tab.key ? "var(--color-brand)" : "#A6A6A6" }}>
                 {tab.label}
@@ -1131,8 +1151,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {activeTab === "estatisticas" && (
           <div>
             <div className="mb-6 flex gap-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-              {[{ key: "geral", label: "GERAL" }, { key: "semanal", label: "SEMANAL" }].map(sub => (
-                <button key={sub.key} type="button" onClick={() => setActiveStatsTab(sub.key as any)}
+            {[{ key: "geral", label: "GERAL" }, { key: "semanal", label: "SEMANAL" }].map(sub => (
+              <button key={sub.key} type="button" onClick={() => { setActiveStatsTab(sub.key as any); updateTab("stats", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeStatsTab === sub.key ? "var(--color-brand)" : "transparent", color: activeStatsTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
                   {sub.label}
@@ -1163,7 +1183,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           <div>
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
             {[{ key: "equipes", label: "EQUIPES" }, { key: "fases", label: "FASES" }].map(sub => (
-                <button key={sub.key} type="button" onClick={() => setActiveCompTab(sub.key as any)}
+                <button key={sub.key} type="button" onClick={() => { setActiveCompTab(sub.key as any); updateTab("comp", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeCompTab === sub.key ? "var(--color-brand)" : "transparent", color: activeCompTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
                   {sub.label}
@@ -1352,13 +1372,13 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {activeTab === "configuracoes" && (
           <div>
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-              {[
+            {[
                 { key: "gerais", label: "GERAIS" },
                 { key: "premiacoes", label: "PREMIAÇÕES" },
                 { key: "inscricoes", label: "INSCRIÇÕES" },
                 { key: "ranking", label: "RANKING" },
               ].map(sub => (
-                <button key={sub.key} type="button" onClick={() => setActiveConfigTab(sub.key as any)}
+                <button key={sub.key} type="button" onClick={() => { setActiveConfigTab(sub.key as any); updateTab("config", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
                   style={{ borderColor: activeConfigTab === sub.key ? "var(--color-brand)" : "transparent", color: activeConfigTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
                   {sub.label}
