@@ -1,5 +1,3 @@
-// EDIÇÕES / ACTIONS
-
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
@@ -38,10 +36,8 @@ export async function criarEdicao(
 
   if (error) return { error: error.message };
 
-  // Cria edition_settings padrão
   await supabase.from("edition_settings").insert({ edition_id: inserted.id });
 
-  // Cria edition_team "sem clube" automaticamente
   const { data: freeAgentTeam } = await supabase
     .from("teams")
     .select("id")
@@ -283,8 +279,10 @@ export async function removerPremiacao(
   return { success: true };
 }
 
+// ← ALTERADO: agora recebe startDate informado pelo admin
 export async function aprovarInscricao(
   entryId: string,
+  startDate: string, // formato YYYY-MM-DD
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -294,7 +292,17 @@ export async function aprovarInscricao(
     .from("user_profiles").select("id")
     .eq("auth_user_id", user.id).maybeSingle();
 
-  const { error } = await supabase
+  // Busca a inscrição para obter athlete_id e edition_team_id
+  const { data: entry } = await supabase
+    .from("edition_roster_entries")
+    .select("athlete_id, edition_team_id, member_type")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  if (!entry) return { error: "Inscrição não encontrada." };
+
+  // Atualiza status da inscrição
+  const { error: updateError } = await supabase
     .from("edition_roster_entries")
     .update({
       status: "approved",
@@ -303,8 +311,83 @@ export async function aprovarInscricao(
     })
     .eq("id", entryId);
 
-  if (error) return { error: error.message };
-  return { success: true };
+  if (updateError) return { error: updateError.message };
+
+// Busca o team_id real a partir do edition_team_id
+const { data: editionTeam } = await supabase
+.from("edition_teams")
+.select("team_id, is_free_agent_pool")
+.eq("id", entry.edition_team_id)
+.maybeSingle();
+
+if (!editionTeam) return { error: "Equipe da edição não encontrada." };
+
+// Free agent pool não gera stint
+if (editionTeam.is_free_agent_pool) return { success: true };
+
+if (entry.member_type === "athlete" && entry.athlete_id) {
+// Fecha stint ativo do atleta em outra equipe
+await supabase
+  .from("athlete_team_stints")
+  .update({ ended_at: startDate, is_current: false })
+  .eq("athlete_id", entry.athlete_id)
+  .eq("is_current", true)
+  .neq("team_id", editionTeam.team_id);
+
+const { data: existingStint } = await supabase
+  .from("athlete_team_stints")
+  .select("id")
+  .eq("athlete_id", entry.athlete_id)
+  .eq("team_id", editionTeam.team_id)
+  .eq("is_current", true)
+  .maybeSingle();
+
+if (!existingStint) {
+  const { error: stintError } = await supabase
+    .from("athlete_team_stints")
+    .insert({
+      athlete_id: entry.athlete_id,
+      team_id: editionTeam.team_id,
+      started_at: startDate,
+      is_current: true,
+      movement_type: "arrival",
+    });
+  if (stintError) return { error: `Inscrição aprovada, mas erro ao criar stint: ${stintError.message}` };
+}
+}
+
+if (entry.member_type === "staff" && entry.staff_member_id) {
+// Fecha stint ativo do membro em outra equipe
+await supabase
+  .from("staff_team_stints")
+  .update({ ended_at: startDate, is_current: false })
+  .eq("staff_member_id", entry.staff_member_id)
+  .eq("is_current", true)
+  .neq("team_id", editionTeam.team_id);
+
+const { data: existingStint } = await supabase
+  .from("staff_team_stints")
+  .select("id")
+  .eq("staff_member_id", entry.staff_member_id)
+  .eq("team_id", editionTeam.team_id)
+  .eq("is_current", true)
+  .maybeSingle();
+
+if (!existingStint) {
+  const { error: stintError } = await supabase
+    .from("staff_team_stints")
+    .insert({
+      staff_member_id: entry.staff_member_id,
+      team_id: editionTeam.team_id,
+      started_at: startDate,
+      is_current: true,
+      movement_type: "arrival",
+    });
+  if (stintError) return { error: `Inscrição aprovada, mas erro ao criar stint: ${stintError.message}` };
+}
+}
+
+return { success: true };
 }
 
 export async function desativarInscricao(
@@ -339,9 +422,11 @@ export async function reativarInscricao(
   return { success: true };
 }
 
+// ← ALTERADO: agora recebe transferDate informado pelo admin
 export async function transferirAtletaNaEdicao(
   entryId: string,
   newEditionTeamId: string,
+  transferDate: string, // formato YYYY-MM-DD ← NOVO parâmetro
 ): Promise<{ success: true; newEntryId: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -365,7 +450,7 @@ export async function transferirAtletaNaEdicao(
   // Busca todos os edition_teams desta edição
   const { data: currentET } = await supabase
     .from("edition_teams")
-    .select("edition_id")
+    .select("edition_id, team_id, is_free_agent_pool")
     .eq("id", original.edition_team_id)
     .maybeSingle();
 
@@ -378,7 +463,7 @@ export async function transferirAtletaNaEdicao(
 
   const allETIds = (allETs ?? []).map((et: any) => et.id);
 
-  // Marca TODOS os entries ativos/pendentes do membro em qualquer equipe como is_transfer_origin
+  // Marca todos os entries ativos/pendentes como inativo + is_transfer_origin
   if (allETIds.length > 0) {
     const { error: deactivateError } = await supabase
       .from("edition_roster_entries")
@@ -390,7 +475,82 @@ export async function transferirAtletaNaEdicao(
     if (deactivateError) return { error: deactivateError.message };
   }
 
-  // Verifica se já existe um entry (inativo) no destino — reativa em vez de duplicar
+  // Busca dados da equipe de destino
+  const { data: destET } = await supabase
+    .from("edition_teams")
+    .select("team_id, is_free_agent_pool")
+    .eq("id", newEditionTeamId)
+    .maybeSingle();
+
+  if (!destET) return { error: "Equipe de destino não encontrada." };
+
+  // Fecha stint atual e cria novo — atletas
+  if (original.member_type === "athlete" && original.athlete_id && !currentET.is_free_agent_pool) {
+    await supabase
+      .from("athlete_team_stints")
+      .update({ ended_at: transferDate, is_current: false })
+      .eq("athlete_id", original.athlete_id)
+      .eq("team_id", currentET.team_id)
+      .eq("is_current", true);
+  }
+
+  if (original.member_type === "athlete" && original.athlete_id && !destET.is_free_agent_pool) {
+    const { data: existingStint } = await supabase
+      .from("athlete_team_stints")
+      .select("id")
+      .eq("athlete_id", original.athlete_id)
+      .eq("team_id", destET.team_id)
+      .eq("is_current", true)
+      .maybeSingle();
+
+    if (!existingStint) {
+      const { error: stintError } = await supabase
+        .from("athlete_team_stints")
+        .insert({
+          athlete_id: original.athlete_id,
+          team_id: destET.team_id,
+          started_at: transferDate,
+          is_current: true,
+          movement_type: "transfer",
+        });
+      if (stintError) return { error: `Transferência registrada, mas erro ao criar stint: ${stintError.message}` };
+    }
+  }
+
+  // Fecha stint atual e cria novo — comissão técnica
+  if (original.member_type === "staff" && original.staff_member_id && !currentET.is_free_agent_pool) {
+    await supabase
+      .from("staff_team_stints")
+      .update({ ended_at: transferDate, is_current: false })
+      .eq("staff_member_id", original.staff_member_id)
+      .eq("team_id", currentET.team_id)
+      .eq("is_current", true);
+  }
+
+  if (original.member_type === "staff" && original.staff_member_id && !destET.is_free_agent_pool) {
+    const { data: existingStint } = await supabase
+      .from("staff_team_stints")
+      .select("id")
+      .eq("staff_member_id", original.staff_member_id)
+      .eq("team_id", destET.team_id)
+      .eq("is_current", true)
+      .maybeSingle();
+
+    if (!existingStint) {
+      const { error: stintError } = await supabase
+        .from("staff_team_stints")
+        .insert({
+          staff_member_id: original.staff_member_id,
+          team_id: destET.team_id,
+          started_at: transferDate,
+          is_current: true,
+          movement_type: "transfer",
+        });
+      if (stintError) return { error: `Transferência registrada, mas erro ao criar stint: ${stintError.message}` };
+    }
+  }
+
+  // Verifica se já existe entry (inativo) no destino — reativa em vez de duplicar
   const { data: existingInDest } = await supabase
     .from("edition_roster_entries")
     .select("id")
@@ -401,7 +561,6 @@ export async function transferirAtletaNaEdicao(
   let newEntryId: string;
 
   if (existingInDest) {
-    // Reativa marcando como não-transferência e voltando para pending
     const { error: reactivateError } = await supabase
       .from("edition_roster_entries")
       .update({
@@ -455,7 +614,6 @@ export async function inscreverAtletaQualquer(
     .from("user_profiles").select("id")
     .eq("auth_user_id", user.id).maybeSingle();
 
-  // Busca edition_id diretamente
   const { data: currentET } = await supabase
     .from("edition_teams").select("edition_id").eq("id", editionTeamId).maybeSingle();
 
@@ -467,7 +625,6 @@ export async function inscreverAtletaQualquer(
     .from("edition_teams").select("id").eq("edition_id", editionId);
   const allETIds = (allETs ?? []).map((et: any) => et.id);
 
-  // Verifica duplicata global na edição
   if (allETIds.length > 0) {
     const lookupField = memberType === "athlete" ? "athlete_id" : "staff_member_id";
     const { data: existingActive } = await supabase
@@ -487,7 +644,6 @@ export async function inscreverAtletaQualquer(
     }
   }
 
-  // Busca configurações da edição
   const { data: settings } = await supabase
     .from("edition_settings")
     .select("max_athletes, max_staff, min_birth_year, max_birth_year")
@@ -495,7 +651,6 @@ export async function inscreverAtletaQualquer(
     .maybeSingle();
 
   if (settings && memberType === "athlete") {
-    // Verificação de ano de nascimento
     if (settings.min_birth_year || settings.max_birth_year) {
       const { data: athleteData } = await supabase
         .from("athletes")
@@ -516,7 +671,6 @@ export async function inscreverAtletaQualquer(
       }
     }
 
-    // Verificação de limite de atletas por equipe
     if (settings.max_athletes) {
       const { count } = await supabase
         .from("edition_roster_entries")
@@ -533,7 +687,6 @@ export async function inscreverAtletaQualquer(
   }
 
   if (settings && memberType === "staff") {
-    // Verificação de limite de comissão por equipe
     if (settings.max_staff) {
       const { count } = await supabase
         .from("edition_roster_entries")
@@ -601,7 +754,6 @@ export async function criarOuAtualizarTOTW(
     .from("competition_editions").select("season_id, seasons(year_id)")
     .eq("id", editionId).maybeSingle();
 
-  // Busca ou cria o squad
   let squadId: string;
   const { data: existing } = await supabase
     .from("selection_squads")
@@ -641,9 +793,7 @@ export async function criarOuAtualizarTOTW(
     if (error) return { error: error.message };
   }
 
-  // Recalcula totw_count para todos os atletas da edição
   await recalcularSelectionStats(supabase, editionId);
-
   return { success: true };
 }
 
@@ -697,15 +847,11 @@ export async function criarOuAtualizarMOTW(
 
   if (memberError) return { error: memberError.message };
 
-  // Recalcula motw_count para todos os atletas da edição
   await recalcularSelectionStats(supabase, editionId);
-
   return { success: true };
 }
 
-// Recalcula totw_count e motw_count do zero para todos os atletas da edição
 async function recalcularSelectionStats(supabase: any, editionId: string) {
-  // Busca todos os squads da edição
   const { data: squads } = await supabase
     .from("selection_squads")
     .select("id, squad_type")
@@ -717,7 +863,6 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
   const totwSquadIds = squads.filter((s: any) => s.squad_type === "totw").map((s: any) => s.id);
   const motwSquadIds = squads.filter((s: any) => s.squad_type === "motw").map((s: any) => s.id);
 
-  // Busca todos os membros atletas desses squads
   const { data: allMembers } = await supabase
     .from("selection_squad_members")
     .select("athlete_id, squad_id")
@@ -726,7 +871,6 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
 
   if (!allMembers) return;
 
-  // Agrupa contagens por athlete_id
   const totwCounts: Record<string, number> = {};
   const motwCounts: Record<string, number> = {};
 
@@ -740,7 +884,6 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
     }
   });
 
-  // Busca todos os athlete_edition_stats da edição
   const { data: stats } = await supabase
     .from("athlete_edition_stats")
     .select("id, athlete_id")
@@ -748,14 +891,12 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
 
   if (!stats) return;
 
-  // Atualiza cada stat com os novos counts
   const updates = stats.map((s: any) => ({
     id: s.id,
     totw_count: totwCounts[s.athlete_id] ?? 0,
     motw_count: motwCounts[s.athlete_id] ?? 0,
   }));
 
-  // Upsert em lote
   if (updates.length > 0) {
     await supabase
       .from("athlete_edition_stats")
@@ -786,7 +927,6 @@ export async function criarConfronto(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
  
-  // Busca a rodada para obter o label e display_order base
   const { data: round } = await supabase
     .from("rounds")
     .select("name, custom_label, display_order")
@@ -798,7 +938,6 @@ export async function criarConfronto(
   const roundLabel = round.name ?? "";
   const roundDisplayLabel = round.custom_label ?? round.name ?? "";
  
-  // Calcula o próximo display_order dentro desta rodada
   const { data: existing } = await supabase
     .from("matchups")
     .select("display_order")
@@ -828,11 +967,6 @@ export async function criarConfronto(
   return { id: inserted.id };
 }
  
-/**
- * Cria uma partida dentro de um matchup já existente.
- * Não cria matchup implicitamente — o matchup deve existir.
- * Para fases classificatórias, use criarPartida() em partidas/actions.ts.
- */
 export async function criarPartidaNoConfronto(
   phaseId: string,
   matchupId: string,
@@ -842,7 +976,6 @@ export async function criarPartidaNoConfronto(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
  
-  // Busca dados do matchup para obter os times e a rodada
   const { data: matchup } = await supabase
     .from("matchups")
     .select("team_a_id, team_b_id, round_id, phase_id")
@@ -863,11 +996,11 @@ export async function criarPartidaNoConfronto(
     .from("matches")
     .insert({
       phase_id: phaseId,
-      round_id: null, // em mata-mata o agrupamento é pelo matchup, não pela rodada
+      round_id: null,
       matchup_id: matchupId,
       team_a_id: matchup.team_a_id,
       team_b_id: matchup.team_b_id,
-      team_a_is_home: !is_second_leg, // na volta o mandante inverte
+      team_a_is_home: !is_second_leg,
       match_date,
       match_time,
       venue_id,
@@ -884,10 +1017,6 @@ export async function criarPartidaNoConfronto(
   return { id: inserted.id };
 }
  
-/**
- * Atualiza os times de um matchup existente.
- * Usado quando o admin define os times de um confronto "A definir".
- */
 export async function editarTimesConfronto(
   matchupId: string,
   teamAId: string | null,
@@ -897,7 +1026,6 @@ export async function editarTimesConfronto(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
  
-  // Verifica se já há partidas — se sim, não permite trocar os times
   const { data: partidas } = await supabase
     .from("matches")
     .select("id")
@@ -913,6 +1041,55 @@ export async function editarTimesConfronto(
     .update({ team_a_id: teamAId || null, team_b_id: teamBId || null })
     .eq("id", matchupId);
  
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+// ← NOVO: permite editar datas de um stint manualmente (correção retroativa pelo admin)
+export async function editarStint(
+  stintId: string,
+  startedAt: string,       // formato YYYY-MM-DD
+  endedAt: string | null,  // null = stint ainda ativo
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const isCurrent = endedAt === null;
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .update({
+      started_at: startedAt,
+      ended_at: endedAt,
+      is_current: isCurrent,
+    })
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarStintStaff(
+  stintId: string,
+  startedAt: string,
+  endedAt: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const isCurrent = endedAt === null;
+
+  const { error } = await supabase
+    .from("staff_team_stints")
+    .update({
+      started_at: startedAt,
+      ended_at: endedAt,
+      is_current: isCurrent,
+    })
+    .eq("id", stintId);
+
   if (error) return { error: error.message };
   return { success: true };
 }

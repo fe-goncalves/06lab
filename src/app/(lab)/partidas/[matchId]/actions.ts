@@ -1,3 +1,5 @@
+// ACTIONS PARTIDAS
+
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
@@ -246,22 +248,13 @@ export async function adicionarAcao(
   if (error) return { error: error.message };
 
   // Atualiza placar se for gol
-  if (action_type === "goal" && !is_own_goal) {
+  if (action_type === "goal") {
     const { data: match } = await supabase.from("matches").select("team_a_id, score_a, score_b").eq("id", matchId).maybeSingle();
     if (match) {
       const isTeamA = match.team_a_id === team_id;
       await supabase.from("matches").update({
         score_a: isTeamA ? match.score_a + 1 : match.score_a,
         score_b: isTeamA ? match.score_b : match.score_b + 1,
-      }).eq("id", matchId);
-    }
-  } else if (action_type === "goal" && is_own_goal) {
-    const { data: match } = await supabase.from("matches").select("team_a_id, score_a, score_b").eq("id", matchId).maybeSingle();
-    if (match) {
-      const isTeamA = match.team_a_id === team_id;
-      await supabase.from("matches").update({
-        score_a: isTeamA ? match.score_a : match.score_a + 1,
-        score_b: isTeamA ? match.score_b + 1 : match.score_b,
       }).eq("id", matchId);
     }
   }
@@ -291,14 +284,9 @@ export async function deletarAcao(
       .from("matches").select("team_a_id, score_a, score_b").eq("id", matchId).maybeSingle();
     if (match) {
       const isTeamA = match.team_a_id === action.team_id;
-      const isOwnGoal = action.is_own_goal;
       await supabase.from("matches").update({
-        score_a: isTeamA
-          ? (isOwnGoal ? match.score_a : Math.max(0, match.score_a - 1))
-          : (isOwnGoal ? Math.max(0, match.score_a - 1) : match.score_a),
-        score_b: isTeamA
-          ? (isOwnGoal ? Math.max(0, match.score_b - 1) : match.score_b)
-          : (isOwnGoal ? match.score_b : Math.max(0, match.score_b - 1)),
+        score_a: isTeamA ? Math.max(0, match.score_a - 1) : match.score_a,
+        score_b: isTeamA ? match.score_b : Math.max(0, match.score_b - 1),
       }).eq("id", matchId);
     }
   }
@@ -470,4 +458,103 @@ export async function salvarArbitrosPartida(
 
   if (error) return { error: error.message };
   return { success: true };
+}
+
+// ─── Team Stats (faltas) ──────────────────────────────────────────────────────
+
+export async function salvarFaltas(
+  matchId: string,
+  teamId: string,
+  period: "first" | "second",
+  fouls: number
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("match_team_stats")
+    .upsert({ match_id: matchId, team_id: teamId, period, fouls }, { onConflict: "match_id,team_id,period" });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+// ─── Shootout ─────────────────────────────────────────────────────────────────
+
+export async function adicionarShootout(
+  matchId: string,
+  fd: FormData
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data, error } = await supabase
+    .from("match_penalty_shootout")
+    .insert({
+      match_id: matchId,
+      team_id: fd.get("team_id") as string,
+      shootout_type: fd.get("shootout_type") as string,
+      athlete_id: (fd.get("athlete_id") as string) || null,
+      goalkeeper_id: (fd.get("goalkeeper_id") as string) || null,
+      result: fd.get("result") as string,
+      kick_order: parseInt(fd.get("kick_order") as string, 10),
+    })
+    .select("id").single();
+
+  if (error) return { error: error.message };
+  return { id: data.id };
+}
+
+export async function deletarShootout(
+  shootoutId: string
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("match_penalty_shootout")
+    .delete().eq("id", shootoutId);
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+// ─── Encerramento ─────────────────────────────────────────────────────────────
+
+export async function encerrarPartida(
+  matchId: string,
+  fd: FormData
+): Promise<{ ok: true } | { error: string }> {
+  const supabase = await createClient();
+  const finishType = (fd.get("finish_type") as string) || null;
+  const aggregateWinnerId = (fd.get("aggregate_winner_id") as string) || null;
+  const { error } = await supabase
+    .from("matches")
+    .update({ status: "finished", finish_type: finishType, aggregate_winner_id: aggregateWinnerId })
+    .eq("id", matchId);
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+export async function editarAcao(
+  actionId: string,
+  formData: FormData,
+): Promise<{ id: string } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const team_id = String(formData.get("team_id") ?? "").trim();
+  const period = String(formData.get("period") ?? "").trim();
+  const minute_raw = formData.get("minute");
+  const minute = minute_raw !== null && minute_raw !== "" ? Number(minute_raw) : null;
+  const primary_athlete_id = String(formData.get("primary_athlete_id") ?? "").trim() || null;
+  const secondary_athlete_id = String(formData.get("secondary_athlete_id") ?? "").trim() || null;
+  const goalkeeper_id = String(formData.get("goalkeeper_id") ?? "").trim() || null;
+  const goal_type = String(formData.get("goal_type") ?? "").trim() || null;
+  const is_own_goal = formData.get("is_own_goal") === "true";
+  const miss_result = String(formData.get("miss_result") ?? "").trim() || null;
+
+  const { error } = await supabase
+    .from("match_actions")
+    .update({ team_id, period, minute, primary_athlete_id, secondary_athlete_id, goalkeeper_id, goal_type, is_own_goal, miss_result })
+    .eq("id", actionId);
+
+  if (error) return { error: error.message };
+  return { id: actionId };
 }

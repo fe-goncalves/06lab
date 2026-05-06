@@ -1,9 +1,26 @@
+// PARTIDA CLIENT
+
 "use client";
 
-import { adicionarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida } from "./actions";
+import { adicionarAcao, editarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida, salvarFaltas, adicionarShootout, deletarShootout, encerrarPartida } from "./actions";
+
+// CSS global para forçar dark mode em todos os selects nativos
+if (typeof document !== "undefined") {
+  const styleId = "partida-select-dark";
+  if (!document.getElementById(styleId)) {
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+      select option { background-color: #181818 !important; color: #E0E0E0 !important; }
+      select { color-scheme: dark; }
+    `;
+    document.head.appendChild(style);
+  }
+}
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -19,15 +36,15 @@ type Athlete = {
 type LineupEntry = {
   athlete_id: string;
   is_present: boolean;
-  is_starter: boolean;
   is_captain: boolean;
+  played_as_goalkeeper: boolean;
 };
 
 type MatchReferee = {
   id: string;
   referee_id: string;
   referee_role_id: string;
-  referees: { id: string; full_name: string; surname: string | null } | null;
+  referees: { id: string; full_name: string; surname: string | null; photo_url: string | null } | null;
   referee_roles: { id: string; full_name: string } | null;
 };
 
@@ -35,6 +52,7 @@ type Referee = {
   id: string;
   full_name: string;
   surname: string | null;
+  photo_url: string | null;
   referee_role_id: string | null;
 };
 
@@ -80,10 +98,114 @@ const ACTION_EMOJI: Record<string, string> = {
   fifth_foul: "5ª",
 };
 
+function ActionIcon({ actionType, goalType, size = 20 }: { actionType: string; goalType?: string; size?: number }) {
+  const s = size;
+
+  if (actionType === "goal" && goalType !== "own_goal" && goalType !== "penalty" && goalType !== "shootout") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <g>
+        <path d="m9.5 5.83-2.76 1v3.02l2.08.81 2.07-2.29z" fill="currentColor"/>
+        <path d="M7 0C3.14 0 0 3.14 0 7s3.14 7 7 7 7-3.14 7-7-3.14-7-7-7m0 12.26c-.97 0-1.88-.27-2.66-.73l.25-1.38-1.55-1.73-.94.48A5.2 5.2 0 0 1 1.74 7v-.17l2.01-.72.66-2.48-.92-.55a5.24 5.24 0 0 1 3.5-1.35c.1 0 .19 0 .29.01l-.29 1.07 2.72 1.15.88-.81c1.02.96 1.67 2.32 1.67 3.83 0 2.9-2.36 5.27-5.26 5.27z" fill="currentColor"/>
+      </g>
+    </svg>
+  );
+
+  if (actionType === "goal" && goalType === "penalty") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <g>
+        <path d="m8.78 8.43-1.88.68v2.06l1.41.55 1.42-1.56z" fill="currentColor"/>
+        <path d="M7.07 4.45c-2.63 0-4.77 2.14-4.77 4.77s2.14 4.77 4.77 4.77 4.77-2.14 4.77-4.77S9.7 4.45 7.07 4.45m0 8.37c-.66 0-1.28-.18-1.82-.5l.17-.94-1.06-1.18-.64.33c-.16-.4-.24-.84-.24-1.29v-.12l1.37-.49.45-1.69-.63-.37c.64-.57 1.47-.92 2.39-.92h.2l-.2.73 1.86.78.6-.55c.7.66 1.14 1.58 1.14 2.62 0 1.98-1.61 3.59-3.59 3.59" fill="currentColor"/>
+        <path d="M14 6.75h-1.5V1.5h-11v5.25H0V0h14z" fill="currentColor"/>
+      </g>
+    </svg>
+  );
+
+  if (actionType === "goal" && goalType === "shootout") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <g>
+        <path d="m8.78 8.43-1.88.68v2.06l1.41.55 1.42-1.56z" fill="currentColor"/>
+        <path d="M7.07 4.45c-2.63 0-4.77 2.14-4.77 4.77s2.14 4.77 4.77 4.77 4.77-2.14 4.77-4.77S9.7 4.45 7.07 4.45m0 8.37c-.66 0-1.28-.18-1.82-.5l.17-.94-1.06-1.18-.64.33c-.16-.4-.24-.84-.24-1.29v-.12l1.37-.49.45-1.69-.63-.37c.64-.57 1.47-.92 2.39-.92h.2l-.2.73 1.86.78.6-.55c.7.66 1.14 1.58 1.14 2.62 0 1.98-1.61 3.59-3.59 3.59" fill="currentColor"/>
+        <path d="M14 6.75h-1.5V1.5h-11v5.25H0V0h14z" fill="currentColor"/>
+      </g>
+    </svg>
+  );
+
+  if (actionType === "goal" && goalType === "own_goal") return (
+    <svg width={s} height={s} viewBox="0 0 175.29 191.85" fill="none">
+      <path d="M93.06,21.3c-16.94-.86-33.43,4.91-46.2,16.37l11.21,6.73-8.08,30.37-24.56,8.79c-.2,8.48,1.15,16.99,4.36,25.15l-18.42,11.5c-5.14-11.66-7.56-24-7.24-36.55.38-22.67,10.1-44.07,25.97-59.48,35.15-34.13,91.72-31.83,123.96,5.07,14.92,16.88,22.72,39.57,20.99,62.54-6.02-4.58-13.7-6.15-21.12-4.16.57-18.55-6.65-36.01-20.36-49.04l-10.76,9.9-33.29-14.08,3.54-13.11Z" fill="#FF4444"/>
+      <path d="M33.35,189.17L1.77,152.43c-2.81-3.27-2.24-8.18,1.48-10.5l40.83-25.49c4.05-2.53,9.46-1.16,12.39,2.26,2.59,3.24,2.23,7.96-1.36,10.22l-23.61,14.83,52.41,7.97c12.11,1.34,24.19-.21,35.35-4.94,16.5-7.03,29.57-21.02,32.44-38.98.38-2.4,1.48-4.33,3.6-5.57,4-2.33,9.12-1.61,12.27,1.74,1.92,2.05,2.27,4.39,1.79,7.09-2.17,12.28-7.99,23.46-16.64,32.5-14.87,15.54-36.34,23.64-57.73,23.99-5.38.06-10.34-.17-15.65-.98l-50.14-7.63,18.03,21.03c2.67,3.4,1.91,7.95-1.69,10.33-3.79,2.42-8.63,1.95-12.19-1.14Z" fill="#FF4444"/>
+      <polygon points="111.98 130.38 86.46 120.49 86.45 83.51 120.26 71.25 137.29 102.35 111.98 130.38" fill="#FF4444"/>
+    </svg>
+  );
+
+  if (actionType === "yellow_card") return (
+    <svg width={s * 0.7} height={s} viewBox="0 0 16 16" fill="none">
+      <path fillRule="evenodd" d="M3 1h10v14H3z" fill="#D9AF00"/>
+    </svg>
+  );
+
+  if (actionType === "red_card") return (
+    <svg width={s * 0.7} height={s} viewBox="0 0 16 16" fill="none">
+      <path fillRule="evenodd" d="M3 1h10v14H3z" fill="#E35C47"/>
+    </svg>
+  );
+
+  if (actionType === "red_yellow_card") return (
+    <svg width={s} height={s} viewBox="0 0 16 16" fill="none">
+      <path d="M6 1V4.66667V12H9.81818H13V1H6Z" fill="#E35C47"/>
+      <path d="M5 13V11.3333V4H3V15H10V13H6.18182H5Z" fill="#D9AF00"/>
+    </svg>
+  );
+
+  if (actionType === "penalty_missed") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <path d="M12.667 0H0v6h1.333V1.333H12V6h1.333V0z" fill="currentColor"/>
+      <path d="M9.273 5.447 6.66 8.067 4.073 5.48l-.94.947 2.58 2.58-2.6 2.606.947.94 2.6-2.6 2.6 2.6.94-.94-2.6-2.606 2.62-2.614z" fill="currentColor"/>
+    </svg>
+  );
+
+  if (actionType === "shootout_missed") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <path d="M12.667 0H0v6h1.333V1.333H12V6h1.333V0z" fill="currentColor"/>
+      <path d="M9.273 5.447 6.66 8.067 4.073 5.48l-.94.947 2.58 2.58-2.6 2.606.947.94 2.6-2.6 2.6 2.6.94-.94-2.6-2.606 2.62-2.614z" fill="currentColor"/>
+    </svg>
+  );
+
+  if (actionType === "foul") return (
+    <svg width={s} height={s} viewBox="0 0 14 14" fill="none">
+      <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.4"/>
+      <path d="M7 4v4M7 9.5v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+    </svg>
+  );
+
+  if (actionType === "fifth_foul") return (
+    <svg width={s * 0.72} height={s} viewBox="0 0 79.04 108.9" fill="none">
+      <path d="M29.93,108.15C13.92,105.48.3,94.07,0,77.09h22.07c.12,3.57,1.55,6.75,4.1,9.15,2.51,2.33,5.55,3.82,8.92,4.43,2.5.42,4.91.45,7.41.03,5.71-.94,10.43-4.6,12.79-9.87s2.3-12.09,0-17.25c-2.39-5.37-7.12-9.15-12.92-10.17-5.35-.92-10.76.1-15.41,2.89-1.72,1.07-3.16,2.32-4.42,3.99l-20.27-3.6L7.34.01h65.7s0,18.59,0,18.59H26.1s-2.67,26.84-2.67,26.84c.36.13.67-.01.82-.3,3.62-4.7,9.98-7.53,15.79-8.4,4.17-.63,8.28-.52,12.43.28,13.13,2.53,23.06,13.01,25.71,26.04,1.07,5.25,1.12,10.56.22,15.84-1.6,9.47-7.05,17.79-15.02,23.11-4.73,3.16-10,5.22-15.65,6.16s-11.81.99-17.8-.01Z" fill="currentColor"/>
+    </svg>
+  );
+
+  return <span style={{ fontSize: s * 0.7, color: "currentColor" }}>{ACTION_EMOJI[actionType] ?? "·"}</span>;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   scheduled: "Agendada",
   ongoing: "Em andamento",
   finished: "Finalizada",
+  postponed: "Adiada",
+};
+
+const MISS_RESULTS: Record<string, string> = {
+  goalkeeper_save: "Defesa do goleiro",
+  off_target: "Para fora",
+  post: "Na trave",
+  foul: "Irregularidade",
+};
+
+const FINISH_TYPE_LABELS: Record<string, string> = {
+  normal: "Normal",
+  walkover: "W.O.",
+  penalties: "Pênaltis",
+  shootouts: "Shoot-outs",
   postponed: "Adiada",
 };
 
@@ -99,6 +221,8 @@ export default function PartidaClient({
   faseId,
   matchReferees: initialMatchReferees,
   allReferees,
+  initialTeamStats,
+  initialShootout,
 }: {
   match: any;
   actions: any[];
@@ -109,7 +233,10 @@ export default function PartidaClient({
   faseId: string;
   matchReferees?: MatchReferee[];
   allReferees?: Referee[];
+  initialTeamStats?: any[];
+  initialShootout?: any[];
 }) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"informacao" | "formacoes" | "posjogo" | "midia">("posjogo");
   const [actions, setActions] = useState<any[]>(initialActions ?? []);
   const [scoreA, setScoreA] = useState<number>(match.score_a ?? 0);
@@ -129,20 +256,33 @@ export default function PartidaClient({
   const [addRefereeRoleId, setAddRefereeRoleId] = useState("");
 
   // Ação
-  const [showActionModal, setShowActionModal] = useState(false);
-  const [actionType, setActionType] = useState("goal");
-  const [actionTeamId, setActionTeamId] = useState<string>(match.team_a_id ?? "");
-  const [actionPeriod, setActionPeriod] = useState("first");
-  const [actionMinute, setActionMinute] = useState("");
-  const [actionAthleteId, setActionAthleteId] = useState("");
-  const [actionAssistId, setActionAssistId] = useState("");
-  const [goalType, setGoalType] = useState("normal");
-  const [isOwnGoal, setIsOwnGoal] = useState(false);
-  const [missResult, setMissResult] = useState("goalkeeper_save");
   const [addingAction, setAddingAction] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [editingAction, setEditingAction] = useState<any | null>(null);
+  const [openActionType, setOpenActionType] = useState<string | null>(null);
+
+  // Team stats (faltas)
+  const [teamStats, setTeamStats] = useState<Record<string, Record<string, number>>>(() => {
+    const map: Record<string, Record<string, number>> = {};
+    (initialTeamStats ?? []).forEach((s: any) => {
+      if (!map[s.team_id]) map[s.team_id] = {};
+      map[s.team_id][s.period] = s.fouls;
+    });
+    return map;
+  });
+  const [activePeriod, setActivePeriod] = useState<"first" | "second">("first");
+
+  // Shootout
+  const [shootout, setShootout] = useState<any[]>(initialShootout ?? []);
+  const [activeShootoutTab, setActiveShootoutTab] = useState<"timeline" | "shootout">("timeline");
+
+  // Encerramento
+  const [showEndModal, setShowEndModal] = useState(false);
+  const [endFinishType, setEndFinishType] = useState<string>(match.finish_type ?? "");
+  const [endAggregateWinnerId, setEndAggregateWinnerId] = useState<string>(match.aggregate_winner_id ?? "");
+  const [savingEnd, setSavingEnd] = useState(false);
 
   // Formações
   const [lineups, setLineups] = useState<Record<string, LineupEntry>>(() => {
@@ -151,17 +291,13 @@ export default function PartidaClient({
       map[l.athlete_id] = {
         athlete_id: l.athlete_id,
         is_present: l.is_present ?? false,
-        is_starter: l.is_starter ?? false,
         is_captain: l.is_captain ?? false,
+        played_as_goalkeeper: l.played_as_goalkeeper ?? false,
       };
     });
     return map;
   });
 
-  const [captainA, setCaptainA] = useState<string>(() => {
-    return (initialLineups ?? []).find((l: any) => l.is_captain)?.athlete_id ?? "";
-  });
-  const [captainB, setCaptainB] = useState<string>("");
   const [savingLineups, setSavingLineups] = useState(false);
 
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -169,21 +305,14 @@ export default function PartidaClient({
 
   const teamA = match.teams_a;
   const teamB = match.teams_b;
-  const halfDuration: number = match.phases?.half_duration_minutes ?? 25;
   const roundName: string = match.rounds?.custom_label ?? match.rounds?.name ?? "Rodada";
   const competitionName: string = match.phases?.competition_editions?.competitions?.full_name ?? "Competição";
   const safeAllReferees: Referee[] = allReferees ?? [];
 
-  function getEditionTeam(teamId: string) {
-    return (editionTeamsWithAthletes ?? []).find((e: any) => e.team_id === teamId);
-  }
-
   function getAthletes(teamId: string): Athlete[] {
-    const et = getEditionTeam(teamId);
+    const et = (editionTeamsWithAthletes ?? []).find((e: any) => e.team_id === teamId);
     if (!et) return [];
-    return (et.edition_roster_entries ?? [])
-      .filter((e: any) => e.member_type === "athlete" && e.status === "approved" && e.athletes)
-      .map((e: any) => e.athletes);
+    return et.athletes ?? [];
   }
 
   function getAthletesByPosition(teamId: string) {
@@ -200,7 +329,7 @@ export default function PartidaClient({
 
   function toggleLineup(athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) {
     setLineups(prev => {
-      const current = prev[athleteId] ?? { athlete_id: athleteId, is_present: false, is_captain: false, is_starter: false };
+      const current = prev[athleteId] ?? { athlete_id: athleteId, is_present: false, is_captain: false, played_as_goalkeeper: false };
       return { ...prev, [athleteId]: { ...current, [field]: !current[field] } };
     });
   }
@@ -261,52 +390,105 @@ export default function PartidaClient({
 
   async function handleSaveLineups() {
     setSavingLineups(true);
-    const entries = Object.values(lineups).map(l => ({
-      ...l,
-      is_captain: l.athlete_id === captainA || l.athlete_id === captainB,
-    }));
+    const entries = Object.values(lineups);
     const r = await salvarFormacoes(match.id, entries);
     setSavingLineups(false);
     if ("error" in r) { toast("error", r.error); return; }
     toast("success", "Formações salvas.");
+    router.refresh();
   }
 
-  const athletes = getAthletes(actionTeamId);
-  const needsMinute = !["foul", "fifth_foul"].includes(actionType);
-  const needsAthlete = actionType !== "fifth_foul";
-  const isGoal = actionType === "goal";
-  const needsMiss = ["penalty_missed", "shootout_missed"].includes(actionType);
+  const halfDuration: number = match.phases?.half_duration_minutes ?? 25;
 
-  async function handleAddAction() {
-    setActionError(null);
+  function getPeriodFromMinute(minute: number): "first" | "second" {
+    // halfDuration = duração de cada tempo (ex: 35 min)
+    // minuto 1-35 = primeiro tempo; minuto 36-70 = segundo tempo
+    return minute <= halfDuration ? "first" : "second";
+  }
+
+  function getFouls(teamId: string, period: "first" | "second"): number {
+    return teamStats[teamId]?.[period] ?? 0;
+  }
+
+  async function handleChangeFouls(teamId: string, delta: number) {
+    const period = activePeriod;
+    const current = getFouls(teamId, period);
+    const next = Math.max(0, current + delta);
+    setTeamStats(prev => ({ ...prev, [teamId]: { ...(prev[teamId] ?? {}), [period]: next } }));
+    await salvarFaltas(match.id, teamId, period, next);
+  }
+
+  async function handleAddAction(fd: FormData) {
     setAddingAction(true);
-    const fd = new FormData();
-    fd.append("team_id", actionTeamId);
-    fd.append("action_type", actionType);
-    fd.append("period", actionPeriod);
-    if (needsMinute && actionMinute) fd.append("minute", actionMinute);
-    if (needsAthlete && actionAthleteId) fd.append("primary_athlete_id", actionAthleteId);
-    if (isGoal && !isOwnGoal && actionAssistId) fd.append("secondary_athlete_id", actionAssistId);
-    if (isGoal) { fd.append("goal_type", isOwnGoal ? "own_goal" : goalType); fd.append("is_own_goal", String(isOwnGoal)); }
-    if (needsMiss) fd.append("miss_result", missResult);
-    const r = await adicionarAcao(match.id, fd);
-    setAddingAction(false);
-    if ("error" in r) { setActionError(r.error); return; }
-    if (actionType === "goal") {
-      const isA = actionTeamId === match.team_a_id;
-      if (!isOwnGoal) { if (isA) setScoreA(p => p + 1); else setScoreB(p => p + 1); }
-      else { if (isA) setScoreB(p => p + 1); else setScoreA(p => p + 1); }
+    const aType = fd.get("action_type") as string;
+    const minuteRaw = fd.get("minute") as string;
+    const minute = minuteRaw ? parseInt(minuteRaw, 10) : null;
+    const goalType = fd.get("goal_type") as string;
+    const missResult = fd.get("miss_result") as string;
+    const primaryAthleteId = fd.get("primary_athlete_id") as string;
+    const secondaryAthleteId = fd.get("secondary_athlete_id") as string;
+    const goalkeeperIdVal = fd.get("goalkeeper_id") as string;
+    const teamIdVal = fd.get("team_id") as string;
+
+    // Período calculado a partir do minuto: <= halfDuration = primeiro tempo
+    const period = (minute && minute <= halfDuration) ? "first" : "second";
+
+    const allAthletes = [...getAthletes(match.team_a_id), ...getAthletes(match.team_b_id)];
+    const athlete = allAthletes.find((a: any) => a.id === primaryAthleteId);
+    const secondaryAthlete = allAthletes.find((a: any) => a.id === secondaryAthleteId);
+
+    const payload = new FormData();
+    payload.append("team_id", teamIdVal);
+    payload.append("action_type", aType);
+    payload.append("period", period);
+    payload.append("match_id", match.id);
+    if (minute) payload.append("minute", String(minute));
+    if (primaryAthleteId) payload.append("primary_athlete_id", primaryAthleteId);
+    if (secondaryAthleteId) payload.append("secondary_athlete_id", secondaryAthleteId);
+    if (goalType) {
+      payload.append("goal_type", goalType);
+      payload.append("is_own_goal", goalType === "own_goal" ? "true" : "false");
     }
-    const athlete = athletes.find((a: any) => a.id === actionAthleteId);
-    setActions(prev => [...prev, {
-      id: r.id, action_type: actionType, team_id: actionTeamId,
-      period: actionPeriod, minute: actionMinute ? Number(actionMinute) : null,
-      is_own_goal: isOwnGoal, goal_type: isOwnGoal ? "own_goal" : goalType,
-      primary_athlete: athlete ?? null,
-    }]);
+    if (missResult) payload.append("miss_result", missResult);
+    if (goalkeeperIdVal) payload.append("goalkeeper_id", goalkeeperIdVal);
+
+    const isEditing = !!editingAction;
+
+    if (isEditing) {
+      if (editingAction.action_type === "goal") {
+        if (editingAction.team_id === match.team_a_id) setScoreA(p => Math.max(0, p - 1));
+        else setScoreB(p => Math.max(0, p - 1));
+      }
+      const r = await editarAcao(editingAction.id, payload);
+      setAddingAction(false);
+      if ("error" in r) { toast("error", r.error); return; }
+      if (aType === "goal") {
+        if (teamIdVal === match.team_a_id) setScoreA(p => p + 1);
+        else setScoreB(p => p + 1);
+      }
+      setActions(prev => prev.map((a: any) => a.id === editingAction.id ? {
+        ...a, team_id: teamIdVal, period, minute,
+        is_own_goal: goalType === "own_goal", goal_type: goalType || "normal",
+        miss_result: missResult || null, primary_athlete: athlete ?? null,
+        secondary_athlete: secondaryAthlete ?? null,
+      } : a));
+    } else {
+      const r = await adicionarAcao(match.id, payload);
+      setAddingAction(false);
+      if ("error" in r) { toast("error", r.error); return; }
+      if (aType === "goal") {
+        if (teamIdVal === match.team_a_id) setScoreA(p => p + 1);
+        else setScoreB(p => p + 1);
+      }
+      setActions(prev => [...prev, {
+        id: r.id, action_type: aType, team_id: teamIdVal,
+        period, minute, is_own_goal: goalType === "own_goal",
+        goal_type: goalType || "normal", miss_result: missResult || null,
+        primary_athlete: athlete ?? null, secondary_athlete: secondaryAthlete ?? null,
+      }]);
+    }
     setShowActionModal(false);
-    setActionMinute(""); setActionAthleteId(""); setActionAssistId("");
-    setIsOwnGoal(false); setGoalType("normal");
+    setEditingAction(null);
   }
 
   async function handleDelete(actionId: string, aType: string, own: boolean, teamId: string) {
@@ -314,74 +496,194 @@ export default function PartidaClient({
     const r = await deletarAcao(actionId, match.id);
     if ("error" in r) { toast("error", r.error); return; }
     if (aType === "goal") {
-      const isA = teamId === match.team_a_id;
-      if (!own) { if (isA) setScoreA(p => Math.max(0, p - 1)); else setScoreB(p => Math.max(0, p - 1)); }
-      else { if (isA) setScoreB(p => Math.max(0, p - 1)); else setScoreA(p => Math.max(0, p - 1)); }
+      // team_id no banco é sempre quem marcou
+      if (teamId === match.team_a_id) setScoreA(p => Math.max(0, p - 1));
+      else setScoreB(p => Math.max(0, p - 1));
     }
     setActions(prev => prev.filter((a: any) => a.id !== actionId));
   }
 
-  const firstHalf = [...actions].filter(a => a.period === "first").sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
-  const secondHalf = [...actions].filter(a => a.period === "second").sort((a, b) => (a.minute ?? 0) - (b.minute ?? 0));
+  async function handleEncerrar() {
+    setSavingEnd(true);
+    const fd = new FormData();
+    fd.append("finish_type", endFinishType);
+    if (endAggregateWinnerId) fd.append("aggregate_winner_id", endAggregateWinnerId);
+    const r = await encerrarPartida(match.id, fd);
+    setSavingEnd(false);
+    if ("error" in r) { toast("error", r.error); return; }
+    setStatus("finished");
+    setFinishType(endFinishType);
+    setShowEndModal(false);
+    toast("success", "Partida encerrada.");
+  }
+
+  async function handleAddShootout(fd: FormData) {
+    const editingId = fd.get("editing_id") as string | null;
+    const teamId = fd.get("team_id") as string;
+    const athleteId = fd.get("athlete_id") as string;
+    const allAthletes = [...getAthletes(match.team_a_id), ...getAthletes(match.team_b_id)];
+    const athlete = allAthletes.find((a: any) => a.id === athleteId);
+
+    if (editingId) {
+      // Edição: deletar e recriar mantendo kick_order
+      const existing = shootout.find((s: any) => s.id === editingId);
+      if (existing) fd.append("kick_order", String(existing.kick_order));
+      const del = await deletarShootout(editingId);
+      if ("error" in del) { toast("error", del.error); return; }
+      const r = await adicionarShootout(match.id, fd);
+      if ("error" in r) { toast("error", r.error); return; }
+      setShootout(prev => prev.map((s: any) => s.id === editingId ? {
+        id: r.id, team_id: teamId,
+        shootout_type: fd.get("shootout_type") as string,
+        result: fd.get("result") as string,
+        kick_order: existing?.kick_order ?? s.kick_order,
+        athlete: athlete ?? null,
+      } : s));
+    } else {
+      const nextOrder = shootout.length + 1;
+      fd.append("kick_order", String(nextOrder));
+      const r = await adicionarShootout(match.id, fd);
+      if ("error" in r) { toast("error", r.error); return; }
+      setShootout(prev => [...prev, {
+        id: r.id, team_id: teamId,
+        shootout_type: fd.get("shootout_type") as string,
+        result: fd.get("result") as string,
+        kick_order: nextOrder, athlete: athlete ?? null,
+      }]);
+    }
+  }
+
+  async function handleDeleteShootout(id: string) {
+    if (!confirm("Remover esta cobrança?")) return;
+    const r = await deletarShootout(id);
+    if ("error" in r) { toast("error", r.error); return; }
+    setShootout(prev => prev.filter((s: any) => s.id !== id));
+  }
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
       {/* Header */}
-      <div className="border-b" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <div className="px-8 pt-6 pb-0">
+      <div className="border-b" style={{ borderColor: "var(--color-border)", position: "sticky", top: 0, zIndex: 10, overflow: "hidden" }}>
+        {/* Degradê suave com as cores dos times */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
+          background: `linear-gradient(135deg, ${teamA?.primary_color ?? "#141414"}12 0%, transparent 45%, transparent 55%, ${teamB?.primary_color ?? "#141414"}12 100%)`,
+        }} />
+        <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.75, pointerEvents: "none", zIndex: 0 }} />
+
+        <div className="px-8 pt-5 pb-0" style={{ position: "relative", zIndex: 1 }}>
           <Breadcrumb items={[
             { label: "Competições", href: "/competicoes" },
             { label: competitionName, href: `/competicoes/${competitionId}` },
             { label: roundName },
           ]} />
 
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              {teamA?.logo_url ? (
-                <img src={teamA.logo_url} alt="" className="h-10 w-10 shrink-0 object-contain" />
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
-              )}
-              <span className="font-display text-lg font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                {teamA?.full_name ?? "A definir"}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreA}</span>
-              <span className="font-display text-2xl" style={{ color: "var(--color-text-secondary)" }}>—</span>
-              <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreB}</span>
-            </div>
-            <div className="flex items-center gap-3 min-w-0 justify-end">
-              <span className="font-display text-lg font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                {teamB?.full_name ?? "A definir"}
-              </span>
-              {teamB?.logo_url ? (
-                <img src={teamB.logo_url} alt="" className="h-10 w-10 shrink-0 object-contain" />
-              ) : (
-                <div className="h-10 w-10 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />
-              )}
-            </div>
-          </div>
-
-          <div className="mb-3 flex items-center justify-center gap-3 flex-wrap">
-            <span className="font-mono text-xs rounded px-2 py-0.5"
-              style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-              {STATUS_LABELS[status] ?? status}
+          {/* Logo + nome da competição */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18 }}>
+            {match.phases?.competition_editions?.competitions?.logo_url ? (
+              <img
+                src={match.phases.competition_editions.competitions.logo_url}
+                alt=""
+                style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 4 }}
+              />
+            ) : null}
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
+              {competitionName}
             </span>
-            {match.match_date && (
-              <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                {new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR")}
-                {match.match_time ? ` · ${match.match_time.slice(0, 5)}` : ""}
-              </span>
-            )}
-            {match.venues?.full_name && (
-              <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                · {match.venues.full_name}
-              </span>
-            )}
+            <span style={{ color: "#2a2a2a", fontSize: 10 }}>·</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#var(--color-text-secondary)" }}>
+              {roundName}
+            </span>
           </div>
 
-          <div className="flex gap-6">
+          {/* Scoreboard: NOMES A | LOGO A | PLACAR | LOGO B | NOMES B */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", paddingBottom: 22 }}>
+
+            {/* Time A — nomes à direita, logo à direita dos nomes */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 14 }}>
+              <div style={{ textAlign: "right", minWidth: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {teamA?.short_name ?? teamA?.full_name ?? "A definir"}
+                </p>
+                {teamA?.short_name && teamA?.full_name && (
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {teamA.full_name}
+                  </p>
+                )}
+              </div>
+              <div style={{ width: 72, height: 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {teamA?.logo_url
+                  ? <img src={teamA.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain" }} />
+                  : <div style={{ width: 72, height: 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                      {(teamA?.short_name ?? teamA?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                    </div>
+                }
+              </div>
+            </div>
+
+            {/* Placar central */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "0 28px", minWidth: 150 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 56, fontWeight: 700, lineHeight: 1, width: 44, textAlign: "center", color: "var(--color-brand)" }}>
+                  {scoreA}
+                </span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, color: "#222", lineHeight: 1 }}>:</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 56, fontWeight: 700, lineHeight: 1, width: 44, textAlign: "center", color: "var(--color-brand)" }}>
+                  {scoreB}
+                </span>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "center" }}>
+                {match.match_date && (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-secondary)", letterSpacing: "0.04em" }}>
+                    {new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                    {match.match_time ? ` · ${match.match_time.slice(0, 5)}` : ""}
+                  </span>
+                )}
+                {status === "ongoing" && (
+                  <>
+                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "#2a2a2a", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, backgroundColor: "rgba(191,242,5,0.12)", color: "var(--color-brand)", border: "1px solid rgba(191,242,5,0.2)" }}>
+                      Ao vivo
+                    </span>
+                  </>
+                )}
+                {match.venues?.full_name && (
+                  <>
+                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "#2a2a2a", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>
+                      {match.venues.full_name}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Time B — logo à esquerda, nomes à direita da logo */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 14 }}>
+              <div style={{ width: 72, height: 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {teamB?.logo_url
+                  ? <img src={teamB.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain" }} />
+                  : <div style={{ width: 72, height: 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                      {(teamB?.short_name ?? teamB?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                    </div>
+                }
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {teamB?.short_name ?? teamB?.full_name ?? "A definir"}
+                </p>
+                {teamB?.short_name && teamB?.full_name && (
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {teamB.full_name}
+                  </p>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Abas */}
+          <div style={{ display: "flex", gap: 0 }}>
             {[
               { key: "informacao", label: "INFORMAÇÃO" },
               { key: "formacoes", label: "FORMAÇÕES" },
@@ -390,10 +692,15 @@ export default function PartidaClient({
             ].map(tab => (
               <button key={tab.key} type="button"
                 onClick={() => setActiveTab(tab.key as any)}
-                className="border-b-2 pb-3 font-mono text-xs transition-colors"
                 style={{
-                  borderColor: activeTab === tab.key ? "var(--color-brand)" : "transparent",
-                  color: activeTab === tab.key ? "var(--color-brand)" : "#A6A6A6",
+                  padding: "12px 20px",
+                  fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 500,
+                  letterSpacing: "0.1em", textTransform: "uppercase",
+                  color: activeTab === tab.key ? "var(--color-brand)" : "var(--color-text-secondary)",
+                  borderBottom: `2px solid ${activeTab === tab.key ? "var(--color-brand)" : "transparent"}`,
+                  borderTop: "none", borderLeft: "none", borderRight: "none",
+                  background: "none", cursor: "pointer",
+                  transition: "color 0.12s",
                 }}>
                 {tab.label}
               </button>
@@ -407,323 +714,81 @@ export default function PartidaClient({
 
         {/* ABA INFORMAÇÃO */}
         {activeTab === "informacao" && (
-          <div className="max-w-lg space-y-4">
-            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                Dados da partida
-              </h2>
-              <div className="flex flex-col gap-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Data</span>
-                    <input type="date" defaultValue={match.match_date ?? ""}
-                      onChange={e => setMatchDate(e.target.value)}
-                      className={inputClass} style={inputStyle} />
-                  </label>
-                  <label className="flex flex-col gap-1">
-                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Horário</span>
-                    <input type="time" defaultValue={match.match_time?.slice(0, 5) ?? ""}
-                      onChange={e => setMatchTime(e.target.value)}
-                      className={inputClass} style={inputStyle} />
-                  </label>
-                </div>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Local</span>
-                  <select defaultValue={match.venue_id ?? ""}
-                    onChange={e => setVenueId(e.target.value)}
-                    className={inputClass} style={inputStyle}>
-                    <option value="">Nenhum</option>
-                    {(match.venues_list ?? []).map((v: any) => (
-                      <option key={v.id} value={v.id}>{v.full_name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Status</span>
-                  <select value={status} onChange={e => setStatus(e.target.value)} className={inputClass} style={inputStyle}>
-                    {Object.entries(STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Encerramento</span>
-                  <select value={finishType} onChange={e => setFinishType(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="">—</option>
-                    <option value="normal">Normal</option>
-                    <option value="walkover">W.O.</option>
-                    <option value="penalties">Pênaltis</option>
-                    <option value="shootouts">Shoot-outs</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-
-            {/* MOTM */}
-            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                Man of the Match
-              </h2>
-              <select value={motmAthleteId} onChange={e => setMotmAthleteId(e.target.value)}
-                className={inputClass} style={inputStyle}>
-                <option value="">Nenhum</option>
-                {[...getAthletes(match.team_a_id), ...getAthletes(match.team_b_id)]
-                  .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
-                  .map(a => (
-                    <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Árbitros */}
-            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                Árbitros
-              </h2>
-
-              {matchReferees.length > 0 && (
-                <div className="mb-4 space-y-2">
-                  {matchReferees.map(r => (
-                    <div key={r.referee_id} className="flex items-center gap-3 rounded-lg border px-3 py-2"
-                      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                          {r.referees?.surname ?? r.referees?.full_name ?? "—"}
-                        </p>
-                        <p className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
-                          {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? r.referee_roles?.full_name ?? "—"}
-                        </p>
-                      </div>
-                      <button type="button" onClick={() => handleRemoveReferee(r.referee_id)}
-                        className="shrink-0 rounded border px-2 py-1 font-mono text-xs transition-colors hover:border-[var(--color-danger)]"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                        Remover
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex gap-2 flex-wrap">
-                <select value={addRefereeId} onChange={e => setAddRefereeId(e.target.value)}
-                  className={`${inputClass} flex-1 min-w-[140px]`} style={inputStyle}>
-                  <option value="">Selecione árbitro…</option>
-                  {safeAllReferees.map(r => (
-                    <option key={r.id} value={r.id}>{r.surname ?? r.full_name}</option>
-                  ))}
-                </select>
-                <select value={addRefereeRoleId} onChange={e => setAddRefereeRoleId(e.target.value)}
-                  className={`${inputClass} flex-1 min-w-[120px]`} style={inputStyle}>
-                  <option value="">Função…</option>
-                  {REFEREE_ROLES.map(r => (
-                    <option key={r.id} value={r.id}>{r.label}</option>
-                  ))}
-                </select>
-                <button type="button" onClick={handleAddReferee}
-                  className="rounded-lg border px-3 py-2 text-sm font-medium"
-                  style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                  + Adicionar
-                </button>
-              </div>
-
-              {matchReferees.length > 0 && (
-                <button type="button" onClick={handleSaveReferees} disabled={savingReferees}
-                  className="mt-4 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                  {savingReferees ? "Salvando…" : "Salvar árbitros"}
-                </button>
-              )}
-            </div>
-
-            <button type="button" onClick={handleSaveInfo} disabled={saving}
-              className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-              {saving ? "Salvando…" : "Salvar alterações"}
-            </button>
-          </div>
+          <InfoTab
+          match={match}
+          matchDate={matchDate} setMatchDate={setMatchDate}
+          matchTime={matchTime} setMatchTime={setMatchTime}
+          venueId={venueId} setVenueId={setVenueId}
+          matchReferees={matchReferees}
+          addRefereeId={addRefereeId} setAddRefereeId={setAddRefereeId}
+          addRefereeRoleId={addRefereeRoleId} setAddRefereeRoleId={setAddRefereeRoleId}
+          savingReferees={savingReferees} saving={saving}
+          safeAllReferees={safeAllReferees}
+          handleAddReferee={handleAddReferee}
+          handleRemoveReferee={handleRemoveReferee}
+          handleSaveReferees={handleSaveReferees}
+          handleSaveInfo={handleSaveInfo}
+        />
         )}
 
         {/* ABA FORMAÇÕES */}
         {activeTab === "formacoes" && (
-          <div>
-            <div className="grid gap-6 lg:grid-cols-2">
-              {[
-                { teamId: match.team_a_id, team: teamA, captain: captainA, setCaptain: setCaptainA },
-                { teamId: match.team_b_id, team: teamB, captain: captainB, setCaptain: setCaptainB },
-              ].map(({ teamId, team, captain, setCaptain }) => {
-                const posGroups = getAthletesByPosition(teamId);
-                const allAthletes = getAthletes(teamId);
-                return (
-                  <div key={teamId} className="rounded-xl border overflow-hidden"
-                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                    <div className="flex items-center gap-3 px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-                      {team?.logo_url && <img src={team.logo_url} alt="" className="h-7 w-7 object-contain" />}
-                      <h2 className="font-mono text-xs uppercase tracking-widest flex-1" style={{ color: "var(--color-text-secondary)" }}>
-                        {team?.full_name ?? "Equipe"}
-                      </h2>
-                    </div>
-                    <div className="px-5 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
-                      <label className="flex flex-col gap-1">
-                        <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Capitão</span>
-                        <select value={captain} onChange={e => setCaptain(e.target.value)}
-                          className="rounded-lg border px-3 py-2 text-sm outline-none"
-                          style={inputStyle}>
-                          <option value="">Nenhum</option>
-                          {allAthletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
-                            <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="flex items-center px-5 py-2 gap-2 border-b" style={{ borderColor: "var(--color-border)" }}>
-                      <span className="flex-1 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Atleta</span>
-                      <span className="w-16 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Presente</span>
-                      <span className="w-16 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Titular</span>
-                    </div>
-                    <div className="px-2 py-1">
-                      {posGroups.length === 0 ? (
-                        <p className="px-3 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum atleta inscrito.</p>
-                      ) : (
-                        posGroups.map(group => (
-                          <div key={group.label}>
-                            <p className="px-3 py-1.5 font-mono text-xs uppercase" style={{ color: "var(--color-brand)" }}>
-                              {group.label}
-                            </p>
-                            {group.athletes
-                              .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
-                              .map(athlete => {
-                                const entry = lineups[athlete.id] ?? { is_present: false, is_starter: false, is_captain: false };
-                                return (
-                                  <div key={athlete.id}
-                                    className="flex items-center gap-2 px-3 py-2 rounded-lg transition-colors hover:bg-[rgba(255,255,255,0.03)]">
-                                    <div className="flex flex-1 items-center gap-2 min-w-0">
-                                      {athlete.photo_url ? (
-                                        <img src={athlete.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                                      ) : (
-                                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                                          style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                                          {(athlete.surname ?? athlete.full_name).slice(0, 2).toUpperCase()}
-                                        </div>
-                                      )}
-                                      <span className="truncate text-sm" style={{ color: "var(--color-text-primary)" }}>
-                                        {athlete.surname ?? athlete.full_name}
-                                      </span>
-                                      {captain === athlete.id && (
-                                        <span className="shrink-0 font-mono text-xs rounded px-1"
-                                          style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-                                          C
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="w-16 flex justify-center">
-                                      <input type="checkbox" checked={entry.is_present}
-                                        onChange={() => toggleLineup(athlete.id, "is_present")}
-                                        className="h-4 w-4 cursor-pointer" />
-                                    </div>
-                                    <div className="w-16 flex justify-center">
-                                      <input type="checkbox" checked={entry.is_starter}
-                                        onChange={() => toggleLineup(athlete.id, "is_starter")}
-                                        className="h-4 w-4 cursor-pointer" />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <div className="mt-6">
-              <button type="button" onClick={handleSaveLineups} disabled={savingLineups}
-                className="rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                {savingLineups ? "Salvando…" : "Salvar formações"}
-              </button>
-            </div>
-          </div>
+          <FormacoesTab
+            match={match}
+            lineups={lineups}
+            setLineups={setLineups}
+            getAthletes={getAthletes}
+            savingLineups={savingLineups}
+            handleSaveLineups={handleSaveLineups}
+            toggleLineup={toggleLineup}
+          />
         )}
 
         {/* ABA PÓS-JOGO */}
         {activeTab === "posjogo" && (
-          <div>
-            <div className="mb-6 rounded-xl border p-5"
-              style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div className="flex items-center gap-6">
-                  <div className="flex items-center gap-4">
-                    {teamA?.logo_url && <img src={teamA.logo_url} alt="" className="h-10 w-10 object-contain" />}
-                    <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreA}</span>
-                  </div>
-                  <span className="font-display text-2xl" style={{ color: "var(--color-text-secondary)" }}>—</span>
-                  <div className="flex items-center gap-4">
-                    <span className="font-display text-4xl font-bold" style={{ color: "var(--color-brand)" }}>{scoreB}</span>
-                    {teamB?.logo_url && <img src={teamB.logo_url} alt="" className="h-10 w-10 object-contain" />}
-                  </div>
-                </div>
-                <button type="button" onClick={handlePublish} disabled={publishing}
-                  className="flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-                  style={{
-                    backgroundColor: published ? "rgba(191,242,5,0.15)" : "var(--color-brand)",
-                    color: published ? "var(--color-brand)" : "var(--color-background)",
-                    border: published ? "1px solid var(--color-brand)" : "none",
-                  }}>
-                  {publishing ? "Publicando…" : published ? "✓ Publicado" : "Publicar resultado"}
-                </button>
-              </div>
-            </div>
-
-            <div className="mb-6 grid grid-cols-4 gap-3 sm:grid-cols-8">
-              {Object.entries(ACTION_LABELS).map(([key, label]) => (
-                <button key={key} type="button"
-                  onClick={() => { setActionType(key); setShowActionModal(true); setActionError(null); }}
-                  className="flex flex-col items-center gap-2 rounded-xl border p-3 transition-all hover:scale-105 active:scale-95"
-                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                  <span className="text-2xl">{ACTION_EMOJI[key]}</span>
-                  <span className="font-mono text-xs text-center leading-tight"
-                    style={{ color: ACTION_COLORS[key] ?? "var(--color-text-secondary)" }}>
-                    {label}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {actions.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem ações</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Use os botões acima para registrar ações da partida.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {firstHalf.length > 0 && (
-                  <>
-                    <p className="font-mono text-xs uppercase tracking-widest pb-1" style={{ color: "var(--color-text-secondary)" }}>
-                      1º Tempo
-                    </p>
-                    {firstHalf.map(a => (
-                      <ActionTimeline key={a.id} action={a} teamA={teamA} teamB={teamB}
-                        matchTeamAId={match.team_a_id}
-                        onDelete={() => handleDelete(a.id, a.action_type, a.is_own_goal, a.team_id)} />
-                    ))}
-                  </>
-                )}
-                {secondHalf.length > 0 && (
-                  <>
-                    <p className="font-mono text-xs uppercase tracking-widest pb-1 pt-4" style={{ color: "var(--color-text-secondary)" }}>
-                      2º Tempo
-                    </p>
-                    {secondHalf.map(a => (
-                      <ActionTimeline key={a.id} action={a} teamA={teamA} teamB={teamB}
-                        matchTeamAId={match.team_a_id}
-                        onDelete={() => handleDelete(a.id, a.action_type, a.is_own_goal, a.team_id)} />
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          <PosJogoTab
+            match={match}
+            actions={actions}
+            shootout={shootout}
+            scoreA={scoreA}
+            scoreB={scoreB}
+            status={status}
+            finishType={finishType}
+            teamStats={teamStats}
+            activePeriod={activePeriod}
+            setActivePeriod={setActivePeriod}
+            activeShootoutTab={activeShootoutTab}
+            setActiveShootoutTab={setActiveShootoutTab}
+            showEndModal={showEndModal}
+            setShowEndModal={setShowEndModal}
+            endFinishType={endFinishType}
+            setEndFinishType={setEndFinishType}
+            endAggregateWinnerId={endAggregateWinnerId}
+            setEndAggregateWinnerId={setEndAggregateWinnerId}
+            savingEnd={savingEnd}
+            publishing={publishing}
+            published={published}
+            addingAction={addingAction}
+            editingAction={editingAction}
+            setEditingAction={setEditingAction}
+            showActionModal={showActionModal}
+            setShowActionModal={setShowActionModal}
+            openActionType={openActionType}
+            setOpenActionType={setOpenActionType}
+            motmAthleteId={motmAthleteId}
+            setMotmAthleteId={setMotmAthleteId}
+            halfDuration={halfDuration}
+            getAthletes={getAthletes}
+            handleChangeFouls={handleChangeFouls}
+            getFouls={getFouls}
+            handleAddAction={handleAddAction}
+            handleDelete={handleDelete}
+            handleAddShootout={handleAddShootout}
+            handleDeleteShootout={handleDeleteShootout}
+            handleEncerrar={handleEncerrar}
+            handlePublish={handlePublish}
+            getPeriodFromMinute={getPeriodFromMinute}
+          />
         )}
 
         {/* ABA MÍDIA */}
@@ -737,108 +802,760 @@ export default function PartidaClient({
         )}
       </div>
 
-      {/* Modal de ação */}
-      {showActionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <div className="w-full max-w-md rounded-xl border shadow-xl"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">{ACTION_EMOJI[actionType]}</span>
-                <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
-                  {ACTION_LABELS[actionType]}
-                </h2>
+      </div>
+  );
+}
+
+
+// ─── TimePicker (drum clock) ──────────────────────────────────────────────────
+
+function TimePicker({ value, onChange, onClose }: {
+  value: string; onChange: (v: string) => void; onClose: () => void;
+}) {
+  const toH = (v: string) => parseInt(v.split(":")[0] ?? "0", 10);
+  const toM = (v: string) => Math.round(parseInt(v.split(":")[1] ?? "0", 10) / 5) * 5;
+  const [selH, setSelH] = useState(toH(value));
+  const [selM, setSelM] = useState(toM(value));
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const mins  = Array.from({ length: 12 }, (_, i) => i * 5);
+  const ITEM_H = 48;
+
+  function confirm() {
+    onChange(`${String(selH).padStart(2, "0")}:${String(selM).padStart(2, "0")}`);
+    onClose();
+  }
+
+  function Drum({ items, selected, onSelect }: { items: number[]; selected: number; onSelect: (v: number) => void }) {
+    return (
+      <div style={{ position: "relative", height: ITEM_H * 3, width: 72, overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to bottom, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "rgba(191,242,5,0.07)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to top, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
+        <div style={{ display: "flex", flexDirection: "column", transform: `translateY(${-items.indexOf(selected) * ITEM_H + ITEM_H}px)`, transition: "transform 0.2s cubic-bezier(.4,0,.2,1)" }}>
+          {items.map(v => (
+            <div key={v} onClick={() => onSelect(v)} style={{
+              height: ITEM_H, width: 72, display: "flex", alignItems: "center", justifyContent: "center",
+              fontFamily: "var(--font-mono)", fontSize: 32, fontWeight: 700, cursor: "pointer",
+              color: v === selected ? "var(--color-brand)" : Math.abs(items.indexOf(v) - items.indexOf(selected)) === 1 ? "#3a3a3a" : "#1e1e1e",
+              transition: "color 0.15s", position: "relative", zIndex: 3, userSelect: "none",
+            }}>
+              {String(v).padStart(2, "0")}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: 300, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#555" }}>
+            Horário da partida
+          </span>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid var(--color-border)", background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+        <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 0 }}>
+          <Drum items={hours} selected={selH} onSelect={setSelH} />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 36, fontWeight: 700, color: "var(--color-brand)", padding: "0 4px", userSelect: "none", marginBottom: 2 }}>:</span>
+          <Drum items={mins} selected={selM} onSelect={setSelM} />
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: "16px 20px", borderTop: "1px solid var(--color-border)" }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border: "1px solid var(--color-border)", background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+            Cancelar
+          </button>
+          <button type="button" onClick={confirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+            Confirmar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── InfoTab ──────────────────────────────────────────────────────────────────
+
+function InfoTab({
+  match, matchDate, setMatchDate, matchTime, setMatchTime,
+  venueId, setVenueId, matchReferees, addRefereeId, setAddRefereeId,
+  addRefereeRoleId, setAddRefereeRoleId, savingReferees, saving,
+  safeAllReferees, handleAddReferee, handleRemoveReferee,
+  handleSaveReferees, handleSaveInfo,
+}: {
+  match: any; matchDate: string; setMatchDate: (v: string) => void;
+  matchTime: string; setMatchTime: (v: string) => void;
+  venueId: string; setVenueId: (v: string) => void;
+  matchReferees: MatchReferee[]; addRefereeId: string; setAddRefereeId: (v: string) => void;
+  addRefereeRoleId: string; setAddRefereeRoleId: (v: string) => void;
+  savingReferees: boolean; saving: boolean; safeAllReferees: Referee[];
+  handleAddReferee: () => void; handleRemoveReferee: (id: string) => void;
+  handleSaveReferees: () => void; handleSaveInfo: () => void;
+}) {
+  const [showClock, setShowClock] = useState(false);
+  const [matchDescription, setMatchDescription] = useState<string>(match.description ?? "");
+  const [showVenueDropdown, setShowVenueDropdown] = useState(false);
+  const [venueSearch, setVenueSearch] = useState("");
+  const [showRefereeDropdown, setShowRefereeDropdown] = useState(false);
+  const [refereeSearch, setRefereeSearch] = useState("");
+
+  const border = "1px solid var(--color-border)";
+
+  const fieldStyle: React.CSSProperties = {
+    display: "flex", flexDirection: "column", gap: 6,
+    padding: "16px 18px", backgroundColor: "var(--color-surface)",
+    position: "relative", cursor: "text", transition: "background 0.12s", flex: 1,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+    letterSpacing: "0.12em", textTransform: "uppercase" as const,
+    color: "var(--color-text-secondary)",
+    display: "flex", alignItems: "center", gap: 6,
+  };
+  const valueStyle: React.CSSProperties = {
+    fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 600,
+    color: "var(--color-text-primary)", background: "none",
+    border: "none", outline: "none", width: "100%", padding: 0,
+  };
+  const focusBar: React.CSSProperties = {
+    position: "absolute", bottom: 0, left: 0, right: 0,
+    height: 1.5, background: "var(--color-brand)",
+    transform: "scaleX(0)", transition: "transform 0.2s",
+    transformOrigin: "left", pointerEvents: "none",
+  };
+
+  function SectionHeader({ title }: { title: string }) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
+          {title}
+        </span>
+        <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
+      </div>
+    );
+  }
+
+  const IconCalendar = () => (
+    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+      <rect x="1" y="2" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M3 1v2M7 1v2M1 5h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconClock = () => (
+    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+      <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M5 3v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconStadium = () => (
+    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+      <path d="M1 8V4.5C1 3 2 2 5 2s4 1 4 2.5V8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+      <path d="M1 5.5h8M3 2.5V8M7 2.5V8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconNote = () => (
+    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
+      <rect x="1.5" y="1" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.1"/>
+      <path d="M3 4h4M3 6h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconChevronDown = () => (
+    <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
+      <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+
+  const selectedVenue = (match.venues_list ?? []).find((v: any) => v.id === venueId);
+  const filteredReferees = refereeSearch.trim()
+    ? safeAllReferees.filter(r => (r.surname ?? r.full_name).toLowerCase().includes(refereeSearch.toLowerCase()))
+    : safeAllReferees;
+  const selectedRefereeForAdd = safeAllReferees.find(r => r.id === addRefereeId);
+
+  // Fecha dropdowns ao clicar fora
+  const venueRef = useRef<HTMLDivElement>(null);
+  const refereeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (venueRef.current && !venueRef.current.contains(e.target as Node)) setShowVenueDropdown(false);
+      if (refereeRef.current && !refereeRef.current.contains(e.target as Node)) setShowRefereeDropdown(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  return (
+    <div style={{ maxWidth: 860, paddingRight: 24 }}>
+
+      {/* ── DADOS DA PARTIDA ── */}
+      <div style={{ marginBottom: 20 }}>
+        <SectionHeader title="Dados da partida" />
+        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
+
+          {/* Linha 1: Data + Horário */}
+          <div style={{ display: "flex", borderBottom: border }}>
+            <div style={fieldStyle}
+              onFocus={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(1)"; }}
+              onBlur={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(0)"; }}>
+              <span style={labelStyle}><IconCalendar /> Data</span>
+              <input type="date" defaultValue={match.match_date ?? ""}
+                onChange={e => setMatchDate(e.target.value)}
+                style={{ ...valueStyle, colorScheme: "dark" }} />
+              <div className="fbar" style={focusBar} />
+            </div>
+            <div style={{ ...fieldStyle, borderLeft: border, cursor: "pointer" }} onClick={() => setShowClock(true)}>
+              <span style={labelStyle}><IconClock /> Horário</span>
+              <div style={{ ...valueStyle, lineHeight: 1.6, color: matchTime ? "var(--color-text-primary)" : "#333" }}>
+                {matchTime || "—"}
               </div>
-              <button type="button" onClick={() => setShowActionModal(false)}
-                style={{ color: "var(--color-text-secondary)" }}>✕</button>
+              <div style={{ ...focusBar, transform: showClock ? "scaleX(1)" : "scaleX(0)" }} />
             </div>
-            <div className="px-6 py-4 space-y-4">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo de ação</span>
-                <select value={actionType} onChange={e => { setActionType(e.target.value); setIsOwnGoal(false); }} className={inputClass} style={inputStyle}>
-                  {Object.entries(ACTION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe</span>
-                <select value={actionTeamId} onChange={e => { setActionTeamId(e.target.value); setActionAthleteId(""); setActionAssistId(""); }} className={inputClass} style={inputStyle}>
-                  {teamA && <option value={teamA.id}>{teamA.full_name}</option>}
-                  {teamB && <option value={teamB.id}>{teamB.full_name}</option>}
-                </select>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Período</span>
-                <select value={actionPeriod} onChange={e => setActionPeriod(e.target.value)} className={inputClass} style={inputStyle}>
-                  <option value="first">1º Tempo</option>
-                  <option value="second">2º Tempo</option>
-                </select>
-              </label>
-              {needsMinute && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Minuto</span>
-                  <input type="number" min={1} max={halfDuration * 2} value={actionMinute}
-                    onChange={e => setActionMinute(e.target.value)} className={inputClass} style={inputStyle} />
-                </label>
-              )}
-              {needsAthlete && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Atleta</span>
-                  <select value={actionAthleteId} onChange={e => setActionAthleteId(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="">Selecione…</option>
-                    {athletes.map((a: any) => (
-                      <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {isGoal && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Tipo de gol</span>
-                  <select value={isOwnGoal ? "own_goal" : goalType}
-                    onChange={e => { if (e.target.value === "own_goal") { setIsOwnGoal(true); setGoalType("normal"); } else { setIsOwnGoal(false); setGoalType(e.target.value); } }}
-                    className={inputClass} style={inputStyle}>
-                    <option value="normal">Normal</option>
-                    <option value="penalty">Pênalti</option>
-                    <option value="own_goal">Gol Contra</option>
-                  </select>
-                </label>
-              )}
-              {isGoal && !isOwnGoal && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Assistência</span>
-                  <select value={actionAssistId} onChange={e => setActionAssistId(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="">Sem assistência</option>
-                    {athletes.filter((a: any) => a.id !== actionAthleteId).map((a: any) => (
-                      <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {needsMiss && (
-                <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Resultado</span>
-                  <select value={missResult} onChange={e => setMissResult(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="goalkeeper_save">Defesa do goleiro</option>
-                    <option value="off_target">Para fora</option>
-                    <option value="post">Na trave</option>
-                    <option value="foul">Irregularidade</option>
-                  </select>
-                </label>
-              )}
-              {actionError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{actionError}</p>}
+          </div>
+
+          {/* Linha 2: Estádio — dropdown com busca */}
+          <div style={{ borderBottom: border, position: "relative" }} ref={venueRef}>
+            <div style={{ ...fieldStyle, cursor: "pointer" }} onClick={() => { setShowVenueDropdown(v => !v); setVenueSearch(""); }}>
+              <span style={labelStyle}><IconStadium /> Estádio / Arena</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 600, color: selectedVenue ? "var(--color-text-primary)" : "#333" }}>
+                  {selectedVenue?.full_name ?? "Selecionar…"}
+                </span>
+                <IconChevronDown />
+              </div>
+              <div style={{ ...focusBar, transform: showVenueDropdown ? "scaleX(1)" : "scaleX(0)" }} />
             </div>
-            <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button" onClick={() => setShowActionModal(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                Cancelar
+            {showVenueDropdown && (
+              <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 100, backgroundColor: "#181818", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                {/* Busca */}
+                <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <input autoFocus type="text" value={venueSearch} onChange={e => setVenueSearch(e.target.value)}
+                    placeholder="Buscar estádio…"
+                    style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
+                </div>
+                <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                  {[{ id: "", full_name: "Nenhum" }, ...(match.venues_list ?? [])
+                    .filter((v: any) => !venueSearch.trim() || v.full_name.toLowerCase().includes(venueSearch.toLowerCase()))
+                  ].map((v: any, i: number) => (
+                    <div key={v.id || "none"}
+                      onClick={() => { setVenueId(v.id); setShowVenueDropdown(false); setVenueSearch(""); }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", backgroundColor: venueId === v.id ? "rgba(191,242,5,0.08)" : "transparent", transition: "background 0.1s" }}
+                      onMouseEnter={e => { if (venueId !== v.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = venueId === v.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                    >
+                      <div style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
+                          <path d="M1 11V6C1 4 3 3 7 3s6 1 6 3v5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.3" strokeLinecap="round"/>
+                          <path d="M1 7.5h12M4 3.5V11M10 3.5V11" stroke="rgba(255,255,255,0.35)" strokeWidth="1.3" strokeLinecap="round"/>
+                        </svg>
+                      </div>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: venueId === v.id ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1 }}>
+                        {v.full_name}
+                      </span>
+                      {venueId === v.id && (
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>✓</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Linha 3: Descrição */}
+          <div style={{ display: "flex" }}>
+            <div style={fieldStyle}
+              onFocus={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(1)"; }}
+              onBlur={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(0)"; }}>
+              <span style={labelStyle}><IconNote /> Descrição curta (opcional)</span>
+              <input type="text" value={matchDescription} onChange={e => setMatchDescription(e.target.value)}
+                placeholder="Ex: Jogo de volta da semifinal…"
+                style={{ ...valueStyle }} />
+              <div className="fbar" style={focusBar} />
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* ── ARBITRAGEM ── */}
+      <div style={{ marginBottom: 20 }}>
+        <SectionHeader title="Arbitragem" />
+        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
+
+          {matchReferees.map((r, idx) => (
+            <div key={r.referee_id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", borderBottom: border, transition: "background 0.12s" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                {r.referees?.photo_url
+                  ? <img src={r.referees.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "#555" }}>
+                      {(r.referees?.surname ?? r.referees?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                    </div>
+                }
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>
+                  {r.referees?.surname ?? r.referees?.full_name ?? "—"}
+                </p>
+                <span style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.08)", border: "1px solid rgba(191,242,5,0.15)", borderRadius: 4, padding: "2px 7px", marginTop: 4 }}>
+                  {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? r.referee_roles?.full_name ?? "—"}
+                </span>
+              </div>
+              <button type="button" onClick={() => handleRemoveReferee(r.referee_id)}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-border)", background: "none", color: "var(--color-danger)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 16, flexShrink: 0 }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,68,68,0.45)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+              >×</button>
+            </div>
+          ))}
+
+          {/* Adicionar árbitro */}
+          <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+
+            {/* Dropdown customizado de árbitro */}
+            <div style={{ position: "relative" }} ref={refereeRef}>
+              <div onClick={() => { setShowRefereeDropdown(v => !v); setRefereeSearch(""); }}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid var(--color-border)", borderRadius: 10, cursor: "pointer", transition: "border-color 0.12s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+              >
+                {selectedRefereeForAdd ? (
+                  <>
+                    <div style={{ width: 30, height: 30, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                      {selectedRefereeForAdd.photo_url
+                        ? <img src={selectedRefereeForAdd.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
+                            {(selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name).slice(0, 2).toUpperCase()}
+                          </div>
+                      }
+                    </div>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
+                      {selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name}
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#444", flex: 1 }}>Selecione o árbitro…</span>
+                )}
+                <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3, flexShrink: 0 }}>
+                  <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </div>
+
+              {showRefereeDropdown && (
+                <div style={{
+                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+                  zIndex: 100, backgroundColor: "#181818",
+                  border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12,
+                  boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+                  overflow: "hidden",
+                }}>
+                  <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <input autoFocus type="text" value={refereeSearch} onChange={e => setRefereeSearch(e.target.value)}
+                      placeholder="Buscar árbitro…"
+                      style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
+                  </div>
+                  <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                    {filteredReferees.length === 0
+                      ? <p style={{ padding: "20px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
+                      : filteredReferees.map((r, idx) => (
+                        <div key={r.id}
+                          onClick={() => { setAddRefereeId(r.id); setShowRefereeDropdown(false); setRefereeSearch(""); }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", backgroundColor: addRefereeId === r.id ? "rgba(191,242,5,0.08)" : "transparent", transition: "background 0.1s" }}
+                          onMouseEnter={e => { if (addRefereeId !== r.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = addRefereeId === r.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                        >
+                          <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                            {r.photo_url
+                              ? <img src={r.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#555" }}>
+                                  {(r.surname ?? r.full_name).slice(0, 2).toUpperCase()}
+                                </div>
+                            }
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: addRefereeId === r.id ? "var(--color-brand)" : "var(--color-text-primary)" }}>
+                              {r.surname ?? r.full_name}
+                            </p>
+                            {r.surname && r.full_name !== r.surname && (
+                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#555", marginTop: 2 }}>{r.full_name}</p>
+                            )}
+                          </div>
+                          {addRefereeId === r.id && (
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)", flexShrink: 0 }}>✓</span>
+                          )}
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Função + botão */}
+            <div style={{ display: "flex", gap: 10 }}>
+              <select value={addRefereeRoleId} onChange={e => setAddRefereeRoleId(e.target.value)}
+                style={{ flex: 1, padding: "12px 14px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid var(--color-border)", borderRadius: 10, fontFamily: "var(--font-mono)", fontSize: 13, color: addRefereeRoleId ? "var(--color-text-primary)" : "#444", outline: "none", cursor: "pointer" }}>
+                <option value="">Função do árbitro…</option>
+                {REFEREE_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+              <button type="button" onClick={handleAddReferee}
+                style={{ padding: "12px 20px", borderRadius: 10, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}
+              >+ Adicionar</button>
+            </div>
+
+            {matchReferees.length > 0 && (
+              <button type="button" onClick={handleSaveReferees} disabled={savingReferees}
+                style={{ alignSelf: "flex-start", padding: "9px 20px", borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", opacity: savingReferees ? 0.5 : 1 }}>
+                {savingReferees ? "Salvando…" : "Salvar árbitros"}
               </button>
-              <button type="button" onClick={handleAddAction} disabled={addingAction}
-                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                {addingAction ? "Adicionando…" : "Confirmar"}
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── SÚMULA ── */}
+      <div style={{ marginBottom: 28 }}>
+        <SectionHeader title="Súmula" />
+        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 18px", flexWrap: "wrap" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--color-text-secondary)", flex: 1, minWidth: 120 }}>
+              Súmula da partida
+            </span>
+            {([
+              { label: "Baixar vazia", variant: "neutral", icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v6M2.5 5l3 3 3-3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
+              { label: "Subir PDF",   variant: "neutral", icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><path d="M5.5 7V1M2.5 4l3-3 3 3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
+              { label: "Visualizar", variant: "brand",   icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5.5s2-3.5 4.5-3.5S10 5.5 10 5.5s-2 3.5-4.5 3.5S1 5.5 1 5.5z" stroke="currentColor" strokeWidth="1.3"/></svg> },
+            ] as const).map(({ label, variant, icon }) => (
+              <button key={label} type="button"
+                style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", border: "1px solid", textTransform: "uppercase", whiteSpace: "nowrap", transition: "all 0.12s",
+                  borderColor: variant === "brand" ? "rgba(191,242,5,0.22)" : "var(--color-border)",
+                  backgroundColor: variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
+                  color: variant === "brand" ? "var(--color-brand)" : "var(--color-text-secondary)",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.06)"; e.currentTarget.style.color = variant === "brand" ? "var(--color-brand)" : "var(--color-text-primary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.15)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)"; e.currentTarget.style.color = variant === "brand" ? "var(--color-brand)" : "var(--color-text-secondary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.22)" : "var(--color-border)"; }}
+              >
+                {icon}{label}
               </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── SALVAR ── */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button type="button" onClick={handleSaveInfo} disabled={saving}
+          style={{ padding: "12px 36px", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
+          {saving ? "Salvando…" : "Salvar alterações"}
+        </button>
+      </div>
+
+      {showClock && (
+        <TimePicker value={matchTime || "00:00"} onChange={v => setMatchTime(v)} onClose={() => setShowClock(false)} />
+      )}
+    </div>
+  );
+}
+
+// ─── FormacoesTab ─────────────────────────────────────────────────────────────
+
+function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, handleSaveLineups, toggleLineup }: {
+  match: any;
+  lineups: Record<string, LineupEntry>;
+  setLineups: React.Dispatch<React.SetStateAction<Record<string, LineupEntry>>>;
+  getAthletes: (teamId: string) => Athlete[];
+  savingLineups: boolean;
+  handleSaveLineups: () => void;
+  toggleLineup: (athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) => void;
+}) {
+  const border = "1px solid var(--color-border)";
+  const teamA = match.teams_a;
+  const teamB = match.teams_b;
+
+  function TeamPanel({ teamId, team }: { teamId: string; team: any }) {
+    const athletes = getAthletes(teamId).sort((a, b) =>
+      (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)
+    );
+
+    const isGoalkeeper = (a: Athlete) =>
+      a.player_positions?.abbreviation?.toLowerCase() === "gk" ||
+      a.player_positions?.full_name?.toLowerCase().includes("goleiro");
+
+    const goalkeepers = athletes.filter(isGoalkeeper);
+    const outfield = athletes.filter(a => !isGoalkeeper(a));
+
+    function setCaptain(athleteId: string) {
+      setLineups(prev => {
+        const next = { ...prev };
+        // Remove capitão anterior do mesmo time
+        athletes.forEach(a => {
+          if (next[a.id]?.is_captain) {
+            next[a.id] = { ...next[a.id], is_captain: false };
+          }
+        });
+        // Se clicou no mesmo, desseleciona; senão, seleciona
+        const already = prev[athleteId]?.is_captain;
+        if (!already) {
+          next[athleteId] = { ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }), is_captain: true };
+        }
+        return next;
+      });
+    }
+
+    function setGoalkeeper(athleteId: string) {
+      setLineups(prev => {
+        const next = { ...prev };
+        // Remove goleiro anterior do mesmo time
+        athletes.forEach(a => {
+          if (next[a.id]?.played_as_goalkeeper) {
+            next[a.id] = { ...next[a.id], played_as_goalkeeper: false };
+          }
+        });
+        const already = prev[athleteId]?.played_as_goalkeeper;
+        if (!already) {
+          next[athleteId] = { ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }), played_as_goalkeeper: true };
+        }
+        return next;
+      });
+    }
+
+    function AthleteRow({ athlete }: { athlete: Athlete }) {
+      const entry = lineups[athlete.id] ?? { athlete_id: athlete.id, is_present: false, is_captain: false, played_as_goalkeeper: false };
+      const name = athlete.surname ?? athlete.full_name;
+      const initials = name.slice(0, 2).toUpperCase();
+      const isPresent = entry.is_present;
+      const isCaptain = entry.is_captain;
+      const isGK = entry.played_as_goalkeeper;
+
+      return (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: border, transition: "background 0.1s" }}
+          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+        >
+          {/* Avatar */}
+          <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)", opacity: isPresent ? 1 : 0.35, transition: "opacity 0.15s" }}>
+            {athlete.photo_url
+              ? <img src={athlete.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>{initials}</div>
+            }
+          </div>
+
+          {/* Número — placeholder */}
+          <div style={{ width: 22, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#333" }}>—</div>
+
+          {/* Nome */}
+          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: isPresent ? "var(--color-text-primary)" : "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.15s" }}>
+            {name}
+          </span>
+
+          {/* GK badge — só aparece se marcado */}
+          {isGK && (
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#F2C005", backgroundColor: "rgba(242,192,5,0.1)", border: "1px solid rgba(242,192,5,0.2)", borderRadius: 4, padding: "2px 5px", flexShrink: 0 }}>
+              GK
+            </span>
+          )}
+
+          {/* Botão GK — seleciona goleiro da partida, só se presente */}
+          <button type="button"
+            title="Goleiro na partida"
+            onClick={() => setGoalkeeper(athlete.id)}
+            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: isPresent ? "pointer" : "default", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", transition: "all 0.12s",
+              borderColor: isGK ? "rgba(242,192,5,0.5)" : "rgba(255,255,255,0.12)",
+              backgroundColor: isGK ? "rgba(242,192,5,0.12)" : "rgba(255,255,255,0.04)",
+              color: isGK ? "#F2C005" : isPresent ? "#888" : "#444",
+              opacity: isPresent ? 1 : 0.4,
+            }}
+            disabled={!isPresent}
+          >GK</button>
+
+          {/* Botão C — capitão, só se presente */}
+          <button type="button"
+            title="Capitão"
+            onClick={() => setCaptain(athlete.id)}
+            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: isPresent ? "pointer" : "default", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, transition: "all 0.12s",
+              borderColor: isCaptain ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.12)",
+              backgroundColor: isCaptain ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.04)",
+              color: isCaptain ? "var(--color-brand)" : isPresent ? "#888" : "#444",
+              opacity: isPresent ? 1 : 0.4,
+            }}
+            disabled={!isPresent}
+          >C</button>
+
+          {/* Toggle presença */}
+          <button type="button"
+            onClick={() => toggleLineup(athlete.id, "is_present")}
+            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: "pointer", transition: "all 0.12s",
+              borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.12)",
+              backgroundColor: isPresent ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.04)",
+            }}
+          >
+            {isPresent
+              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: "block", margin: "auto" }}>
+                  <path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              : <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: "block", margin: "auto" }}>
+                  <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="#555" strokeWidth="1.4"/>
+                </svg>
+            }
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden", flex: 1, minWidth: 0 }}>
+        {/* Header do time */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: border }}>
+          {team?.logo_url
+            ? <img src={team.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
+            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)" }} />
+          }
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>
+            {team?.short_name ?? team?.full_name ?? "Equipe"}
+          </span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+            {athletes.filter(a => lineups[a.id]?.is_present).length}/{athletes.length}
+          </span>
+        </div>
+
+        {/* Cabeçalho das colunas */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+          <div style={{ width: 34, flexShrink: 0 }} />
+          <div style={{ width: 22, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#444" }}>Atleta</span>
+          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>GK</span>
+          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>C</span>
+          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>✓</span>
+        </div>
+
+        {athletes.length === 0 ? (
+          <p style={{ padding: "20px 16px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#444" }}>Nenhum atleta inscrito.</p>
+        ) : (
+          <div>
+            {/* Goleiros primeiro */}
+            {goalkeepers.length > 0 && (
+              <>
+                <div style={{ padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(242,192,5,0.04)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F2C005" }}>Goleiros</span>
+                </div>
+                {goalkeepers.map(a => <AthleteRow key={a.id} athlete={a} />)}
+              </>
+            )}
+            {/* Linha */}
+            {outfield.length > 0 && goalkeepers.length > 0 && (
+              <div style={{ padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#444" }}>Linha</span>
+              </div>
+            )}
+            {outfield.map(a => <AthleteRow key={a.id} athlete={a} />)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+      <TeamPanel teamId={match.team_a_id} team={teamA} />
+      <TeamPanel teamId={match.team_b_id} team={teamB} />
+
+      {/* Salvar fixo no rodapé da direita */}
+      <div style={{ position: "fixed", bottom: 24, right: 32, zIndex: 10 }}>
+        <button type="button" onClick={handleSaveLineups} disabled={savingLineups}
+          style={{ padding: "11px 28px", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: savingLineups ? 0.5 : 1, boxShadow: "0 8px 32px rgba(191,242,5,0.2)" }}>
+          {savingLineups ? "Salvando…" : "Salvar formações"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AthleteDropdown ──────────────────────────────────────────────────────────
+
+function AthleteDropdown({ athletes, selectedId, onSelect, show, setShow, search, setSearch, dropdownRef, placeholder, optional }: {
+  athletes: Athlete[]; selectedId: string;
+  onSelect: (id: string) => void;
+  show: boolean; setShow: (v: boolean) => void;
+  search: string; setSearch: (v: string) => void;
+  dropdownRef: React.RefObject<HTMLDivElement>;
+  placeholder: string; optional?: boolean;
+}) {
+  const selected = athletes.find(a => a.id === selectedId);
+  const filtered = search.trim()
+    ? athletes.filter(a => (a.surname ?? a.full_name).toLowerCase().includes(search.toLowerCase()))
+    : athletes;
+  const border = "1px solid var(--color-border)";
+
+  return (
+    <div style={{ position: "relative", marginTop: 4 }} ref={dropdownRef}>
+      <div onClick={() => { setShow(!show); setSearch(""); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", backgroundColor: "rgba(255,255,255,0.04)", border, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
+        {selected ? (
+          <>
+            <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+              {selected.photo_url
+                ? <img src={selected.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
+                    {(selected.surname ?? selected.full_name).slice(0, 2).toUpperCase()}
+                  </div>
+              }
             </div>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
+              {selected.surname ?? selected.full_name}
+            </span>
+            <button type="button" onClick={e => { e.stopPropagation(); onSelect(""); }}
+              style={{ width: 18, height: 18, borderRadius: 4, border: "none", background: "none", color: "#555", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          </>
+        ) : (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#444", flex: 1 }}>{placeholder}</span>
+        )}
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3, flexShrink: 0 }}>
+          <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+        </svg>
+      </div>
+      {show && (
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#181818", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, boxShadow: "0 16px 48px rgba(0,0,0,0.7)", overflow: "hidden" }}>
+          <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Buscar…"
+              style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
+          </div>
+          <div style={{ maxHeight: 220, overflowY: "auto" }}>
+            {optional && (
+              <div onClick={() => onSelect("")}
+                style={{ padding: "9px 12px", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "#555", borderBottom: "1px solid rgba(255,255,255,0.04)", backgroundColor: !selectedId ? "rgba(191,242,5,0.06)" : "transparent" }}
+                onMouseEnter={e => { if (selectedId) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = !selectedId ? "rgba(191,242,5,0.06)" : "transparent"; }}>
+                {placeholder}
+              </div>
+            )}
+            {filtered.length === 0
+              ? <p style={{ padding: "16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
+              : filtered.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map((a, idx) => (
+                <div key={a.id} onClick={() => onSelect(a.id)}
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: selectedId === a.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
+                  onMouseEnter={e => { if (selectedId !== a.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === a.id ? "rgba(191,242,5,0.07)" : "transparent"; }}>
+                  <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                    {a.photo_url
+                      ? <img src={a.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
+                          {(a.surname ?? a.full_name).slice(0, 2).toUpperCase()}
+                        </div>
+                    }
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: selectedId === a.id ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {a.surname ?? a.full_name}
+                  </span>
+                  {selectedId === a.id && <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)" }}>✓</span>}
+                </div>
+              ))
+            }
           </div>
         </div>
       )}
@@ -846,38 +1563,981 @@ export default function PartidaClient({
   );
 }
 
-// ─── Linha do tempo ───────────────────────────────────────────────────────────
+// ─── MinutePicker ─────────────────────────────────────────────────────────────
 
-function ActionTimeline({ action, teamA, teamB, matchTeamAId, onDelete }: {
-  action: any; teamA: any; teamB: any; matchTeamAId: string; onDelete: () => void;
+function MinutePicker({ value, max, onChange, onClose }: {
+  value: number; max: number; onChange: (v: number) => void; onClose: () => void;
 }) {
-  const isTeamA = action.team_id === matchTeamAId;
-  const team = isTeamA ? teamA : teamB;
-  const name = action.primary_athlete?.surname ?? action.primary_athlete?.full_name ?? "";
-  const color = ACTION_COLORS[action.action_type] ?? "#A6A6A6";
+  const [sel, setSel] = useState(value);
+  const items = Array.from({ length: max }, (_, i) => i + 1);
+  const ITEM_H = 48;
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border px-4 py-3"
-      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-      <span className="w-8 font-mono text-xs text-right shrink-0" style={{ color: "var(--color-text-secondary)" }}>
-        {action.minute ? `${action.minute}'` : "—"}
-      </span>
-      <span className="text-lg shrink-0">{ACTION_EMOJI[action.action_type] ?? "·"}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
-          {name || ACTION_LABELS[action.action_type]}
-          {action.is_own_goal ? " (contra)" : ""}
-        </p>
-        <p className="font-mono text-xs" style={{ color }}>
-          {team?.abbreviation ?? team?.full_name ?? "—"}
-          {name ? ` · ${ACTION_LABELS[action.action_type]}` : ""}
-        </p>
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: 220, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#555" }}>Minuto</span>
+          <button type="button" onClick={onClose} style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid var(--color-border)", background: "none", color: "#555", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+        <div style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ position: "relative", height: ITEM_H * 3, width: 100, overflow: "hidden" }}
+            onWheel={e => { e.preventDefault(); const idx = items.indexOf(sel); const next = Math.max(0, Math.min(items.length - 1, idx + (e.deltaY > 0 ? 1 : -1))); setSel(items[next]); }}>
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to bottom, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "rgba(191,242,5,0.07)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to top, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
+            <div style={{ display: "flex", flexDirection: "column", transform: `translateY(${-(items.indexOf(sel)) * ITEM_H + ITEM_H}px)`, transition: "transform 0.2s cubic-bezier(.4,0,.2,1)" }}>
+              {items.map(v => (
+                <div key={v} onClick={() => setSel(v)} style={{ height: ITEM_H, width: 100, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 700, cursor: "pointer", color: v === sel ? "var(--color-brand)" : Math.abs(v - sel) === 1 ? "#3a3a3a" : "#1e1e1e", transition: "color 0.15s", userSelect: "none" }}>
+                  {v}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: "14px 16px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8 }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1px solid var(--color-border)", background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
+          <button type="button" onClick={() => { onChange(sel); onClose(); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>OK</button>
+        </div>
       </div>
-      <button type="button" onClick={onDelete}
-        className="shrink-0 rounded border px-2 py-0.5 text-xs transition-colors hover:border-[var(--color-danger)]"
-        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-        ×
-      </button>
+    </div>
+  );
+}
+
+// ─── ActionModal ──────────────────────────────────────────────────────────────
+
+function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDuration, onConfirm, onClose, editingAction, getPeriodFromMinute }: {
+  actionType: string; preselectedTeamId?: string; match: any;
+  getAthletes: (teamId: string) => Athlete[]; halfDuration: number;
+  onConfirm: (fd: FormData) => void; onClose: () => void;
+  editingAction?: any; getPeriodFromMinute: (m: number) => "first" | "second";
+}) {
+  const teamA = match.teams_a;
+  const teamB = match.teams_b;
+  const isGoal = actionType === "goal";
+  const needsAthlete = actionType !== "fifth_foul";
+  const needsMiss = ["penalty_missed", "shootout_missed"].includes(actionType);
+  const needsTeam = !preselectedTeamId;
+
+  const [teamId, setTeamId] = useState<string>(editingAction?.team_id ?? preselectedTeamId ?? match.team_a_id ?? "");
+  const [minute, setMinute] = useState<number>(editingAction?.minute ?? 1);
+  const [showMinutePicker, setShowMinutePicker] = useState(false);
+  const [athleteId, setAthleteId] = useState<string>(editingAction?.primary_athlete?.id ?? "");
+  const [assistId, setAssistId] = useState<string>(editingAction?.secondary_athlete?.id ?? "");
+  const [goalType, setGoalType] = useState<string>(editingAction?.goal_type ?? "normal");
+  const [missResult, setMissResult] = useState<string>(editingAction?.miss_result ?? "");
+  const [goalkeeperIdVal, setGoalkeeperIdVal] = useState<string>(editingAction?.goalkeeper_id ?? "");
+
+  const [showAthleteDropdown, setShowAthleteDropdown] = useState(false);
+  const [showAssistDropdown, setShowAssistDropdown] = useState(false);
+  const [showGkDropdown, setShowGkDropdown] = useState(false);
+  const [athleteSearch, setAthleteSearch] = useState("");
+  const [assistSearch, setAssistSearch] = useState("");
+  const [gkSearch, setGkSearch] = useState("");
+  const athleteDropRef = useRef<HTMLDivElement>(null);
+  const assistDropRef = useRef<HTMLDivElement>(null);
+  const gkDropRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (athleteDropRef.current && !athleteDropRef.current.contains(e.target as Node)) setShowAthleteDropdown(false);
+      if (assistDropRef.current && !assistDropRef.current.contains(e.target as Node)) setShowAssistDropdown(false);
+      if (gkDropRef.current && !gkDropRef.current.contains(e.target as Node)) setShowGkDropdown(false);
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const isOwnGoal = goalType === "own_goal";
+  const period = getPeriodFromMinute(minute);
+  const athleteTeamId = isOwnGoal ? (teamId === match.team_a_id ? match.team_b_id : match.team_a_id) : teamId;
+  const athletes = getAthletes(athleteTeamId);
+  const opposingTeamId = teamId === match.team_a_id ? match.team_b_id : match.team_a_id;
+  const opposingAthletes = getAthletes(opposingTeamId);
+
+  const border = "1px solid var(--color-border)";
+  const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)", position: "relative", transition: "background 0.12s" };
+  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#555" };
+  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer", colorScheme: "dark" as any };
+
+  function handleConfirm() {
+    const fd = new FormData();
+    fd.append("action_type", actionType);
+    // team_id = o time que RECEBE o gol (quem o admin clicou no +, ou selecionou no modal)
+    // Para gol contra: team_id = Time A (clicado), atleta = jogador do Time B. Correto.
+    fd.append("team_id", teamId);
+    fd.append("minute", String(minute));
+    if (needsAthlete && athleteId) fd.append("primary_athlete_id", athleteId);
+    if (isGoal && !isOwnGoal && assistId) fd.append("secondary_athlete_id", assistId);
+    if (isGoal) fd.append("goal_type", goalType);
+    if (needsMiss && missResult) fd.append("miss_result", missResult);
+    if (needsMiss && missResult === "goalkeeper_save" && goalkeeperIdVal) fd.append("goalkeeper_id", goalkeeperIdVal);
+    onConfirm(fd);
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      {showMinutePicker && <MinutePicker value={minute} max={halfDuration * 2} onChange={v => setMinute(v)} onClose={() => setShowMinutePicker(false)} />}
+      <div style={{ width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "visible", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border }}>
+          <ActionIcon actionType={actionType} goalType={undefined} size={20} />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>{ACTION_LABELS[actionType] ?? actionType}</span>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)" }}>
+          {needsTeam && (
+            <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 10, padding: "12px 14px" }}>
+              {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
+                <div key={id} onClick={() => { setTeamId(id); setAthleteId(""); setAssistId(""); }}
+                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "12px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: teamId === id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.06)", borderRadius: 8 }} />}
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: teamId === id ? "var(--color-brand)" : "var(--color-text-secondary)", textAlign: "center" }}>
+                    {team?.short_name ?? team?.full_name ?? "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          {(
+            <div style={{ ...fieldStyle, cursor: "pointer" }} onClick={() => setShowMinutePicker(true)}>
+              <span style={labelStyle}>Minuto</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--color-brand)" }}>{minute}'</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#555", padding: "3px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  {period === "first" ? "1º Tempo" : "2º Tempo"}
+                </span>
+              </div>
+            </div>
+          )}
+          {isGoal && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Tipo de gol</span>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+                {[{ value: "normal", label: "Normal" }, { value: "penalty", label: "Pênalti" }, { value: "shootout", label: "Shoot-out" }, { value: "own_goal", label: "Gol contra" }].map(opt => (
+                  <button key={opt.value} type="button" onClick={() => { setGoalType(opt.value); setAthleteId(""); }}
+                    style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${goalType === opt.value ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: goalType === opt.value ? "rgba(191,242,5,0.08)" : "rgba(255,255,255,0.03)", color: goalType === opt.value ? "var(--color-brand)" : "#777", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {needsAthlete && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>{isOwnGoal ? "Atleta (equipe oposta)" : "Atleta"}</span>
+              <AthleteDropdown
+                athletes={athletes}
+                selectedId={athleteId}
+                onSelect={id => { setAthleteId(id); setShowAthleteDropdown(false); }}
+                show={showAthleteDropdown}
+                setShow={setShowAthleteDropdown}
+                search={athleteSearch}
+                setSearch={setAthleteSearch}
+                dropdownRef={athleteDropRef}
+                placeholder="Selecione o atleta…"
+              />
+            </div>
+          )}
+          {isGoal && !isOwnGoal && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Assistência (opcional)</span>
+              <AthleteDropdown
+                athletes={athletes.filter(a => a.id !== athleteId)}
+                selectedId={assistId}
+                onSelect={id => { setAssistId(id); setShowAssistDropdown(false); }}
+                show={showAssistDropdown}
+                setShow={setShowAssistDropdown}
+                search={assistSearch}
+                setSearch={setAssistSearch}
+                dropdownRef={assistDropRef}
+                placeholder="Sem assistência"
+                optional
+              />
+            </div>
+          )}
+          {needsMiss && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Resultado</span>
+              <select value={missResult} onChange={e => setMissResult(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
+                <option value="">Selecione…</option>
+                {Object.entries(MISS_RESULTS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+          )}
+          {needsMiss && missResult === "goalkeeper_save" && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Goleiro que defendeu (opcional)</span>
+              <AthleteDropdown
+                athletes={opposingAthletes}
+                selectedId={goalkeeperIdVal}
+                onSelect={id => { setGoalkeeperIdVal(id); setShowGkDropdown(false); }}
+                show={showGkDropdown}
+                setShow={setShowGkDropdown}
+                search={gkSearch}
+                setSearch={setGkSearch}
+                dropdownRef={gkDropRef}
+                placeholder="Selecione o goleiro…"
+                optional
+              />
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
+          <button type="button" onClick={() => { handleConfirm(); onClose(); }} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ShootoutModal ────────────────────────────────────────────────────────────
+
+function ShootoutModal({ match, shootoutType, getAthletes, editingShootout, onConfirm, onClose }: {
+  match: any; shootoutType: string;
+  getAthletes: (teamId: string) => Athlete[];
+  editingShootout?: any;
+  onConfirm: (fd: FormData) => void; onClose: () => void;
+}) {
+  const [teamId, setTeamId] = useState<string>(editingShootout?.team_id ?? match.team_a_id ?? "");
+  const [result, setResult] = useState<string>(editingShootout?.result ?? "goal");
+  const [athleteId, setAthleteId] = useState<string>(editingShootout?.athlete?.id ?? "");
+  const [goalkeeperIdVal, setGoalkeeperIdVal] = useState<string>(editingShootout?.goalkeeper_id ?? "");
+  const athletes = getAthletes(teamId);
+  const opposingTeamId = teamId === match.team_a_id ? match.team_b_id : match.team_a_id;
+  const opposingAthletes = getAthletes(opposingTeamId);
+  const border = "1px solid var(--color-border)";
+  const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)" };
+  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#555" };
+  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer", colorScheme: "dark" as any };
+  const teamA = match.teams_a; const teamB = match.teams_b;
+
+  function handleConfirm() {
+    const fd = new FormData();
+    fd.append("team_id", teamId);
+    fd.append("shootout_type", shootoutType);
+    fd.append("result", result);
+    if (athleteId) fd.append("athlete_id", athleteId);
+    if (result === "goalkeeper_save" && goalkeeperIdVal) fd.append("goalkeeper_id", goalkeeperIdVal);
+    if (editingShootout) fd.append("editing_id", editingShootout.id);
+    onConfirm(fd);
+    onClose();
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: "100%", maxWidth: 400, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>
+            {editingShootout ? "Editar cobrança" : `Adicionar ${shootoutType === "penalties" ? "Pênalti" : "Shoot-out"}`}
+          </span>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)" }}>
+          <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 10, padding: "12px 14px" }}>
+            {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
+              <div key={id} onClick={() => { setTeamId(id); setAthleteId(""); }}
+                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: teamId === id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                <div style={{ width: 32, height: 32, borderRadius: 7, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.06)", borderRadius: 7 }} />}
+                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: teamId === id ? "var(--color-brand)" : "var(--color-text-secondary)", textAlign: "center" }}>
+                  {team?.short_name ?? team?.full_name ?? "—"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={fieldStyle}>
+            <span style={labelStyle}>Resultado</span>
+            <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" as const }}>
+              {[{ v: "goal", l: "✓ Convertido" }, { v: "goalkeeper_save", l: "Defesa" }, { v: "off_target", l: "Para fora" }, { v: "post", l: "Na trave" }].map(opt => (
+                <button key={opt.v} type="button" onClick={() => setResult(opt.v)}
+                  style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${result === opt.v ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: result === opt.v ? "rgba(191,242,5,0.08)" : "rgba(255,255,255,0.03)", color: result === opt.v ? "var(--color-brand)" : "#777", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const }}>
+                  {opt.l}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div style={fieldStyle}>
+            <span style={labelStyle}>Cobrador</span>
+            <select value={athleteId} onChange={e => setAthleteId(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
+              <option value="">Selecione…</option>
+              {athletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
+                <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
+              ))}
+            </select>
+          </div>
+          {result === "goalkeeper_save" && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Goleiro que defendeu (opcional)</span>
+              <select value={goalkeeperIdVal} onChange={e => setGoalkeeperIdVal(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
+                <option value="">Selecione…</option>
+                {opposingAthletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
+                  <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border }}>
+          <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
+          <button type="button" onClick={handleConfirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PosJogoTab ───────────────────────────────────────────────────────────────
+
+function PosJogoTab({
+  match, actions, shootout, scoreA, scoreB, status, finishType,
+  teamStats, activePeriod, setActivePeriod, activeShootoutTab, setActiveShootoutTab,
+  showEndModal, setShowEndModal, endFinishType, setEndFinishType,
+  endAggregateWinnerId, setEndAggregateWinnerId, savingEnd, publishing, published,
+  addingAction, editingAction, setEditingAction, showActionModal, setShowActionModal,
+  openActionType, setOpenActionType, motmAthleteId, setMotmAthleteId,
+  halfDuration, getAthletes, handleChangeFouls, getFouls,
+  handleAddAction, handleDelete, handleAddShootout, handleDeleteShootout,
+  handleEncerrar, handlePublish, getPeriodFromMinute,
+}: any) {
+  const border = "1px solid var(--color-border)";
+  const teamA = match.teams_a;
+  const teamB = match.teams_b;
+  const tiebreaker = match.phases?.penalty_tiebreaker_type ?? null;
+  const hasShootout = finishType === "shootouts" || finishType === "penalties";
+
+  const [openGoalTeam, setOpenGoalTeam] = useState<string | null>(null);
+  const [openShootoutModal, setOpenShootoutModal] = useState(false);
+  const [editingShootout, setEditingShootout] = useState<any | null>(null);
+
+  const secondHalf = [...actions]
+    .filter((a: any) => a.period === "second")
+    .sort((a: any, b: any) => {
+      const minuteDiff = (b.minute ?? 0) - (a.minute ?? 0);
+      if (minuteDiff !== 0) return minuteDiff;
+      return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
+    });
+  const firstHalf = [...actions]
+    .filter((a: any) => a.period === "first")
+    .sort((a: any, b: any) => {
+      const minuteDiff = (b.minute ?? 0) - (a.minute ?? 0);
+      if (minuteDiff !== 0) return minuteDiff;
+      return new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime();
+    });
+
+  const foulsA = getFouls(match.team_a_id, activePeriod);
+  const foulsB = getFouls(match.team_b_id, activePeriod);
+
+  const actionsWithScore = (() => {
+    const sorted = [...actions].sort((a: any, b: any) => {
+      if (a.period !== b.period) return a.period === "first" ? -1 : 1;
+      const minuteDiff = (a.minute ?? 0) - (b.minute ?? 0);
+      if (minuteDiff !== 0) return minuteDiff;
+      return new Date(a.created_at ?? 0).getTime() - new Date(b.created_at ?? 0).getTime();
+    });
+    let sA = 0; let sB = 0;
+    const scoreMap: Record<string, string> = {};
+    sorted.forEach((a: any) => {
+      if (a.action_type === "goal") {
+        // team_id no banco = quem marcou (já corrigido na origem)
+        if (a.team_id === match.team_a_id) sA++; else sB++;
+        scoreMap[a.id] = `${sA}–${sB}`;
+      }
+    });
+    return scoreMap;
+  })();
+
+  const winnerSide = scoreA > scoreB ? "a" : scoreB > scoreA ? "b" : null;
+
+  // Label secundária para cada tipo de ação
+  function getSecondaryLabel(action: any): string | null {
+    if (action.action_type === "goal") {
+      if (action.goal_type === "penalty") return "Pênalti";
+      if (action.goal_type === "own_goal" || action.is_own_goal) return "Gol contra";
+      if (action.goal_type === "shootout") return "Shoot-out";
+      return null;
+    }
+    if (action.action_type === "penalty_missed" || action.action_type === "shootout_missed") {
+      return MISS_RESULTS[action.miss_result] ?? null;
+    }
+    if (action.action_type === "yellow_card") return "Cartão amarelo";
+    if (action.action_type === "red_card") return "Cartão vermelho";
+    if (action.action_type === "red_yellow_card") return "Segundo amarelo";
+    if (action.action_type === "fifth_foul") return "Quinta falta";
+    if (action.action_type === "foul") return "Falta";
+    return null;
+  }
+
+  // ── TimelineRow ─────────────────────────────────────────────────────────────
+  function TimelineRow({ action, scoreLabel }: { action: any; scoreLabel?: string }) {
+    const isA = action.team_id === match.team_a_id;
+    const isGoal = action.action_type === "goal";
+    const isOwnGoal = action.is_own_goal;
+    const name = action.primary_athlete?.surname ?? action.primary_athlete?.full_name ?? "";
+    const assistName = action.secondary_athlete?.surname ?? action.secondary_athlete?.full_name ?? "";
+
+    // Ícone correto por tipo
+    function EventIcon() {
+      const type = action.action_type;
+      const isCard = ["yellow_card", "red_card", "red_yellow_card"].includes(type);
+      if (isCard) return <ActionIcon actionType={type} size={18} />;
+      if (type === "goal" && isOwnGoal) return <ActionIcon actionType="goal" goalType="own_goal" size={18} />;
+      if (type === "goal") {
+        const gt = action.goal_type ?? "normal";
+        return (
+          <span style={{ color: "rgba(255,255,255,0.6)", display: "flex" }}>
+            <ActionIcon actionType="goal" goalType={gt} size={18} />
+          </span>
+        );
+      }
+      return (
+        <span style={{ color: "rgba(255,255,255,0.55)", display: "flex" }}>
+          <ActionIcon actionType={type} goalType="normal" size={18} />
+        </span>
+      );
+    }
+
+    // Linha secundária: apenas assistência em gols, apenas miss_result em pênalti/shootout perdido
+    function SecondaryLine() {
+      if (isGoal) {
+        if (!assistName) return null;
+        return (
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.38)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            Assist. {assistName}
+          </p>
+        );
+      }
+      if (action.action_type === "penalty_missed" || action.action_type === "shootout_missed") {
+        const label = MISS_RESULTS[action.miss_result] ?? null;
+        if (!label) return null;
+        return (
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.38)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {label}
+          </p>
+        );
+      }
+      return null;
+    }
+
+    function EventContent({ align }: { align: "left" | "right" }) {
+      const isRight = align === "right";
+      return (
+        <div
+          onClick={() => { setEditingAction(action); setOpenActionType(action.action_type); setShowActionModal(true); }}
+          style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", width: "100%", flexDirection: isRight ? "row-reverse" : "row" }}
+        >
+          {/* Ícone */}
+          <div style={{ flexShrink: 0, width: 20, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <EventIcon />
+          </div>
+
+          {/* Placar — só em gols, sempre #BFF205 */}
+          {isGoal && scoreLabel && (
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 900,
+              color: "#BFF205", flexShrink: 0, lineHeight: 1, letterSpacing: "0.02em",
+            }}>
+              {scoreLabel}
+            </span>
+          )}
+
+          {/* Texto */}
+          <div style={{ flex: 1, minWidth: 0, textAlign: isRight ? "right" : "left" }}>
+            <p style={{
+              fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+              color: "var(--color-text-primary)", overflow: "hidden",
+              textOverflow: "ellipsis", whiteSpace: "nowrap",
+              lineHeight: 1.3, letterSpacing: "0.02em", margin: 0,
+            }}>
+              {name || ACTION_LABELS[action.action_type] || "—"}
+            </p>
+            <SecondaryLine />
+          </div>
+
+          {/* Deletar */}
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); handleDelete(action.id, action.action_type, action.is_own_goal, action.team_id); }}
+            className="tl-del-btn"
+            style={{
+              width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)",
+              background: "none", color: "#FF4444", cursor: "pointer", fontSize: 14,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0, opacity: 0, transition: "opacity 0.15s",
+            }}
+          >×</button>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", alignItems: "center", minHeight: 46, borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+        onMouseEnter={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "1")}
+        onMouseLeave={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "0")}
+      >
+        <div style={{ padding: "10px 8px 10px 0", display: "flex", alignItems: "center" }}>
+          {isA ? <EventContent align="left" /> : null}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800,
+            color: "rgba(255,255,255,0.45)", letterSpacing: "0.01em", lineHeight: 1,
+          }}>
+            {action.minute ? `${action.minute}'` : "—"}
+          </span>
+        </div>
+        <div style={{ padding: "10px 0 10px 8px", display: "flex", alignItems: "center" }}>
+          {!isA ? <EventContent align="right" /> : null}
+        </div>
+      </div>
+    );
+  }
+
+  // ── ShootoutSection ─────────────────────────────────────────────────────────
+  function ShootoutSection() {
+    const shootoutType = tiebreaker ?? "shootouts";
+    const teamAKicks = shootout
+      .filter((s: any) => s.team_id === match.team_a_id)
+      .sort((a: any, b: any) => a.kick_order - b.kick_order);
+    const teamBKicks = shootout
+      .filter((s: any) => s.team_id === match.team_b_id)
+      .sort((a: any, b: any) => a.kick_order - b.kick_order);
+    const totalA = teamAKicks.filter((s: any) => s.result === "goal").length;
+    const totalB = teamBKicks.filter((s: any) => s.result === "goal").length;
+    const maxKicks = Math.max(teamAKicks.length, teamBKicks.length, 0);
+
+    function KickDot({ result }: { result: string }) {
+      const isGoal = result === "goal";
+      return (
+        <div style={{
+          width: 26, height: 26, borderRadius: 6,
+          backgroundColor: isGoal ? "rgba(191,242,5,0.1)" : "rgba(255,68,68,0.08)",
+          border: `1px solid ${isGoal ? "rgba(191,242,5,0.2)" : "rgba(255,68,68,0.18)"}`,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          {isGoal
+            ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="#FF4444" strokeWidth="1.8" strokeLinecap="round"/></svg>
+          }
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ marginTop: 8 }}>
+        {/* Header placar */}
+        <div style={{
+          display: "grid", gridTemplateColumns: "1fr 64px 1fr",
+          borderRadius: 12, border, backgroundColor: "var(--color-surface)",
+          overflow: "hidden", marginBottom: 8,
+        }}>
+          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 8 }}>
+            {teamA?.logo_url && <img src={teamA.logo_url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />}
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+              {teamA?.short_name ?? teamA?.full_name ?? "—"}
+            </span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 800, color: totalA > totalB ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{totalA}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: "#2a2a2a" }}>–</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 800, color: totalB > totalA ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{totalB}</span>
+          </div>
+          <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+              {teamB?.short_name ?? teamB?.full_name ?? "—"}
+            </span>
+            {teamB?.logo_url && <img src={teamB.logo_url} alt="" style={{ width: 22, height: 22, objectFit: "contain" }} />}
+          </div>
+        </div>
+
+        {/* Kicks */}
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {Array.from({ length: maxKicks }).map((_, i) => {
+            const kA = teamAKicks[i];
+            const kB = teamBKicks[i];
+            return (
+              <div key={i} style={{
+                display: "grid", gridTemplateColumns: "1fr 64px 1fr",
+                alignItems: "center", minHeight: 40,
+                borderBottom: i < maxKicks - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 0" }}>
+                {kA && (
+                    <>
+                      <KickDot result={kA.result} />
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {kA.athlete?.surname ?? kA.athlete?.full_name ?? "—"}
+                      </span>
+                      <button type="button" onClick={() => { setEditingShootout(kA); setOpenShootoutModal(true); }}
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                      <button type="button" onClick={() => handleDeleteShootout(kA.id)}
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "#FF4444", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+                    </>
+                  )}
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#2a2a2a" }}>{i + 1}</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "6px 0 6px 8px" }}>
+                {kB && (
+                    <>
+                      <button type="button" onClick={() => handleDeleteShootout(kB.id)}
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "#FF4444", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+                      <button type="button" onClick={() => { setEditingShootout(kB); setOpenShootoutModal(true); }}
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>
+                        {kB.athlete?.surname ?? kB.athlete?.full_name ?? "—"}
+                      </span>
+                      <KickDot result={kB.result} />
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <button type="button" onClick={() => setOpenShootoutModal(true)}
+          style={{
+            width: "100%", marginTop: 8, padding: "12px",
+            border: "1px dashed rgba(255,255,255,0.08)", borderRadius: 10,
+            background: "none", color: "#444", fontFamily: "var(--font-mono)",
+            fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
+            cursor: "pointer", transition: "all 0.15s",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.color = "var(--color-brand)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "#444"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+        >+ Adicionar cobrança</button>
+      </div>
+    );
+  }
+
+  // ── Render principal ────────────────────────────────────────────────────────
+  return (
+    <div style={{ maxWidth: 960, margin: "0 auto", paddingBottom: 80, width: "100%" }}>
+
+      {/* ── Modal encerramento ── */}
+      {showEndModal && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.78)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowEndModal(false); }}>
+          <div style={{ width: "100%", maxWidth: 400, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#111", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: border }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Encerrar partida</span>
+              <button type="button" onClick={() => setShowEndModal(false)} style={{ width: 28, height: 28, borderRadius: 7, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+            </div>
+            <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>Tipo de encerramento</p>
+              {[{ v: "normal", l: "Normal" }, { v: "penalties", l: "Pênaltis" }, { v: "shootouts", l: "Shoot-outs" }, { v: "walkover", l: "W.O." }, { v: "postponed", l: "Adiada" }].map(opt => (
+                <div key={opt.v} onClick={() => setEndFinishType(opt.v)}
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 9, border: `1px solid ${endFinishType === opt.v ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: endFinishType === opt.v ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                  <div style={{ width: 14, height: 14, borderRadius: "50%", border: `1.5px solid ${endFinishType === opt.v ? "var(--color-brand)" : "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {endFinishType === opt.v && <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--color-brand)" }} />}
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: endFinishType === opt.v ? "var(--color-text-primary)" : "#555" }}>{opt.l}</span>
+                </div>
+              ))}
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginTop: 8, marginBottom: 4 }}>Vencedor agregado (opcional)</p>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[{ id: "", label: "Empate", logo: null }, { id: match.team_a_id, label: teamA?.short_name ?? "A", logo: teamA?.logo_url }, { id: match.team_b_id, label: teamB?.short_name ?? "B", logo: teamB?.logo_url }].map(opt => (
+                  <div key={opt.id} onClick={() => setEndAggregateWinnerId(opt.id)}
+                    style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${endAggregateWinnerId === opt.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: endAggregateWinnerId === opt.id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer" }}>
+                    {opt.logo ? <img src={opt.logo} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} /> : <div style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 10, color: "#333" }}>—</span></div>}
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: endAggregateWinnerId === opt.id ? "var(--color-brand)" : "#444", textAlign: "center" }}>{opt.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "14px 20px", borderTop: border }}>
+              <button type="button" onClick={() => setShowEndModal(false)} style={{ flex: 1, padding: 11, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
+              <button type="button" onClick={handleEncerrar} disabled={savingEnd || !endFinishType}
+                style={{ flex: 2, padding: 11, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: savingEnd || !endFinishType ? 0.45 : 1 }}>
+                {savingEnd ? "Salvando…" : "Confirmar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modais de ação ── */}
+      {(openGoalTeam !== null || (showActionModal && openActionType)) && (
+        <ActionModal
+          actionType={openGoalTeam ? "goal" : openActionType!}
+          preselectedTeamId={openGoalTeam ?? undefined}
+          match={match}
+          getAthletes={getAthletes}
+          halfDuration={halfDuration}
+          editingAction={editingAction}
+          onConfirm={(fd) => handleAddAction(fd)}
+          onClose={() => { setOpenGoalTeam(null); setOpenActionType(null); setShowActionModal(false); setEditingAction(null); }}
+          getPeriodFromMinute={getPeriodFromMinute}
+        />
+      )}
+
+      {/* ── Modal shootout ── */}
+      {openShootoutModal && (
+        <ShootoutModal
+          match={match}
+          shootoutType={tiebreaker ?? "shootouts"}
+          getAthletes={getAthletes}
+          editingShootout={editingShootout}
+          onConfirm={handleAddShootout}
+          onClose={() => { setOpenShootoutModal(false); setEditingShootout(null); }}
+        />
+      )}
+
+      {/* ══ BLOCO 1 — STATUS ══ */}
+      <div
+        onClick={() => setShowEndModal(true)}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "11px 18px", borderRadius: 10, border,
+          backgroundColor: "var(--color-surface)", cursor: "pointer",
+          marginBottom: 10, transition: "border-color 0.15s",
+        }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+      >
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)" }}>Status da partida</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: finishType ? "var(--color-brand)" : "rgba(255,255,255,0.2)" }}>
+            {finishType ? FINISH_TYPE_LABELS[finishType] ?? finishType : "Definir encerramento"}
+          </span>
+          <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 16, lineHeight: 1 }}>›</span>
+        </div>
+      </div>
+
+      {/* ══ BLOCO 2 — SCOREBOARD COM + ══ */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr auto 1fr",
+        borderRadius: 12, border, backgroundColor: "var(--color-surface)",
+        overflow: "hidden", marginBottom: 10, position: "relative",
+      }}>
+        {/* Underline vencedor */}
+        {winnerSide && status !== "scheduled" && (
+          <div style={{
+            position: "absolute", bottom: 0,
+            left: winnerSide === "a" ? 0 : "auto",
+            right: winnerSide === "b" ? 0 : "auto",
+            width: "40%", height: 2,
+            backgroundColor: "var(--color-brand)", borderRadius: 1,
+          }} />
+        )}
+        {/* Time A */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" }}>
+          {teamA?.logo_url ? <img src={teamA.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)" }} />}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: winnerSide === "a" ? "var(--color-text-primary)" : "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            {teamA?.short_name ?? teamA?.full_name ?? "—"}
+          </span>
+          <button type="button" onClick={() => setOpenGoalTeam(match.team_a_id)}
+            style={{ marginLeft: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#444"; }}>+</button>
+        </div>
+        {/* Placar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 22px" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 38, fontWeight: 900, lineHeight: 1, color: winnerSide === "a" ? "var(--color-brand)" : "var(--color-text-secondary)", width: 40, textAlign: "center", transition: "color 0.2s" }}>{scoreA}</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, color: "#1a1a1a", lineHeight: 1 }}>:</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 38, fontWeight: 900, lineHeight: 1, color: winnerSide === "b" ? "var(--color-brand)" : "var(--color-text-secondary)", width: 40, textAlign: "center", transition: "color 0.2s" }}>{scoreB}</span>
+        </div>
+        {/* Time B */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "14px 16px" }}>
+          <button type="button" onClick={() => setOpenGoalTeam(match.team_b_id)}
+            style={{ marginRight: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#444"; }}>+</button>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: winnerSide === "b" ? "var(--color-text-primary)" : "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            {teamB?.short_name ?? teamB?.full_name ?? "—"}
+          </span>
+          {teamB?.logo_url ? <img src={teamB.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)" }} />}
+        </div>
+      </div>
+
+      {/* ══ BLOCO 3 — FALTAS ══ */}
+      <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden", marginBottom: 10 }}>
+        {/* Tabs */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: border }}>
+          {(["first", "second"] as const).map(p => (
+            <button key={p} type="button" onClick={() => setActivePeriod(p)}
+              style={{
+                padding: "9px 0", border: "none",
+                backgroundColor: activePeriod === p ? "rgba(191,242,5,0.05)" : "transparent",
+                color: activePeriod === p ? "var(--color-brand)" : "rgba(255,255,255,0.25)",
+                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                letterSpacing: "0.12em", textTransform: "uppercase",
+                cursor: "pointer", borderRight: p === "first" ? border : "none",
+                transition: "all 0.12s",
+              }}>
+              {p === "first" ? "1º Tempo" : "2º Tempo"}
+            </button>
+          ))}
+        </div>
+        {/* Contadores */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+          {([
+            { teamId: match.team_a_id, fouls: foulsA, align: "left" as const },
+            { teamId: match.team_b_id, fouls: foulsB, align: "right" as const },
+          ]).map(({ teamId, fouls, align }) => {
+            const isDanger = fouls >= 5;
+            return (
+              <div key={teamId} style={{
+                display: "flex", alignItems: "center",
+                padding: "14px 18px", gap: 12,
+                flexDirection: align === "right" ? "row-reverse" : "row",
+                borderLeft: align === "right" ? border : "none",
+              }}>
+                <button type="button" onClick={() => handleChangeFouls(teamId, -1)}
+                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                >−</button>
+                <div style={{ textAlign: "center", minWidth: 44 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 34, fontWeight: 900, lineHeight: 1, color: isDanger ? "#FF4444" : "var(--color-text-primary)", transition: "color 0.2s", display: "block" }}>{fouls}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: isDanger ? "rgba(255,68,68,0.6)" : "rgba(255,255,255,0.2)", marginTop: 2, display: "block" }}>
+                    {isDanger ? "5ª FALTA" : "Faltas"}
+                  </span>
+                </div>
+                <button type="button" onClick={() => handleChangeFouls(teamId, 1)}
+                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                >+</button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ══ BLOCO 4 — BOTÕES DE AÇÃO ══ */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginBottom: 20 }}>
+        {[
+          { type: "yellow_card",     label: "Amarelo" },
+          { type: "red_card",        label: "Vermelho" },
+          { type: "red_yellow_card", label: "Amar-Verm." },
+          { type: "penalty_missed",  label: "Pênalti" },
+          { type: "shootout_missed", label: "Shoot-out" },
+          { type: "fifth_foul",      label: "5ª Falta" },
+        ].map(({ type, label }) => (
+          <button key={type} type="button"
+            onClick={() => { setOpenActionType(type); setShowActionModal(true); setEditingAction(null); }}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              gap: 10, padding: "16px 8px", borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.07)",
+              backgroundColor: "var(--color-surface)", cursor: "pointer", transition: "all 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-surface)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.transform = "translateY(0)"; }}
+          >
+            <ActionIcon actionType={type} size={28} />
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
+              letterSpacing: "0.08em", textTransform: "uppercase",
+              color: "rgba(255,255,255,0.4)",
+              textAlign: "center", lineHeight: 1.4,
+            }}>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ══ BLOCO 5 — ABAS TIMELINE / SHOOTOUT ══ */}
+      {hasShootout && (
+        <div style={{ display: "flex", borderBottom: border, marginBottom: 16 }}>
+          {[
+            { key: "timeline", label: "Período FT" },
+            { key: "shootout", label: tiebreaker === "penalties" ? "Pênaltis" : "Shoot-outs" },
+          ].map(tab => (
+            <button key={tab.key} type="button" onClick={() => setActiveShootoutTab(tab.key as any)}
+              style={{
+                padding: "10px 20px", border: "none",
+                borderBottom: `2px solid ${activeShootoutTab === tab.key ? "var(--color-brand)" : "transparent"}`,
+                backgroundColor: "transparent",
+                color: activeShootoutTab === tab.key ? "var(--color-brand)" : "rgba(255,255,255,0.25)",
+                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                letterSpacing: "0.12em", textTransform: "uppercase",
+                cursor: "pointer", transition: "color 0.12s", marginBottom: -1,
+              }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ══ BLOCO 6 — TIMELINE ══ */}
+      {(!hasShootout || activeShootoutTab === "timeline") && (
+        <div>
+          {actions.length === 0 ? (
+            <div style={{ padding: "64px 0", textAlign: "center" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.12)" }}>Sem ações registradas</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)", marginTop: 8 }}>Use os botões acima para registrar eventos da partida.</p>
+            </div>
+          ) : (
+            <>
+              {secondHalf.length > 0 && (
+                <div style={{ marginBottom: 4 }}>
+                  {/* Separador 2º tempo */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
+                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ textAlign: "center" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#BFF205" }}>2º T</span>
+                    </div>
+                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                  </div>
+                  {secondHalf.map((a: any) => <TimelineRow key={a.id} action={a} scoreLabel={actionsWithScore[a.id]} />)}
+                </div>
+              )}
+              {firstHalf.length > 0 && (
+                <div style={{ marginTop: secondHalf.length > 0 ? 16 : 0 }}>
+                  {/* Separador 1º tempo */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
+                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ textAlign: "center" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#BFF205" }}>1º T</span>
+                    </div>
+                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                  </div>
+                  {firstHalf.map((a: any) => <TimelineRow key={a.id} action={a} scoreLabel={actionsWithScore[a.id]} />)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Shootout tab */}
+      {hasShootout && activeShootoutTab === "shootout" && <ShootoutSection />}
+
+      {/* ══ RODAPÉ FIXO ══ */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        padding: "12px 32px",
+        backgroundColor: "rgba(10,10,10,0.95)",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        backdropFilter: "blur(12px)",
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
+        gap: 12, zIndex: 20,
+      }}>
+        {published && (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(191,242,5,0.45)", textTransform: "uppercase" }}>✓ Publicado</span>
+        )}
+        <button type="button" onClick={handlePublish} disabled={publishing}
+          style={{
+            padding: "11px 32px", borderRadius: 9,
+            border: published ? "1px solid rgba(191,242,5,0.25)" : "none",
+            backgroundColor: published ? "rgba(191,242,5,0.05)" : "var(--color-brand)",
+            color: published ? "var(--color-brand)" : "var(--color-background)",
+            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
+            letterSpacing: "0.1em", textTransform: "uppercase",
+            cursor: publishing ? "not-allowed" : "pointer",
+            opacity: publishing ? 0.5 : 1, transition: "all 0.15s",
+          }}>
+          {publishing ? "Publicando…" : published ? "✓ Publicado" : "Publicar resultado"}
+        </button>
+      </div>
     </div>
   );
 }

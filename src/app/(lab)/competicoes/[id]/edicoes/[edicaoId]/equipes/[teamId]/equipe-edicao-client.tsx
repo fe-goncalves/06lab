@@ -7,12 +7,12 @@ import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import {
-    removerAtletaEdicao, aprovarInscricao, desativarInscricao, reativarInscricao,
-    transferirAtletaNaEdicao, inscreverAtletaQualquer,
-  } from "@/app/(lab)/competicoes/[id]/edicoes/actions";
+  removerAtletaEdicao, aprovarInscricao, desativarInscricao, reativarInscricao,
+  transferirAtletaNaEdicao, inscreverAtletaQualquer, editarStint, editarStintStaff,
+} from "@/app/(lab)/competicoes/[id]/edicoes/actions";
 
 import { criarAtleta } from "@/app/(lab)/atletas/actions";
-import { Plus, Check, X, ArrowRightLeft, Search, Ban, RotateCcw, Trash2 } from "lucide-react";
+import { Plus, Check, X, ArrowRightLeft, Search, Ban, RotateCcw, Trash2, History } from "lucide-react";
 
 type RosterEntry = {
   id: string;
@@ -48,6 +48,16 @@ type EditionTeam = {
 };
 
 type Position = { id: string; full_name: string; abbreviation: string };
+
+type StintRecord = {
+  id: string;
+  team_id: string;
+  team_name: string;
+  started_at: string;
+  ended_at: string | null;
+  is_current: boolean;
+  movement_type: string | null;
+};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "Pendente", approved: "Aprovado", rejected: "Rejeitado",
@@ -262,6 +272,7 @@ export default function EquipeEdicaoClient({
   // Modal transferir
   const [transferEntryId, setTransferEntryId] = useState<string | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
+  const [transferDate, setTransferDate] = useState("");
 
   // Modal remover
   const [removeConfirmEntryId, setRemoveConfirmEntryId] = useState<string | null>(null);
@@ -271,6 +282,21 @@ export default function EquipeEdicaoClient({
   // Modal rejeitar
   const [rejectEntryId, setRejectEntryId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+// Modal histórico de stints
+const [historyAthleteId, setHistoryAthleteId] = useState<string | null>(null);
+const [historyAthleteName, setHistoryAthleteName] = useState<string>("");
+const [historyStints, setHistoryStints] = useState<StintRecord[]>([]);
+const [historyLoading, setHistoryLoading] = useState(false);
+const [editingStintId, setEditingStintId] = useState<string | null>(null);
+const [editStintStarted, setEditStintStarted] = useState("");
+const [editStintEnded, setEditStintEnded] = useState("");
+const [savingStint, setSavingStint] = useState(false);
+const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">("athlete");
+  
+  // Modal aprovar — data de início
+  const [approveEntryId, setApproveEntryId] = useState<string | null>(null);
+  const [approveStartDate, setApproveStartDate] = useState("");
 
   const team = editionTeam.teams;
   const teamColor = team?.primary_color ?? "var(--color-brand)";
@@ -345,12 +371,18 @@ export default function EquipeEdicaoClient({
   }
 
   async function handleAprovar(entryId: string) {
+    if (!approveStartDate) return;
+    // Converte DD/MM/YYYY → YYYY-MM-DD
+    const parts = approveStartDate.split("/");
+    const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : approveStartDate;
     setProcessing(entryId);
-    const result = await aprovarInscricao(entryId);
+    const result = await aprovarInscricao(entryId, isoDate);
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Aprovado.");
     setEntries(prev => prev.map(e => e.id === entryId ? { ...e, status: "approved" } : e));
+    setApproveEntryId(null);
+    setApproveStartDate("");
   }
 
   async function handleRejeitar(entryId: string, reason: string) {
@@ -419,17 +451,90 @@ export default function EquipeEdicaoClient({
     setRemoveBlocked(false);
   }
 
+  async function handleOpenHistory(memberId: string, memberName: string, memberType: "athlete" | "staff") {
+    setHistoryAthleteId(memberId);
+    setHistoryMemberType(memberType);
+    setHistoryAthleteName(memberName);
+    setHistoryStints([]);
+    setEditingStintId(null);
+    setHistoryLoading(true);
+
+    const supabase = createClient();
+
+    const { data: editionTeamsData } = await supabase
+      .from("edition_teams")
+      .select("team_id, teams(full_name, abbreviation)")
+      .eq("edition_id", edicaoId);
+
+    const teamIds = (editionTeamsData ?? []).map((et: any) => et.team_id);
+    const teamMap: Record<string, string> = {};
+    (editionTeamsData ?? []).forEach((et: any) => {
+      teamMap[et.team_id] = et.teams?.full_name ?? et.teams?.abbreviation ?? "—";
+    });
+
+    if (teamIds.length === 0) {
+      setHistoryLoading(false);
+      return;
+    }
+
+    const table = memberType === "athlete" ? "athlete_team_stints" : "staff_team_stints";
+    const column = memberType === "athlete" ? "athlete_id" : "staff_member_id";
+
+    const { data: stints } = await supabase
+      .from(table)
+      .select("id, team_id, started_at, ended_at, is_current, movement_type")
+      .eq(column, memberId)
+      .in("team_id", teamIds)
+      .order("started_at", { ascending: true });
+
+    setHistoryStints(
+      (stints ?? []).map((s: any) => ({
+        ...s,
+        team_name: teamMap[s.team_id] ?? "—",
+      }))
+    );
+    setHistoryLoading(false);
+  }
+  
+  async function handleSaveStint(stintId: string) {
+    if (!editStintStarted) return;
+    const toISO = (val: string) => {
+      const parts = val.split("/");
+      return parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : val;
+    };
+    const startedISO = toISO(editStintStarted);
+    const endedISO = editStintEnded && editStintEnded.length === 10 ? toISO(editStintEnded) : null;
+
+    setSavingStint(true);
+    const result = historyMemberType === "athlete"
+      ? await editarStint(stintId, startedISO, endedISO)
+      : await editarStintStaff(stintId, startedISO, endedISO);
+    setSavingStint(false);
+
+    if ("error" in result) { toast("error", result.error); return; }
+
+    toast("success", "Stint atualizado.");
+    setHistoryStints(prev => prev.map(s =>
+      s.id === stintId
+        ? { ...s, started_at: startedISO, ended_at: endedISO, is_current: endedISO === null }
+        : s
+    ));
+    setEditingStintId(null);
+  }
+
   async function handleTransferir() {
-    if (!transferEntryId || !transferTargetId) return;
+    if (!transferEntryId || !transferTargetId || !transferDate) return;
+    const parts = transferDate.split("/");
+    const isoDate = parts.length === 3 ? `${parts[2]}-${parts[1]}-${parts[0]}` : transferDate;
     setProcessing(transferEntryId);
-    const result = await transferirAtletaNaEdicao(transferEntryId, transferTargetId);
+    const result = await transferirAtletaNaEdicao(transferEntryId, transferTargetId, isoDate);
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", transferTargetId === freeAgentPoolId ? "Atleta movido para sem clube." : "Transferência realizada.");
-    // Remove completamente da lista — atleta não pertence mais a esta equipe nesta edição
     setEntries(prev => prev.filter(e => e.id !== transferEntryId));
     setTransferEntryId(null);
     setTransferTargetId("");
+    setTransferDate("");
   }
 
   async function handleInscrever(athlete: Athlete) {
@@ -644,7 +749,8 @@ export default function EquipeEdicaoClient({
                         {entry.status === "pending" && (
                           <>
                             <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
-                              onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                              onClick={() => { setApproveEntryId(entry.id); setApproveStartDate(""); }}
+                              disabled={processing === entry.id}
                               color="var(--color-brand)" />
                             <ActionButton icon={<X size={14} strokeWidth={2.5} />} label="Rejeitar"
                               onClick={() => { setRejectEntryId(entry.id); setRejectReason(""); }}
@@ -667,9 +773,21 @@ export default function EquipeEdicaoClient({
                             onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
                             color="var(--color-brand)" />
                         )}
-                        <ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
-                          onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
-                          color="var(--color-danger)" />
+                        {entry.member_type === "athlete" && entry.athlete_id && (
+  <ActionButton
+    icon={<History size={14} strokeWidth={2.5} />}
+    label="Histórico"
+    onClick={() => handleOpenHistory(
+      entry.athlete_id!,
+      entry.athletes?.surname ?? entry.athletes?.full_name ?? "Atleta",
+      "athlete"
+    )}
+    disabled={processing === entry.id}
+  />
+)}
+<ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
+  onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
+  color="var(--color-danger)" />
                       </>
                     }
                   />
@@ -713,7 +831,8 @@ export default function EquipeEdicaoClient({
                         {entry.status === "pending" && (
                           <>
                             <ActionButton icon={<Check size={14} strokeWidth={2.5} />} label="Aprovar"
-                              onClick={() => handleAprovar(entry.id)} disabled={processing === entry.id}
+                              onClick={() => { setApproveEntryId(entry.id); setApproveStartDate(""); }}
+                              disabled={processing === entry.id}
                               color="var(--color-brand)" />
                             <ActionButton icon={<X size={14} strokeWidth={2.5} />} label="Rejeitar"
                               onClick={() => { setRejectEntryId(entry.id); setRejectReason(""); }}
@@ -722,18 +841,36 @@ export default function EquipeEdicaoClient({
                           </>
                         )}
                         {entry.status === "approved" && (
-                          <ActionButton icon={<Ban size={14} strokeWidth={2.5} />} label="Desativar"
-                            onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
-                            color="#F2C005" />
-                        )}
+  <>
+    <ActionButton icon={<ArrowRightLeft size={14} strokeWidth={2.5} />} label="Transferir"
+      onClick={() => { setTransferEntryId(entry.id); setTransferTargetId(""); setTransferDate(""); }}
+      disabled={processing === entry.id} />
+    <ActionButton icon={<Ban size={14} strokeWidth={2.5} />} label="Desativar"
+      onClick={() => handleDesativar(entry.id)} disabled={processing === entry.id}
+      color="#F2C005" />
+  </>
+)}
+                        
                         {entry.status === "inactive" && (
                           <ActionButton icon={<RotateCcw size={14} strokeWidth={2.5} />} label="Reativar"
                             onClick={() => handleReativar(entry.id)} disabled={processing === entry.id}
                             color="var(--color-brand)" />
                         )}
-                        <ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
-                          onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
-                          color="var(--color-danger)" />
+                        {entry.member_type === "staff" && entry.staff_member_id && (
+  <ActionButton
+    icon={<History size={14} strokeWidth={2.5} />}
+    label="Histórico"
+    onClick={() => handleOpenHistory(
+      entry.staff_member_id!,
+      entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "Membro",
+      "staff"
+    )}
+    disabled={processing === entry.id}
+  />
+)}
+<ActionButton icon={<Trash2 size={14} strokeWidth={2.5} />} label="Remover"
+  onClick={() => handleRemover(entry.id)} disabled={processing === entry.id}
+  color="var(--color-danger)" />
                       </>
                     }
                   />
@@ -1100,40 +1237,273 @@ export default function EquipeEdicaoClient({
       )}
 
       {/* ── MODAL TRANSFERIR ── */}
-      {transferEntryId && (
+{transferEntryId && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div className="w-full max-w-sm rounded-xl border shadow-xl p-6"
+      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+      <h2 className="mb-4 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Transferir atleta</h2>
+      <div className="space-y-3 mb-4">
+        <label className="flex flex-col gap-1">
+          <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Destino</span>
+          <select value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)}
+            className={inputClass} style={inputStyle}>
+            <option value="">Selecione…</option>
+            {freeAgentPoolId && (
+              <option value={freeAgentPoolId}>⚪ Sem clube (free agent)</option>
+            )}
+            {allEditionTeams.map(et => (
+              <option key={et.id} value={et.id}>{et.teams?.full_name ?? "—"}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            Data da transferência <span style={{ color: "var(--color-danger)" }}>*</span>
+          </span>
+          <input
+            type="text"
+            placeholder="DD/MM/AAAA"
+            value={transferDate}
+            maxLength={10}
+            onChange={e => setTransferDate(applyDateMask(e.target.value))}
+            className={inputClass}
+            style={inputStyle}
+          />
+          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            Partidas anteriores a esta data mantêm o atleta na equipe de origem.
+          </span>
+        </label>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button type="button"
+          onClick={() => { setTransferEntryId(null); setTransferTargetId(""); setTransferDate(""); }}
+          className="rounded-lg border px-4 py-2 text-sm"
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+          Cancelar
+        </button>
+        <button type="button" onClick={handleTransferir}
+          disabled={!transferTargetId || !transferDate || transferDate.length < 10 || processing === transferEntryId}
+          className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+          {processing === transferEntryId ? "Transferindo…" : "Confirmar"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* ── MODAL APROVAR ── */}
+{approveEntryId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-sm rounded-xl border shadow-xl p-6"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            <h2 className="mb-4 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Transferir atleta</h2>
+            <h2 className="mb-1 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Aprovar inscrição</h2>
+            <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+              Informe a data de início do atleta nesta equipe. Esta data define a partir de quando ele pode jogar.
+            </p>
             <label className="flex flex-col gap-1 mb-4">
-              <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Destino</span>
-              <select value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)}
-                className={inputClass} style={inputStyle}>
-                <option value="">Selecione…</option>
-                {freeAgentPoolId && (
-                  <option value={freeAgentPoolId}>⚪ Sem clube (free agent)</option>
-                )}
-                {allEditionTeams.map(et => (
-                  <option key={et.id} value={et.id}>{et.teams?.full_name ?? "—"}</option>
-                ))}
-              </select>
+              <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                Data de início <span style={{ color: "var(--color-danger)" }}>*</span>
+              </span>
+              <input
+                type="text"
+                placeholder="DD/MM/AAAA"
+                value={approveStartDate}
+                maxLength={10}
+                autoFocus
+                onChange={e => setApproveStartDate(applyDateMask(e.target.value))}
+                className={inputClass}
+                style={inputStyle}
+              />
             </label>
             <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => { setTransferEntryId(null); setTransferTargetId(""); }}
+              <button type="button"
+                onClick={() => { setApproveEntryId(null); setApproveStartDate(""); }}
                 className="rounded-lg border px-4 py-2 text-sm"
                 style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                 Cancelar
               </button>
-              <button type="button" onClick={handleTransferir}
-                disabled={!transferTargetId || processing === transferEntryId}
+              <button type="button"
+                onClick={() => approveEntryId && handleAprovar(approveEntryId)}
+                disabled={!approveStartDate || approveStartDate.length < 10 || processing === approveEntryId}
                 className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
                 style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                {processing === transferEntryId ? "Transferindo…" : "Confirmar"}
+                {processing === approveEntryId ? "Aprovando…" : "Confirmar"}
               </button>
             </div>
           </div>
         </div>
-      )}
+        )}
+
+{/* ── MODAL HISTÓRICO DE STINTS ── */}
+{historyAthleteId && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+    <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col"
+      style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "80vh" }}>
+
+      {/* Header */}
+      <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
+        style={{ borderColor: "var(--color-border)" }}>
+        <div>
+          <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>
+            Histórico na edição
+          </h2>
+          <p className="font-mono text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
+            {historyAthleteName.toUpperCase()}
+          </p>
+        </div>
+        <button type="button"
+          onClick={() => { setHistoryAthleteId(null); setEditingStintId(null); }}
+          style={{ color: "var(--color-text-secondary)" }}>
+          <X size={18} />
+        </button>
+      </div>
+
+      {/* Conteúdo */}
+      <div className="overflow-y-auto flex-1 px-6 py-4">
+        {historyLoading ? (
+          <p className="text-center py-8 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            Carregando…
+          </p>
+        ) : historyStints.length === 0 ? (
+          <p className="text-center py-8 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            Nenhum stint registrado nesta edição.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {historyStints.map((stint) => (
+              <div key={stint.id} className="rounded-lg border p-4"
+                style={{
+                  borderColor: stint.is_current ? teamColor : "var(--color-border)",
+                  backgroundColor: stint.is_current ? `${teamColor}08` : "transparent",
+                }}>
+
+                {editingStintId === stint.id ? (
+                  // Modo edição
+                  <div className="space-y-3">
+                    <p className="font-mono text-xs font-bold" style={{ color: teamColor }}>
+                      {stint.team_name.toUpperCase()}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex flex-col gap-1">
+                        <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                          Data de entrada
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="DD/MM/AAAA"
+                          value={editStintStarted}
+                          maxLength={10}
+                          onChange={e => setEditStintStarted(applyDateMask(e.target.value))}
+                          className="rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                          Data de saída
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="DD/MM/AAAA ou vazio"
+                          value={editStintEnded}
+                          maxLength={10}
+                          onChange={e => setEditStintEnded(applyDateMask(e.target.value))}
+                          className="rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]"
+                          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}
+                        />
+                        <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                          Deixe vazio se ainda está ativo
+                        </span>
+                      </label>
+                    </div>
+                    <div className="flex gap-2 justify-end">
+                      <button type="button"
+                        onClick={() => setEditingStintId(null)}
+                        className="rounded-lg border px-3 py-1.5 font-mono text-xs"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        Cancelar
+                      </button>
+                      <button type="button"
+                        onClick={() => handleSaveStint(stint.id)}
+                        disabled={!editStintStarted || editStintStarted.length < 10 || savingStint}
+                        className="rounded-lg px-3 py-1.5 font-mono text-xs font-medium disabled:opacity-50"
+                        style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
+                        {savingStint ? "Salvando…" : "Salvar"}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Modo visualização
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="font-mono text-sm font-bold truncate"
+                          style={{ color: "var(--color-text-primary)" }}>
+                          {stint.team_name.toUpperCase()}
+                        </p>
+                        {stint.is_current && (
+                          <span className="shrink-0 font-mono text-xs rounded px-1.5 py-0.5"
+                            style={{ backgroundColor: `${teamColor}22`, color: teamColor }}>
+                            ATUAL
+                          </span>
+                        )}
+                        {stint.movement_type && (
+                          <span className="shrink-0 font-mono text-xs rounded px-1.5 py-0.5"
+                            style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "var(--color-text-secondary)" }}>
+                            {stint.movement_type === "arrival" ? "chegada" : stint.movement_type === "transfer" ? "transferência" : stint.movement_type}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-xs"
+                        style={{ color: "var(--color-text-secondary)" }}>
+                        <span>
+                          {new Date(stint.started_at + "T00:00:00").toLocaleDateString("pt-BR")}
+                        </span>
+                        <span>→</span>
+                        <span style={{ color: stint.is_current ? teamColor : "var(--color-text-secondary)" }}>
+                          {stint.ended_at
+                            ? new Date(stint.ended_at + "T00:00:00").toLocaleDateString("pt-BR")
+                            : "Atual"}
+                        </span>
+                      </div>
+                    </div>
+                    <button type="button"
+                      onClick={() => {
+                        setEditingStintId(stint.id);
+                        const toDisplay = (iso: string) => {
+                          const [y, m, d] = iso.split("-");
+                          return `${d}/${m}/${y}`;
+                        };
+                        setEditStintStarted(toDisplay(stint.started_at));
+                        setEditStintEnded(stint.ended_at ? toDisplay(stint.ended_at) : "");
+                      }}
+                      className="shrink-0 rounded border px-3 py-1.5 font-mono text-xs transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]"
+                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                      Editar
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="border-t px-6 py-4 shrink-0 flex justify-end"
+        style={{ borderColor: "var(--color-border)" }}>
+        <button type="button"
+          onClick={() => { setHistoryAthleteId(null); setEditingStintId(null); }}
+          className="rounded-lg border px-4 py-2 font-mono text-xs"
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+          Fechar
+        </button>
+      </div>
     </div>
+  </div>
+)}
+
+</div>
   );
 }

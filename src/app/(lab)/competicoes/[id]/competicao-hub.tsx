@@ -21,8 +21,8 @@ type Team = { id: string; full_name: string; abbreviation: string | null; logo_u
 type Match = {
   id: string; match_date: string | null; match_time: string | null; status: string;
   score_a: number; score_b: number; matchup_id: string | null;
-  teams_a: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
-  teams_b: { full_name: string; abbreviation: string | null; logo_url: string | null } | null;
+  teams_a: { full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null; primary_color: string | null } | null;
+  teams_b: { full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null; primary_color: string | null } | null;
   rounds: { name: string; custom_label: string | null } | null;
   phases: { id: string; full_name: string; custom_label: string | null; phase_type: string } | null;
 };
@@ -162,7 +162,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       { data: groupsData },
     ] = await Promise.all([
       phaseIds.length > 0
-      ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, matchup_id, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: true })
+      ? supabase.from("matches").select("id, match_date, match_time, status, score_a, score_b, matchup_id, teams_a:teams!matches_team_a_id_fkey(full_name, short_name, abbreviation, logo_url, primary_color), teams_b:teams!matches_team_b_id_fkey(full_name, short_name, abbreviation, logo_url, primary_color), rounds(name, custom_label), phases(id, full_name, custom_label, phase_type)").in("phase_id", phaseIds).order("match_date", { ascending: true })
         : Promise.resolve({ data: [] }),
         supabase.from("phases").select("id, full_name, custom_label, phase_type, display_order, is_current, legs, aggregate_score").eq("edition_id", editionId).order("display_order"),
       phaseIds.length > 0
@@ -3470,48 +3470,136 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
 
 function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelete: () => void }) {
   const [hovered, setHovered] = useState(false);
-  const statusColor = STATUS_COLOR[match.status] ?? "#A6A6A6";
   const isScheduled = match.status === "scheduled";
+  const colorA = match.teams_a?.primary_color ?? "#444444";
+  const colorB = match.teams_b?.primary_color ?? "#444444";
+  const nameA = match.teams_a?.short_name ?? match.teams_a?.full_name ?? "A definir";
+  const nameB = match.teams_b?.short_name ?? match.teams_b?.full_name ?? "A definir";
 
   return (
-    <div className="relative group"
+    <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: hovered ? 1 : 0.75, transition: "opacity 0.15s ease" }}>
-      <Link href={`/partidas/${match.id}`} className="flex items-center gap-3 px-4 py-2 transition-colors hover:bg-[rgba(255,255,255,0.02)]">
-        <div className="shrink-0 w-12 text-center">
-          <span className="font-mono text-xs font-bold" style={{ color: statusColor }}>{STATUS_LABEL[match.status] ?? match.status.toUpperCase()}</span>
-          {match.match_date && <p className="font-mono text-xs mt-0.5" style={{ color: "#444" }}>{new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</p>}
-          {match.match_time && <p className="font-mono text-xs" style={{ color: "#444" }}>{match.match_time.slice(0, 5)}</p>}
-        </div>
-        <div className="flex flex-1 items-center gap-2 min-w-0 justify-end">
-          <span className="font-mono text-sm font-bold truncate text-right" style={{ color: "var(--color-text-primary)" }}>
-            {match.teams_a?.abbreviation?.toUpperCase() ?? match.teams_a?.full_name ?? "—"}
+      style={{
+        borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
+        position: "relative",
+        opacity: hovered ? 1 : 0.82,
+        transition: "opacity 0.12s ease",
+      }}
+    >
+      <div style={{
+        position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
+        background: `linear-gradient(90deg, ${colorA} 50%, ${colorB} 50%)`,
+        opacity: hovered ? 1 : 0,
+        transition: "opacity 0.2s ease",
+        pointerEvents: "none", zIndex: 1,
+      }} />
+
+      <Link
+        href={`/partidas/${match.id}`}
+        className="hover:bg-[rgba(255,255,255,0.025)]"
+        style={{ display: "flex", alignItems: "center", padding: "0 16px", height: 54, textDecoration: "none" }}
+      >
+        {/* Data + status — largura fixa, sempre legível */}
+        <div style={{ width: 52, flexShrink: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)" }}>
+            {match.match_date
+              ? new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+              : "—"}
           </span>
-          {match.teams_a?.logo_url ? <img src={match.teams_a.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" /> : <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />}
-        </div>
-        <div className="shrink-0 flex items-center gap-2 px-3">
-          <span className="font-display text-lg font-bold w-6 text-center" style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>{isScheduled ? "–" : match.score_a}</span>
-          <span className="font-mono text-xs" style={{ color: "#333" }}>:</span>
-          <span className="font-display text-lg font-bold w-6 text-center" style={{ color: isScheduled ? "#333" : "var(--color-brand)" }}>{isScheduled ? "–" : match.score_b}</span>
-        </div>
-        <div className="flex flex-1 items-center gap-2 min-w-0">
-          {match.teams_b?.logo_url ? <img src={match.teams_b.logo_url} alt="" className="h-5 w-5 shrink-0 object-contain" /> : <div className="h-5 w-5 shrink-0 rounded border" style={{ borderColor: "var(--color-border)" }} />}
-          <span className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-            {match.teams_b?.abbreviation?.toUpperCase() ?? match.teams_b?.full_name ?? "—"}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+            {match.match_time ? match.match_time.slice(0, 5) : STATUS_LABEL[match.status] ?? "—"}
           </span>
         </div>
-        <div className="shrink-0 hidden lg:block w-28 text-right">
-          <p className="font-mono text-xs truncate" style={{ color: "#444" }}>{match.phases?.custom_label ?? match.phases?.full_name ?? ""}</p>
+
+        <div style={{ width: 1, height: 24, background: "var(--color-border)", flexShrink: 0, margin: "0 16px" }} />
+
+        {/* Bloco central — ocupa todo o espaço restante, conteúdo centralizado */}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, minWidth: 0 }}>
+
+          {/* Nome A */}
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+            color: "var(--color-text-primary)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            textAlign: "right", flex: 1, minWidth: 0,
+          }}>
+            {nameA}
+          </span>
+
+          {/* Logo A — sem fundo */}
+          <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {match.teams_a?.logo_url
+              ? <img src={match.teams_a.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
+              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: colorA }}>
+                  {nameA.slice(0, 2).toUpperCase()}
+                </span>
+            }
+          </div>
+
+          {/* Placar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, width: 68, justifyContent: "center" }}>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, lineHeight: 1,
+              color: isScheduled ? "#2a2a2a" : "var(--color-brand)",
+              width: 20, textAlign: "center",
+            }}>
+              {isScheduled ? "–" : match.score_a}
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#333", lineHeight: 1 }}>–</span>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, lineHeight: 1,
+              color: isScheduled ? "#2a2a2a" : "var(--color-brand)",
+              width: 20, textAlign: "center",
+            }}>
+              {isScheduled ? "–" : match.score_b}
+            </span>
+          </div>
+
+          {/* Logo B — sem fundo */}
+          <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {match.teams_b?.logo_url
+              ? <img src={match.teams_b.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
+              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: colorB }}>
+                  {nameB.slice(0, 2).toUpperCase()}
+                </span>
+            }
+          </div>
+
+          {/* Nome B */}
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+            color: "var(--color-text-primary)",
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            flex: 1, minWidth: 0,
+          }}>
+            {nameB}
+          </span>
+
         </div>
-      </Link>
-      {hovered && (
-        <button type="button" onClick={e => { e.preventDefault(); onDelete(); }}
-          className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-lg border transition-colors hover:border-[var(--color-danger)]"
-          style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-          <Trash2 size={13} strokeWidth={2} />
+
+        <div style={{ width: 1, height: 24, background: "var(--color-border)", flexShrink: 0, margin: "0 16px" }} />
+
+        {/* Delete */}
+        <button
+          type="button"
+          onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
+          style={{
+            flexShrink: 0, width: 26, height: 26, borderRadius: 6,
+            border: "1px solid rgba(255,255,255,0.07)",
+            backgroundColor: "rgba(255,255,255,0.03)",
+            color: "var(--color-danger)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer",
+            opacity: hovered ? 1 : 0.25,
+            transition: "opacity 0.12s, border-color 0.12s",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,68,68,0.45)")}
+          onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
+        >
+          <Trash2 size={12} strokeWidth={2} />
         </button>
-      )}
+      </Link>
     </div>
   );
 }
