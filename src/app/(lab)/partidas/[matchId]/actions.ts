@@ -110,12 +110,13 @@ export async function editarPartida(
   const match_time = String(formData.get("match_time") ?? "").trim() || null;
   const venue_id = String(formData.get("venue_id") ?? "").trim() || null;
   const motm_athlete_id = String(formData.get("motm_athlete_id") ?? "").trim() || null;
+  const motm_team_id = String(formData.get("motm_team_id") ?? "").trim() || null;
   const highlights_url = String(formData.get("highlights_url") ?? "").trim() || null;
   const photos_url = String(formData.get("photos_url") ?? "").trim() || null;
 
   const updateData: Record<string, any> = {
     status, finish_type, score_a, score_b,
-    motm_athlete_id, highlights_url, photos_url,
+    motm_athlete_id, motm_team_id, highlights_url, photos_url,
   };
 
   if (match_date) updateData.match_date = match_date;
@@ -549,6 +550,15 @@ export async function editarAcao(
   const goal_type = String(formData.get("goal_type") ?? "").trim() || null;
   const is_own_goal = formData.get("is_own_goal") === "true";
   const miss_result = String(formData.get("miss_result") ?? "").trim() || null;
+  const action_type = String(formData.get("action_type") ?? "").trim();
+  const match_id = String(formData.get("match_id") ?? "").trim() || null;
+
+  // Busca ação anterior para reverter placar se era gol
+  const { data: oldAction } = await supabase
+    .from("match_actions")
+    .select("action_type, team_id, match_id")
+    .eq("id", actionId)
+    .maybeSingle();
 
   const { error } = await supabase
     .from("match_actions")
@@ -556,5 +566,37 @@ export async function editarAcao(
     .eq("id", actionId);
 
   if (error) return { error: error.message };
+
+  // Recalcula placar no banco se a ação envolve gol (antes ou depois)
+  const effectiveMatchId = oldAction?.match_id ?? match_id;
+  if (effectiveMatchId && (oldAction?.action_type === "goal" || action_type === "goal")) {
+    const { data: match } = await supabase
+      .from("matches")
+      .select("team_a_id, score_a, score_b")
+      .eq("id", effectiveMatchId)
+      .maybeSingle();
+
+    if (match) {
+      // Reverte gol antigo
+      let newScoreA = match.score_a;
+      let newScoreB = match.score_b;
+
+      if (oldAction?.action_type === "goal") {
+        const wasTeamA = match.team_a_id === oldAction.team_id;
+        newScoreA = wasTeamA ? Math.max(0, newScoreA - 1) : newScoreA;
+        newScoreB = wasTeamA ? newScoreB : Math.max(0, newScoreB - 1);
+      }
+
+      // Aplica gol novo
+      if (action_type === "goal") {
+        const isTeamA = match.team_a_id === team_id;
+        newScoreA = isTeamA ? newScoreA + 1 : newScoreA;
+        newScoreB = isTeamA ? newScoreB : newScoreB + 1;
+      }
+
+      await supabase.from("matches").update({ score_a: newScoreA, score_b: newScoreB }).eq("id", effectiveMatchId);
+    }
+  }
+
   return { id: actionId };
 }

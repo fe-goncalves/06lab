@@ -248,6 +248,11 @@ export default function PartidaClient({
   const [matchTime, setMatchTime] = useState<string>(match.match_time?.slice(0, 5) ?? "");
   const [venueId, setVenueId] = useState<string>(match.venue_id ?? "");
   const [motmAthleteId, setMotmAthleteId] = useState<string>(match.motm_athlete_id ?? "");
+  const [motmTeamId, setMotmTeamId] = useState<string>(match.motm_team_id ?? "");
+  const [highlightsUrl, setHighlightsUrl] = useState<string>(match.highlights_url ?? "");
+  const [photosUrl, setPhotosUrl] = useState<string>(match.photos_url ?? "");
+
+  const isMobile = useIsMobile();
 
   // Árbitros
   const [matchReferees, setMatchReferees] = useState<MatchReferee[]>(initialMatchReferees ?? []);
@@ -345,6 +350,9 @@ export default function PartidaClient({
     if (matchTime) fd.append("match_time", matchTime);
     fd.append("venue_id", venueId);
     fd.append("motm_athlete_id", motmAthleteId);
+    fd.append("motm_team_id", motmTeamId);
+    fd.append("highlights_url", highlightsUrl);
+    fd.append("photos_url", photosUrl);
     const r = await editarPartida(match.id, fd);
     setSaving(false);
     if ("error" in r) { toast("error", r.error); return; }
@@ -571,7 +579,7 @@ export default function PartidaClient({
         }} />
         <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.75, pointerEvents: "none", zIndex: 0 }} />
 
-        <div className="px-8 pt-5 pb-0" style={{ position: "relative", zIndex: 1 }}>
+        <div className="px-4 pt-4 pb-0 sm:px-8 sm:pt-5" style={{ position: "relative", zIndex: 1 }}>
           <Breadcrumb items={[
             { label: "Competições", href: "/competicoes" },
             { label: competitionName, href: `/competicoes/${competitionId}` },
@@ -602,7 +610,7 @@ export default function PartidaClient({
             {/* Time A — nomes à direita, logo à direita dos nomes */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 14 }}>
               <div style={{ textAlign: "right", minWidth: 0 }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {teamA?.short_name ?? teamA?.full_name ?? "A definir"}
                 </p>
                 {teamA?.short_name && teamA?.full_name && (
@@ -611,10 +619,10 @@ export default function PartidaClient({
                   </p>
                 )}
               </div>
-              <div style={{ width: 72, height: 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {teamA?.logo_url
-                  ? <img src={teamA.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain" }} />
-                  : <div style={{ width: 72, height: 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                  ? <img src={teamA.logo_url} alt="" style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, objectFit: "contain" }} />
+                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
                       {(teamA?.short_name ?? teamA?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                 }
@@ -624,11 +632,11 @@ export default function PartidaClient({
             {/* Placar central */}
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "0 28px", minWidth: 150 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 56, fontWeight: 700, lineHeight: 1, width: 44, textAlign: "center", color: "var(--color-brand)" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 36 : 56, fontWeight: 700, lineHeight: 1, width: isMobile ? 32 : 44, textAlign: "center", color: "var(--color-brand)" }}>
                   {scoreA}
                 </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 24, color: "#222", lineHeight: 1 }}>:</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 56, fontWeight: 700, lineHeight: 1, width: 44, textAlign: "center", color: "var(--color-brand)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 18 : 24, color: "#222", lineHeight: 1 }}>:</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 36 : 56, fontWeight: 700, lineHeight: 1, width: isMobile ? 32 : 44, textAlign: "center", color: "var(--color-brand)" }}>
                   {scoreB}
                 </span>
               </div>
@@ -660,16 +668,16 @@ export default function PartidaClient({
 
             {/* Time B — logo à esquerda, nomes à direita da logo */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 14 }}>
-              <div style={{ width: 72, height: 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {teamB?.logo_url
-                  ? <img src={teamB.logo_url} alt="" style={{ width: 72, height: 72, objectFit: "contain" }} />
-                  : <div style={{ width: 72, height: 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                  ? <img src={teamB.logo_url} alt="" style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, objectFit: "contain" }} />
+                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
                       {(teamB?.short_name ?? teamB?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                 }
               </div>
               <div style={{ minWidth: 0 }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {teamB?.short_name ?? teamB?.full_name ?? "A definir"}
                 </p>
                 {teamB?.short_name && teamB?.full_name && (
@@ -710,7 +718,7 @@ export default function PartidaClient({
       </div>
 
       {/* Conteúdo */}
-      <div className="flex-1 px-8 py-6">
+      <div className="flex-1 px-4 py-4 sm:px-8 sm:py-6">
 
         {/* ABA INFORMAÇÃO */}
         {activeTab === "informacao" && (
@@ -793,12 +801,20 @@ export default function PartidaClient({
 
         {/* ABA MÍDIA */}
         {activeTab === "midia" && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Mídia</p>
-            <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-              Em construção — links de vídeos e fotos serão adicionados aqui.
-            </p>
-          </div>
+          <MidiaTab
+          match={match}
+          motmAthleteId={motmAthleteId}
+          setMotmAthleteId={setMotmAthleteId}
+          motmTeamIdProp={motmTeamId}
+          setMotmTeamIdProp={setMotmTeamId}
+          highlightsUrl={highlightsUrl}
+          setHighlightsUrl={setHighlightsUrl}
+          photosUrl={photosUrl}
+          setPhotosUrl={setPhotosUrl}
+          getAthletes={getAthletes}
+          handleSaveInfo={handleSaveInfo}
+          saving={saving}
+        />
         )}
       </div>
 
@@ -893,88 +909,17 @@ function InfoTab({
   handleAddReferee: () => void; handleRemoveReferee: (id: string) => void;
   handleSaveReferees: () => void; handleSaveInfo: () => void;
 }) {
+  const isMobile = useIsMobile();
+  const border = "1px solid var(--color-border)";
   const [showClock, setShowClock] = useState(false);
   const [matchDescription, setMatchDescription] = useState<string>(match.description ?? "");
   const [showVenueDropdown, setShowVenueDropdown] = useState(false);
   const [venueSearch, setVenueSearch] = useState("");
   const [showRefereeDropdown, setShowRefereeDropdown] = useState(false);
   const [refereeSearch, setRefereeSearch] = useState("");
-
-  const border = "1px solid var(--color-border)";
-
-  const fieldStyle: React.CSSProperties = {
-    display: "flex", flexDirection: "column", gap: 6,
-    padding: "16px 18px", backgroundColor: "var(--color-surface)",
-    position: "relative", cursor: "text", transition: "background 0.12s", flex: 1,
-  };
-  const labelStyle: React.CSSProperties = {
-    fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
-    letterSpacing: "0.12em", textTransform: "uppercase" as const,
-    color: "var(--color-text-secondary)",
-    display: "flex", alignItems: "center", gap: 6,
-  };
-  const valueStyle: React.CSSProperties = {
-    fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 600,
-    color: "var(--color-text-primary)", background: "none",
-    border: "none", outline: "none", width: "100%", padding: 0,
-  };
-  const focusBar: React.CSSProperties = {
-    position: "absolute", bottom: 0, left: 0, right: 0,
-    height: 1.5, background: "var(--color-brand)",
-    transform: "scaleX(0)", transition: "transform 0.2s",
-    transformOrigin: "left", pointerEvents: "none",
-  };
-
-  function SectionHeader({ title }: { title: string }) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-text-secondary)", whiteSpace: "nowrap" }}>
-          {title}
-        </span>
-        <div style={{ flex: 1, height: 1, background: "var(--color-border)" }} />
-      </div>
-    );
-  }
-
-  const IconCalendar = () => (
-    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-      <rect x="1" y="2" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M3 1v2M7 1v2M1 5h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-  const IconClock = () => (
-    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-      <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2"/>
-      <path d="M5 3v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-  const IconStadium = () => (
-    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-      <path d="M1 8V4.5C1 3 2 2 5 2s4 1 4 2.5V8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-      <path d="M1 5.5h8M3 2.5V8M7 2.5V8" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-    </svg>
-  );
-  const IconNote = () => (
-    <svg width="11" height="11" viewBox="0 0 10 10" fill="none">
-      <rect x="1.5" y="1" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.1"/>
-      <path d="M3 4h4M3 6h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-    </svg>
-  );
-  const IconChevronDown = () => (
-    <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.35, flexShrink: 0 }}>
-      <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-    </svg>
-  );
-
-  const selectedVenue = (match.venues_list ?? []).find((v: any) => v.id === venueId);
-  const filteredReferees = refereeSearch.trim()
-    ? safeAllReferees.filter(r => (r.surname ?? r.full_name).toLowerCase().includes(refereeSearch.toLowerCase()))
-    : safeAllReferees;
-  const selectedRefereeForAdd = safeAllReferees.find(r => r.id === addRefereeId);
-
-  // Fecha dropdowns ao clicar fora
   const venueRef = useRef<HTMLDivElement>(null);
   const refereeRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (venueRef.current && !venueRef.current.contains(e.target as Node)) setShowVenueDropdown(false);
@@ -984,75 +929,162 @@ function InfoTab({
     return () => document.removeEventListener("mousedown", handle);
   }, []);
 
-  return (
-    <div style={{ maxWidth: 860, paddingRight: 24 }}>
+  const selectedVenue = (match.venues_list ?? []).find((v: any) => v.id === venueId);
+  const filteredVenues = venueSearch.trim()
+    ? (match.venues_list ?? []).filter((v: any) => v.full_name.toLowerCase().includes(venueSearch.toLowerCase()))
+    : (match.venues_list ?? []);
+  const filteredReferees = refereeSearch.trim()
+    ? safeAllReferees.filter(r => (r.surname ?? r.full_name).toLowerCase().includes(refereeSearch.toLowerCase()))
+    : safeAllReferees;
+  const selectedRefereeForAdd = safeAllReferees.find(r => r.id === addRefereeId);
 
-      {/* ── DADOS DA PARTIDA ── */}
-      <div style={{ marginBottom: 20 }}>
-        <SectionHeader title="Dados da partida" />
-        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
+  function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
+          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
+        </div>
+        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+      </div>
+    );
+  }
+
+  // ── Campo genérico com label flutuante e barra de foco ──
+  const fieldBase: React.CSSProperties = {
+    display: "flex", flexDirection: "column", gap: 5,
+    padding: "14px 16px", backgroundColor: "var(--color-surface)",
+    position: "relative", flex: 1,
+  };
+  const labelBase: React.CSSProperties = {
+    fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+    letterSpacing: "0.14em", textTransform: "uppercase" as const,
+    color: "rgba(255,255,255,0.3)",
+    display: "flex", alignItems: "center", gap: 5,
+  };
+  const valueBase: React.CSSProperties = {
+    fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600,
+    color: "var(--color-text-primary)",
+    background: "none", border: "none", outline: "none",
+    width: "100%", padding: 0,
+  };
+  const focusBar: React.CSSProperties = {
+    position: "absolute", bottom: 0, left: 0, right: 0, height: 1.5,
+    background: "#BFF205", transform: "scaleX(0)", transition: "transform 0.2s",
+    transformOrigin: "left", pointerEvents: "none",
+  };
+
+  // ── Ícones ──
+  const IconCalendar = () => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <rect x="1" y="2" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M3 1v2M7 1v2M1 5h8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconClock = () => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+      <path d="M5 3v2.5l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconStadium = () => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <path d="M1 9V5C1 3.5 2.5 2.5 5 2.5S9 3.5 9 5V9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+      <path d="M1 6h8M3 2.5V9M7 2.5V9" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+      <ellipse cx="5" cy="2.5" rx="2.5" ry="1" stroke="currentColor" strokeWidth="1.1"/>
+    </svg>
+  );
+  const IconNote = () => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+      <rect x="1.5" y="1" width="7" height="8" rx="1" stroke="currentColor" strokeWidth="1.1"/>
+      <path d="M3 4h4M3 6h2.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+    </svg>
+  );
+  const IconChevron = () => (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.25, flexShrink: 0 }}>
+      <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+    </svg>
+  );
+
+  return (
+    <div style={{ maxWidth: 720, width: "100%", paddingBottom: 80 }}>
+
+      {/* ══ DADOS DA PARTIDA ══ */}
+      <div style={{ marginBottom: 24 }}>
+        <SectionHeader title="Dados da Partida" subtitle="Data, horário e local" />
+        <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
 
           {/* Linha 1: Data + Horário */}
           <div style={{ display: "flex", borderBottom: border }}>
-            <div style={fieldStyle}
+            {/* Data */}
+            <div style={fieldBase}
               onFocus={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(1)"; }}
               onBlur={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(0)"; }}>
-              <span style={labelStyle}><IconCalendar /> Data</span>
+              <span style={labelBase}><IconCalendar /> Data</span>
               <input type="date" defaultValue={match.match_date ?? ""}
                 onChange={e => setMatchDate(e.target.value)}
-                style={{ ...valueStyle, colorScheme: "dark" }} />
+                style={{ ...valueBase, colorScheme: "dark" }} />
               <div className="fbar" style={focusBar} />
             </div>
-            <div style={{ ...fieldStyle, borderLeft: border, cursor: "pointer" }} onClick={() => setShowClock(true)}>
-              <span style={labelStyle}><IconClock /> Horário</span>
-              <div style={{ ...valueStyle, lineHeight: 1.6, color: matchTime ? "var(--color-text-primary)" : "#333" }}>
-                {matchTime || "—"}
+
+            {/* Horário */}
+            <div style={{ ...fieldBase, borderLeft: border, cursor: "pointer" }}
+              onClick={() => setShowClock(true)}>
+              <span style={labelBase}><IconClock /> Horário</span>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: matchTime ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)" }}>
+                  {matchTime || "—"}
+                </span>
+                <IconChevron />
               </div>
               <div style={{ ...focusBar, transform: showClock ? "scaleX(1)" : "scaleX(0)" }} />
             </div>
           </div>
 
-          {/* Linha 2: Estádio — dropdown com busca */}
+          {/* Linha 2: Estádio */}
           <div style={{ borderBottom: border, position: "relative" }} ref={venueRef}>
-            <div style={{ ...fieldStyle, cursor: "pointer" }} onClick={() => { setShowVenueDropdown(v => !v); setVenueSearch(""); }}>
-              <span style={labelStyle}><IconStadium /> Estádio / Arena</span>
+            <div style={{ ...fieldBase, cursor: "pointer" }}
+              onClick={() => { setShowVenueDropdown(v => !v); setVenueSearch(""); }}>
+              <span style={labelBase}><IconStadium /> Estádio / Arena</span>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 600, color: selectedVenue ? "var(--color-text-primary)" : "#333" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: selectedVenue ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)" }}>
                   {selectedVenue?.full_name ?? "Selecionar…"}
                 </span>
-                <IconChevronDown />
+                <IconChevron />
               </div>
               <div style={{ ...focusBar, transform: showVenueDropdown ? "scaleX(1)" : "scaleX(0)" }} />
             </div>
+
             {showVenueDropdown && (
-              <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 100, backgroundColor: "#181818", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                {/* Busca */}
-                <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, boxShadow: "0 24px 64px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                   <input autoFocus type="text" value={venueSearch} onChange={e => setVenueSearch(e.target.value)}
                     placeholder="Buscar estádio…"
                     style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
                 </div>
-                <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                  {[{ id: "", full_name: "Nenhum" }, ...(match.venues_list ?? [])
-                    .filter((v: any) => !venueSearch.trim() || v.full_name.toLowerCase().includes(venueSearch.toLowerCase()))
-                  ].map((v: any, i: number) => (
+                <div style={{ maxHeight: 280, overflowY: "auto" }}>
+                  {[{ id: "", full_name: "Nenhum" }, ...filteredVenues].map((v: any, i: number) => (
                     <div key={v.id || "none"}
                       onClick={() => { setVenueId(v.id); setShowVenueDropdown(false); setVenueSearch(""); }}
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", backgroundColor: venueId === v.id ? "rgba(191,242,5,0.08)" : "transparent", transition: "background 0.1s" }}
-                      onMouseEnter={e => { if (venueId !== v.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = venueId === v.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: venueId === v.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
+                      onMouseEnter={e => { if (venueId !== v.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = venueId === v.id ? "rgba(191,242,5,0.07)" : "transparent"; }}
                     >
-                      <div style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none">
-                          <path d="M1 11V6C1 4 3 3 7 3s6 1 6 3v5" stroke="rgba(255,255,255,0.35)" strokeWidth="1.3" strokeLinecap="round"/>
-                          <path d="M1 7.5h12M4 3.5V11M10 3.5V11" stroke="rgba(255,255,255,0.35)" strokeWidth="1.3" strokeLinecap="round"/>
+                      {/* Ícone estádio */}
+                      <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <svg width="14" height="14" viewBox="0 0 10 10" fill="none">
+                          <path d="M1 9V5C1 3.5 2.5 2.5 5 2.5S9 3.5 9 5V9" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" strokeLinecap="round"/>
+                          <path d="M1 6h8M3 2.5V9M7 2.5V9" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" strokeLinecap="round"/>
+                          <ellipse cx="5" cy="2.5" rx="2.5" ry="1" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1"/>
                         </svg>
                       </div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: venueId === v.id ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: venueId === v.id ? "#BFF205" : "var(--color-text-primary)", flex: 1 }}>
                         {v.full_name}
                       </span>
                       {venueId === v.id && (
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>✓</span>
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
                       )}
                     </div>
                   ))}
@@ -1063,126 +1095,132 @@ function InfoTab({
 
           {/* Linha 3: Descrição */}
           <div style={{ display: "flex" }}>
-            <div style={fieldStyle}
-              onFocus={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(1)"; }}
-              onBlur={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar"); if (b) b.style.transform = "scaleX(0)"; }}>
-              <span style={labelStyle}><IconNote /> Descrição curta (opcional)</span>
+            <div style={fieldBase}
+              onFocus={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar2"); if (b) b.style.transform = "scaleX(1)"; }}
+              onBlur={e => { const b = e.currentTarget.querySelector<HTMLElement>(".fbar2"); if (b) b.style.transform = "scaleX(0)"; }}>
+              <span style={labelBase}><IconNote /> Descrição curta <span style={{ opacity: 0.4 }}>(opcional)</span></span>
               <input type="text" value={matchDescription} onChange={e => setMatchDescription(e.target.value)}
                 placeholder="Ex: Jogo de volta da semifinal…"
-                style={{ ...valueStyle }} />
-              <div className="fbar" style={focusBar} />
+                style={{ ...valueBase }} />
+              <div className="fbar2" style={focusBar} />
             </div>
           </div>
-
         </div>
       </div>
 
-      {/* ── ARBITRAGEM ── */}
-      <div style={{ marginBottom: 20 }}>
-        <SectionHeader title="Arbitragem" />
-        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
+      {/* ══ ARBITRAGEM ══ */}
+      <div style={{ marginBottom: 24 }}>
+        <SectionHeader title="Arbitragem" subtitle="Árbitros escalados para a partida" />
+        <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "visible" }}>
 
+          {/* Lista de árbitros */}
+          {matchReferees.length === 0 && (
+            <div style={{ padding: "20px 16px", textAlign: "center" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.15)" }}>Nenhum árbitro adicionado.</p>
+            </div>
+          )}
           {matchReferees.map((r, idx) => (
-            <div key={r.referee_id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", borderBottom: border, transition: "background 0.12s" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+            <div key={r.referee_id}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: border, transition: "background 0.1s" }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.02)")}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+            >
+              {/* Avatar */}
+              <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
                 {r.referees?.photo_url
-                  ? <img src={r.referees.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "#555" }}>
+                  ? <img src={(r.referees as any).photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#555" }}>
                       {(r.referees?.surname ?? r.referees?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                 }
               </div>
+
+              {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
                   {r.referees?.surname ?? r.referees?.full_name ?? "—"}
                 </p>
-                <span style={{ display: "inline-block", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.08)", border: "1px solid rgba(191,242,5,0.15)", borderRadius: 4, padding: "2px 7px", marginTop: 4 }}>
-                  {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? r.referee_roles?.full_name ?? "—"}
+                <span style={{ display: "inline-block", marginTop: 3, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#BFF205", backgroundColor: "rgba(191,242,5,0.08)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 4, padding: "2px 6px" }}>
+                  {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? "—"}
                 </span>
               </div>
+
+              {/* Remover */}
               <button type="button" onClick={() => handleRemoveReferee(r.referee_id)}
-                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-border)", background: "none", color: "var(--color-danger)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 16, flexShrink: 0 }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,68,68,0.45)")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.4)"; e.currentTarget.style.color = "#FF4444"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,100,100,0.5)"; }}
               >×</button>
             </div>
           ))}
 
           {/* Adicionar árbitro */}
-          <div style={{ padding: "14px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 10 }} ref={refereeRef}>
 
-            {/* Dropdown customizado de árbitro */}
-            <div style={{ position: "relative" }} ref={refereeRef}>
+            {/* Dropdown de árbitro */}
+            <div style={{ position: "relative" }}>
               <div onClick={() => { setShowRefereeDropdown(v => !v); setRefereeSearch(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid var(--color-border)", borderRadius: 10, cursor: "pointer", transition: "border-color 0.12s" }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 13px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
               >
                 {selectedRefereeForAdd ? (
                   <>
-                    <div style={{ width: 30, height: 30, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
                       {selectedRefereeForAdd.photo_url
                         ? <img src={selectedRefereeForAdd.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
+                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
                             {(selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name).slice(0, 2).toUpperCase()}
                           </div>
                       }
                     </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
                       {selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name}
                     </span>
                   </>
                 ) : (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#444", flex: 1 }}>Selecione o árbitro…</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.2)", flex: 1 }}>Selecionar árbitro…</span>
                 )}
-                <svg width="11" height="11" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3, flexShrink: 0 }}>
-                  <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                </svg>
+                <IconChevron />
               </div>
 
               {showRefereeDropdown && (
-                <div style={{
-                  position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-                  zIndex: 100, backgroundColor: "#181818",
-                  border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12,
-                  boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
-                  overflow: "hidden",
-                }}>
-                  <div style={{ padding: "12px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <input autoFocus type="text" value={refereeSearch} onChange={e => setRefereeSearch(e.target.value)}
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, boxShadow: "0 24px 64px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <input autoFocus type="text" value={refereeSearch} onChange={e => setRefereeSearch(e.target.value)}
                       placeholder="Buscar árbitro…"
                       style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
                   </div>
-                  <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                  <div style={{ maxHeight: 260, overflowY: "auto" }}>
                     {filteredReferees.length === 0
-                      ? <p style={{ padding: "20px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
+                      ? <p style={{ padding: "16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
                       : filteredReferees.map((r, idx) => (
                         <div key={r.id}
                           onClick={() => { setAddRefereeId(r.id); setShowRefereeDropdown(false); setRefereeSearch(""); }}
-                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", backgroundColor: addRefereeId === r.id ? "rgba(191,242,5,0.08)" : "transparent", transition: "background 0.1s" }}
-                          onMouseEnter={e => { if (addRefereeId !== r.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = addRefereeId === r.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: addRefereeId === r.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
+                          onMouseEnter={e => { if (addRefereeId !== r.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = addRefereeId === r.id ? "rgba(191,242,5,0.07)" : "transparent"; }}
                         >
                           <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
                             {r.photo_url
                               ? <img src={r.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#555" }}>
+                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
                                   {(r.surname ?? r.full_name).slice(0, 2).toUpperCase()}
                                 </div>
                             }
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: addRefereeId === r.id ? "var(--color-brand)" : "var(--color-text-primary)" }}>
+                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: addRefereeId === r.id ? "#BFF205" : "var(--color-text-primary)", margin: 0 }}>
                               {r.surname ?? r.full_name}
                             </p>
                             {r.surname && r.full_name !== r.surname && (
-                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#555", marginTop: 2 }}>{r.full_name}</p>
+                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 1 }}>{r.full_name}</p>
                             )}
                           </div>
                           {addRefereeId === r.id && (
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)", flexShrink: 0 }}>✓</span>
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
                           )}
                         </div>
                       ))
@@ -1192,23 +1230,24 @@ function InfoTab({
               )}
             </div>
 
-            {/* Função + botão */}
-            <div style={{ display: "flex", gap: 10 }}>
+            {/* Função + botão adicionar */}
+            <div style={{ display: "flex", gap: 8 }}>
               <select value={addRefereeRoleId} onChange={e => setAddRefereeRoleId(e.target.value)}
-                style={{ flex: 1, padding: "12px 14px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid var(--color-border)", borderRadius: 10, fontFamily: "var(--font-mono)", fontSize: 13, color: addRefereeRoleId ? "var(--color-text-primary)" : "#444", outline: "none", cursor: "pointer" }}>
+                style={{ flex: 1, padding: "10px 13px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9, fontFamily: "var(--font-mono)", fontSize: 12, color: addRefereeRoleId ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", outline: "none", cursor: "pointer", colorScheme: "dark" as any }}>
                 <option value="">Função do árbitro…</option>
                 {REFEREE_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
               </select>
+
               <button type="button" onClick={handleAddReferee}
-                style={{ padding: "12px 20px", borderRadius: 10, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", whiteSpace: "nowrap" }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"; }}
+                style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.12s" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}
               >+ Adicionar</button>
             </div>
 
             {matchReferees.length > 0 && (
               <button type="button" onClick={handleSaveReferees} disabled={savingReferees}
-                style={{ alignSelf: "flex-start", padding: "9px 20px", borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", opacity: savingReferees ? 0.5 : 1 }}>
+                style={{ alignSelf: "flex-start", padding: "8px 18px", borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", opacity: savingReferees ? 0.5 : 1 }}>
                 {savingReferees ? "Salvando…" : "Salvar árbitros"}
               </button>
             )}
@@ -1216,39 +1255,40 @@ function InfoTab({
         </div>
       </div>
 
-      {/* ── SÚMULA ── */}
+      {/* ══ SÚMULA ══ */}
       <div style={{ marginBottom: 28 }}>
-        <SectionHeader title="Súmula" />
-        <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 18px", flexWrap: "wrap" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: "var(--color-text-secondary)", flex: 1, minWidth: 120 }}>
-              Súmula da partida
-            </span>
-            {([
-              { label: "Baixar vazia", variant: "neutral", icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v6M2.5 5l3 3 3-3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
-              { label: "Subir PDF",   variant: "neutral", icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><path d="M5.5 7V1M2.5 4l3-3 3 3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg> },
-              { label: "Visualizar", variant: "brand",   icon: <svg width="12" height="12" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5.5s2-3.5 4.5-3.5S10 5.5 10 5.5s-2 3.5-4.5 3.5S1 5.5 1 5.5z" stroke="currentColor" strokeWidth="1.3"/></svg> },
-            ] as const).map(({ label, variant, icon }) => (
-              <button key={label} type="button"
-                style={{ display: "flex", alignItems: "center", gap: 7, padding: "9px 16px", borderRadius: 9, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer", border: "1px solid", textTransform: "uppercase", whiteSpace: "nowrap", transition: "all 0.12s",
-                  borderColor: variant === "brand" ? "rgba(191,242,5,0.22)" : "var(--color-border)",
-                  backgroundColor: variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
-                  color: variant === "brand" ? "var(--color-brand)" : "var(--color-text-secondary)",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.06)"; e.currentTarget.style.color = variant === "brand" ? "var(--color-brand)" : "var(--color-text-primary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.15)"; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)"; e.currentTarget.style.color = variant === "brand" ? "var(--color-brand)" : "var(--color-text-secondary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.22)" : "var(--color-border)"; }}
-              >
-                {icon}{label}
-              </button>
-            ))}
+        <SectionHeader title="Súmula" subtitle="Documento oficial da partida" />
+        <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: 10 }}>
+            <div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Súmula da partida</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 3 }}>PDF · máx. 5 MB</p>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              {([
+                { label: "Baixar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v6M2.5 5l3 3 3-3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>, variant: "neutral" },
+                { label: "Subir PDF", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 7V1M2.5 4l3-3 3 3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>, variant: "neutral" },
+                { label: "Visualizar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5.5s2-3.5 4.5-3.5S10 5.5 10 5.5s-2 3.5-4.5 3.5S1 5.5 1 5.5z" stroke="currentColor" strokeWidth="1.3"/></svg>, variant: "brand" },
+              ] as const).map(({ label, icon, variant }) => (
+                <button key={label} type="button"
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const,
+                    borderColor: variant === "brand" ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)",
+                    backgroundColor: variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
+                    color: variant === "brand" ? "#BFF205" : "rgba(255,255,255,0.4)",
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.07)"; e.currentTarget.style.color = variant === "brand" ? "#BFF205" : "var(--color-text-primary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.45)" : "rgba(255,255,255,0.2)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)"; e.currentTarget.style.color = variant === "brand" ? "#BFF205" : "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)"; }}
+                >{icon}{label}</button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── SALVAR ── */}
+      {/* ══ SALVAR ══ */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button type="button" onClick={handleSaveInfo} disabled={saving}
-          style={{ padding: "12px 36px", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
+          style={{ padding: isMobile ? "12px 0" : "12px 40px", width: isMobile ? "100%" : "auto", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
           {saving ? "Salvando…" : "Salvar alterações"}
         </button>
       </div>
@@ -1271,35 +1311,48 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
   handleSaveLineups: () => void;
   toggleLineup: (athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) => void;
 }) {
-  const border = "1px solid var(--color-border)";
+  const isMobile = useIsMobile();
   const teamA = match.teams_a;
   const teamB = match.teams_b;
+  const border = "1px solid var(--color-border)";
+
+  function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
+          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
+        </div>
+        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+      </div>
+    );
+  }
 
   function TeamPanel({ teamId, team }: { teamId: string; team: any }) {
-    const athletes = getAthletes(teamId).sort((a, b) =>
+    const allAthletes = getAthletes(teamId).sort((a, b) =>
       (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)
     );
 
-    const isGoalkeeper = (a: Athlete) =>
+    const isGKByPosition = (a: Athlete) =>
       a.player_positions?.abbreviation?.toLowerCase() === "gk" ||
       a.player_positions?.full_name?.toLowerCase().includes("goleiro");
 
-    const goalkeepers = athletes.filter(isGoalkeeper);
-    const outfield = athletes.filter(a => !isGoalkeeper(a));
+    const goalkeepers = allAthletes.filter(isGKByPosition);
+    const outfield = allAthletes.filter(a => !isGKByPosition(a));
+    const presentCount = allAthletes.filter(a => lineups[a.id]?.is_present).length;
 
     function setCaptain(athleteId: string) {
       setLineups(prev => {
         const next = { ...prev };
-        // Remove capitão anterior do mesmo time
-        athletes.forEach(a => {
-          if (next[a.id]?.is_captain) {
-            next[a.id] = { ...next[a.id], is_captain: false };
-          }
+        allAthletes.forEach(a => {
+          if (next[a.id]?.is_captain) next[a.id] = { ...next[a.id], is_captain: false };
         });
-        // Se clicou no mesmo, desseleciona; senão, seleciona
         const already = prev[athleteId]?.is_captain;
         if (!already) {
-          next[athleteId] = { ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }), is_captain: true };
+          next[athleteId] = {
+            ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }),
+            is_captain: true,
+          };
         }
         return next;
       });
@@ -1308,15 +1361,15 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
     function setGoalkeeper(athleteId: string) {
       setLineups(prev => {
         const next = { ...prev };
-        // Remove goleiro anterior do mesmo time
-        athletes.forEach(a => {
-          if (next[a.id]?.played_as_goalkeeper) {
-            next[a.id] = { ...next[a.id], played_as_goalkeeper: false };
-          }
+        allAthletes.forEach(a => {
+          if (next[a.id]?.played_as_goalkeeper) next[a.id] = { ...next[a.id], played_as_goalkeeper: false };
         });
         const already = prev[athleteId]?.played_as_goalkeeper;
         if (!already) {
-          next[athleteId] = { ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }), played_as_goalkeeper: true };
+          next[athleteId] = {
+            ...(next[athleteId] ?? { athlete_id: athleteId, is_present: false, played_as_goalkeeper: false, is_captain: false }),
+            played_as_goalkeeper: true,
+          };
         }
         return next;
       });
@@ -1324,149 +1377,643 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
 
     function AthleteRow({ athlete }: { athlete: Athlete }) {
       const entry = lineups[athlete.id] ?? { athlete_id: athlete.id, is_present: false, is_captain: false, played_as_goalkeeper: false };
-      const name = athlete.surname ?? athlete.full_name;
-      const initials = name.slice(0, 2).toUpperCase();
       const isPresent = entry.is_present;
       const isCaptain = entry.is_captain;
       const isGK = entry.played_as_goalkeeper;
+      const name = athlete.surname ?? athlete.full_name;
 
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: border, transition: "background 0.1s" }}
-          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
-          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+        <div
+          style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "9px 14px",
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            backgroundColor: isPresent
+              ? isCaptain ? "rgba(191,242,5,0.03)" : isGK ? "rgba(242,192,5,0.03)" : "transparent"
+              : "transparent",
+            transition: "background 0.12s",
+            position: "relative" as const,
+          }}
+          onMouseEnter={e => { if (!isPresent) return; e.currentTarget.style.backgroundColor = isCaptain ? "rgba(191,242,5,0.05)" : isGK ? "rgba(242,192,5,0.05)" : "rgba(255,255,255,0.03)"; }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = isPresent ? isCaptain ? "rgba(191,242,5,0.03)" : isGK ? "rgba(242,192,5,0.03)" : "transparent" : "transparent"; }}
         >
+          {/* Barra lateral de status */}
+          <div style={{
+            position: "absolute", left: 0, top: 6, bottom: 6, width: 2, borderRadius: 1,
+            backgroundColor: isCaptain ? "#BFF205" : isGK ? "#F2C005" : "transparent",
+            transition: "background 0.15s",
+          }} />
+
           {/* Avatar */}
-          <div style={{ width: 34, height: 34, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)", opacity: isPresent ? 1 : 0.35, transition: "opacity 0.15s" }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+            backgroundColor: "rgba(255,255,255,0.06)",
+            border: `1.5px solid ${isCaptain ? "rgba(191,242,5,0.4)" : isGK ? "rgba(242,192,5,0.35)" : "rgba(255,255,255,0.08)"}`,
+            opacity: isPresent ? 1 : 0.3,
+            transition: "all 0.15s",
+          }}>
             {athlete.photo_url
               ? <img src={athlete.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>{initials}</div>
+              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
+                  {name.slice(0, 2).toUpperCase()}
+                </div>
             }
           </div>
 
           {/* Número — placeholder */}
-          <div style={{ width: 22, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#333" }}>—</div>
+          <div style={{
+            width: 20, flexShrink: 0, textAlign: "center",
+            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
+            color: "rgba(255,255,255,0.15)",
+          }}>—</div>
 
-          {/* Nome */}
-          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: isPresent ? "var(--color-text-primary)" : "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", transition: "color 0.15s" }}>
-            {name}
-          </span>
+          {/* Nome + badges */}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+              color: isPresent ? "var(--color-text-primary)" : "rgba(255,255,255,0.25)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+              transition: "color 0.15s",
+            }}>{name}</span>
 
-          {/* GK badge — só aparece se marcado */}
-          {isGK && (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#F2C005", backgroundColor: "rgba(242,192,5,0.1)", border: "1px solid rgba(242,192,5,0.2)", borderRadius: 4, padding: "2px 5px", flexShrink: 0 }}>
-              GK
-            </span>
-          )}
+            {isCaptain && (
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
+                letterSpacing: "0.06em", color: "#BFF205",
+                backgroundColor: "rgba(191,242,5,0.1)", border: "1px solid rgba(191,242,5,0.25)",
+                borderRadius: 4, padding: "1px 5px", flexShrink: 0,
+              }}>CAP</span>
+            )}
+            {isGK && (
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
+                letterSpacing: "0.06em", color: "#F2C005",
+                backgroundColor: "rgba(242,192,5,0.1)", border: "1px solid rgba(242,192,5,0.25)",
+                borderRadius: 4, padding: "1px 5px", flexShrink: 0,
+              }}>GK</span>
+            )}
+          </div>
 
-          {/* Botão GK — seleciona goleiro da partida, só se presente */}
-          <button type="button"
-            title="Goleiro na partida"
-            onClick={() => setGoalkeeper(athlete.id)}
-            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: isPresent ? "pointer" : "default", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.04em", transition: "all 0.12s",
-              borderColor: isGK ? "rgba(242,192,5,0.5)" : "rgba(255,255,255,0.12)",
-              backgroundColor: isGK ? "rgba(242,192,5,0.12)" : "rgba(255,255,255,0.04)",
-              color: isGK ? "#F2C005" : isPresent ? "#888" : "#444",
-              opacity: isPresent ? 1 : 0.4,
-            }}
-            disabled={!isPresent}
-          >GK</button>
+          {/* Ações */}
+          <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+            {/* Botão GK */}
+            <button type="button"
+              onClick={() => isPresent && setGoalkeeper(athlete.id)}
+              disabled={!isPresent}
+              title="Goleiro na partida"
+              style={{
+                width: 28, height: 28, borderRadius: 6, border: "1px solid",
+                cursor: isPresent ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
+                letterSpacing: "0.02em", transition: "all 0.12s",
+                borderColor: isGK ? "rgba(242,192,5,0.5)" : "rgba(255,255,255,0.08)",
+                backgroundColor: isGK ? "rgba(242,192,5,0.12)" : "rgba(255,255,255,0.03)",
+                color: isGK ? "#F2C005" : "rgba(255,255,255,0.2)",
+                opacity: isPresent ? 1 : 0.3,
+              }}>GK</button>
 
-          {/* Botão C — capitão, só se presente */}
-          <button type="button"
-            title="Capitão"
-            onClick={() => setCaptain(athlete.id)}
-            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: isPresent ? "pointer" : "default", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, transition: "all 0.12s",
-              borderColor: isCaptain ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.12)",
-              backgroundColor: isCaptain ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.04)",
-              color: isCaptain ? "var(--color-brand)" : isPresent ? "#888" : "#444",
-              opacity: isPresent ? 1 : 0.4,
-            }}
-            disabled={!isPresent}
-          >C</button>
+            {/* Botão Capitão */}
+            <button type="button"
+              onClick={() => isPresent && setCaptain(athlete.id)}
+              disabled={!isPresent}
+              title="Capitão"
+              style={{
+                width: 28, height: 28, borderRadius: 6, border: "1px solid",
+                cursor: isPresent ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 900,
+                transition: "all 0.12s",
+                borderColor: isCaptain ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.08)",
+                backgroundColor: isCaptain ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.03)",
+                color: isCaptain ? "#BFF205" : "rgba(255,255,255,0.2)",
+                opacity: isPresent ? 1 : 0.3,
+              }}>C</button>
 
-          {/* Toggle presença */}
-          <button type="button"
-            onClick={() => toggleLineup(athlete.id, "is_present")}
-            style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, border: "1px solid", cursor: "pointer", transition: "all 0.12s",
-              borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.12)",
-              backgroundColor: isPresent ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.04)",
-            }}
-          >
-            {isPresent
-              ? <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: "block", margin: "auto" }}>
-                  <path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              : <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ display: "block", margin: "auto" }}>
-                  <rect x="2" y="2" width="8" height="8" rx="1.5" stroke="#555" strokeWidth="1.4"/>
-                </svg>
-            }
-          </button>
+            {/* Toggle presença */}
+            <button type="button"
+              onClick={() => toggleLineup(athlete.id, "is_present")}
+              title={isPresent ? "Marcar ausência" : "Marcar presença"}
+              style={{
+                width: 28, height: 28, borderRadius: 6, border: "1px solid",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "all 0.12s",
+                borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.1)",
+                backgroundColor: isPresent ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
+              }}>
+              {isPresent
+                ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4"/></svg>
+              }
+            </button>
+          </div>
         </div>
       );
     }
 
     return (
-      <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden", flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         {/* Header do time */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", borderBottom: border }}>
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "12px 14px", marginBottom: 2,
+          borderRadius: "12px 12px 0 0",
+          backgroundColor: "var(--color-surface)",
+          border, borderBottom: "none",
+        }}>
           {team?.logo_url
-            ? <img src={team.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
-            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)" }} />
+            ? <img src={team.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
+            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
           }
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>
-            {team?.short_name ?? team?.full_name ?? "Equipe"}
-          </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
-            {athletes.filter(a => lineups[a.id]?.is_present).length}/{athletes.length}
-          </span>
-        </div>
-
-        {/* Cabeçalho das colunas */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(255,255,255,0.02)" }}>
-          <div style={{ width: 34, flexShrink: 0 }} />
-          <div style={{ width: 22, flexShrink: 0 }} />
-          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#444" }}>Atleta</span>
-          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>GK</span>
-          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>C</span>
-          <span style={{ width: 26, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#444" }}>✓</span>
-        </div>
-
-        {athletes.length === 0 ? (
-          <p style={{ padding: "20px 16px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#444" }}>Nenhum atleta inscrito.</p>
-        ) : (
-          <div>
-            {/* Goleiros primeiro */}
-            {goalkeepers.length > 0 && (
-              <>
-                <div style={{ padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(242,192,5,0.04)" }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#F2C005" }}>Goleiros</span>
-                </div>
-                {goalkeepers.map(a => <AthleteRow key={a.id} athlete={a} />)}
-              </>
-            )}
-            {/* Linha */}
-            {outfield.length > 0 && goalkeepers.length > 0 && (
-              <div style={{ padding: "6px 14px", borderBottom: border, backgroundColor: "rgba(255,255,255,0.02)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#444" }}>Linha</span>
-              </div>
-            )}
-            {outfield.map(a => <AthleteRow key={a.id} athlete={a} />)}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>
+              {team?.short_name ?? team?.full_name ?? "Equipe"}
+            </p>
           </div>
-        )}
+          {/* Contador */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
+          </div>
+        </div>
+
+        {/* Header das colunas */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "5px 14px",
+          backgroundColor: "rgba(255,255,255,0.02)",
+          borderLeft: border, borderRight: border,
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+        }}>
+          <div style={{ width: 36, flexShrink: 0 }} />
+          <div style={{ width: 20, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>#</div>
+          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>Atleta</span>
+          <div style={{ display: "flex", gap: 5 }}>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>GK</span>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>C</span>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>✓</span>
+          </div>
+        </div>
+
+        {/* Lista */}
+        <div style={{
+          borderRadius: "0 0 12px 12px",
+          border, borderTop: "none",
+          backgroundColor: "var(--color-surface)",
+          overflow: "hidden",
+        }}>
+          {allAthletes.length === 0 ? (
+            <p style={{ padding: "24px 16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.15)", textAlign: "center" }}>
+              Nenhum atleta inscrito.
+            </p>
+          ) : (
+            <>
+              {goalkeepers.length > 0 && (
+                <>
+                  <div style={{ padding: "6px 14px", backgroundColor: "rgba(242,192,5,0.04)", borderBottom: "1px solid rgba(242,192,5,0.08)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "#F2C005" }}>Goleiros</span>
+                  </div>
+                  {goalkeepers.map(a => <AthleteRow key={a.id} athlete={a} />)}
+                </>
+              )}
+              {outfield.length > 0 && (
+                <>
+                  {goalkeepers.length > 0 && (
+                    <div style={{ padding: "6px 14px", backgroundColor: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.25)" }}>Linha</span>
+                    </div>
+                  )}
+                  {outfield.map(a => <AthleteRow key={a.id} athlete={a} />)}
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-      <TeamPanel teamId={match.team_a_id} team={teamA} />
-      <TeamPanel teamId={match.team_b_id} team={teamB} />
+    <div style={{ width: "100%", paddingBottom: 80 }}>
+      <SectionHeader title="Formações" subtitle="Escalação e presenças da partida" />
 
-      {/* Salvar fixo no rodapé da direita */}
-      <div style={{ position: "fixed", bottom: 24, right: 32, zIndex: 10 }}>
+      <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "flex-start" }}>
+        <TeamPanel teamId={match.team_a_id} team={teamA} />
+        <TeamPanel teamId={match.team_b_id} team={teamB} />
+      </div>
+
+      {/* Legenda */}
+      <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" as const }}>
+        {[
+          { color: "#BFF205", label: "Capitão" },
+          { color: "#F2C005", label: "Goleiro da partida" },
+        ].map(({ color, label }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ width: 2, height: 12, borderRadius: 1, backgroundColor: color }} />
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.04em" }}>{label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Rodapé fixo */}
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0,
+        padding: isMobile ? "12px 16px" : "12px 32px",
+        backgroundColor: "rgba(10,10,10,0.95)",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        backdropFilter: "blur(12px)",
+        display: "flex", alignItems: "center", justifyContent: "flex-end",
+        zIndex: 20,
+      }}>
         <button type="button" onClick={handleSaveLineups} disabled={savingLineups}
-          style={{ padding: "11px 28px", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: savingLineups ? 0.5 : 1, boxShadow: "0 8px 32px rgba(191,242,5,0.2)" }}>
+          style={{
+            padding: isMobile ? "11px 0" : "11px 36px",
+            width: isMobile ? "100%" : "auto",
+            borderRadius: 9, border: "none",
+            backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
+            letterSpacing: "0.1em", textTransform: "uppercase" as const,
+            cursor: savingLineups ? "not-allowed" : "pointer",
+            opacity: savingLineups ? 0.5 : 1,
+            boxShadow: "0 4px 24px rgba(191,242,5,0.15)",
+          }}>
           {savingLineups ? "Salvando…" : "Salvar formações"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── MidiaTab ─────────────────────────────────────────────────────────────────
+
+function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setMotmTeamIdProp, highlightsUrl, setHighlightsUrl, photosUrl, setPhotosUrl, getAthletes, handleSaveInfo, saving }: {
+  match: any;
+  motmAthleteId: string;
+  setMotmAthleteId: (v: string) => void;
+  motmTeamIdProp: string;
+  setMotmTeamIdProp: (v: string) => void;
+  highlightsUrl: string;
+  setHighlightsUrl: (v: string) => void;
+  photosUrl: string;
+  setPhotosUrl: (v: string) => void;
+  getAthletes: (teamId: string) => Athlete[];
+  handleSaveInfo: () => void;
+  saving: boolean;
+}) {
+  const border = "1px solid var(--color-border)";
+  const isMobile = useIsMobile();
+  const teamA = match.teams_a;
+  const teamB = match.teams_b;
+
+  // Step: null = fechado, "team" = escolhendo time, "athlete" = escolhendo atleta
+  const [motmStep, setMotmStep] = useState<null | "team" | "athlete">(null);
+  const [motmTeamId, setMotmTeamId] = useState<string>(motmTeamIdProp ?? "");
+  const [motmSearch, setMotmSearch] = useState("");
+
+  const selectedMotm = [...getAthletes(match.team_a_id), ...getAthletes(match.team_b_id)]
+    .find(a => a.id === motmAthleteId);
+
+  const motmTeam = motmAthleteId
+    ? (getAthletes(match.team_a_id).some(a => a.id === motmAthleteId) ? teamA : teamB)
+    : null;
+
+  const athletesForTeam = motmTeamId ? getAthletes(motmTeamId) : [];
+  const filteredAthletes = motmSearch.trim()
+    ? athletesForTeam.filter(a => (a.surname ?? a.full_name).toLowerCase().includes(motmSearch.toLowerCase()))
+    : athletesForTeam;
+
+  function openMotm() {
+    // Pré-seleciona o time do atleta atual se houver
+    if (motmAthleteId) {
+      const inA = getAthletes(match.team_a_id).some(a => a.id === motmAthleteId);
+      setMotmTeamId(inA ? match.team_a_id : match.team_b_id);
+      setMotmStep("athlete");
+    } else {
+      setMotmTeamId("");
+      setMotmStep("team");
+    }
+    setMotmSearch("");
+  }
+
+  function clearMotm(e: React.MouseEvent) {
+    e.stopPropagation();
+    setMotmAthleteId("");
+    setMotmTeamId("");
+    setMotmTeamIdProp("");
+    setMotmStep(null);
+  }
+
+  function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
+            letterSpacing: "0.16em", textTransform: "uppercase" as const,
+            color: "#BFF205",
+          }}>{title}</span>
+          {subtitle && (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>
+          )}
+        </div>
+        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: 600, width: "100%" }}>
+
+      {/* ══ MOTM ══ */}
+      <div style={{ marginBottom: 28 }}>
+        <SectionHeader title="Melhor em Campo" subtitle="Man of the Match" />
+
+        {/* Card de exibição / trigger */}
+        <div
+          onClick={openMotm}
+          style={{
+            borderRadius: 14, border: `1px solid ${motmAthleteId ? "rgba(191,242,5,0.25)" : "var(--color-border)"}`,
+            backgroundColor: motmAthleteId ? "rgba(191,242,5,0.04)" : "var(--color-surface)",
+            padding: isMobile ? "16px" : "20px 24px",
+            cursor: "pointer", transition: "all 0.15s", position: "relative", overflow: "hidden",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = motmAthleteId ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.15)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = motmAthleteId ? "rgba(191,242,5,0.25)" : "var(--color-border)"; }}
+        >
+          {motmAthleteId && selectedMotm ? (
+            <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 12 : 16 }}>
+              {/* Foto grande */}
+              <div style={{
+                width: isMobile ? 52 : 64, height: isMobile ? 52 : 64,
+                borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+                backgroundColor: "rgba(255,255,255,0.06)",
+                border: "2px solid rgba(191,242,5,0.3)",
+              }}>
+                {selectedMotm.photo_url
+                  ? <img src={selectedMotm.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#555" }}>
+                      {(selectedMotm.surname ?? selectedMotm.full_name).slice(0, 2).toUpperCase()}
+                    </div>
+                }
+              </div>
+              {/* Nome + time */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 16 : 20, fontWeight: 800, color: "var(--color-text-primary)", lineHeight: 1, margin: 0, letterSpacing: "0.02em" }}>
+                  {selectedMotm.surname ?? selectedMotm.full_name}
+                </p>
+                {motmTeam && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
+                    {motmTeam.logo_url && <img src={motmTeam.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.35)" }}>
+                      {motmTeam.short_name ?? motmTeam.full_name}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {/* Troféu */}
+              <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(191,242,5,0.12)", border: "1px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="20" height="20" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="#BFF205" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="#BFF205" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </div>
+              {/* Limpar */}
+              <button type="button" onClick={clearMotm}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              {/* Placeholder */}
+              <div style={{ width: isMobile ? 52 : 64, height: isMobile ? 52 : 64, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <svg width="22" height="22" viewBox="0 0 12 12" fill="none">
+                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="rgba(255,255,255,0.15)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="rgba(255,255,255,0.15)" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <div>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.25)", margin: 0 }}>Selecionar Melhor em Campo</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)", marginTop: 3 }}>Toque para escolher o atleta</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Modal de seleção MOTM ── */}
+        {motmStep !== null && (
+          <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.82)", zIndex: 60, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? 0 : 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setMotmStep(null); }}>
+          <div style={{
+            width: "100%", maxWidth: isMobile ? "100%" : 480,
+            borderRadius: isMobile ? "18px 18px 0 0" : 18,
+            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "#0e0e0e",
+            overflow: "hidden",
+            boxShadow: isMobile ? "0 -24px 80px rgba(0,0,0,0.8)" : "0 32px 80px rgba(0,0,0,0.8)",
+            maxHeight: isMobile ? "85vh" : "70vh",
+            display: "flex", flexDirection: "column",
+          }}>
+            {/* Handle — só mobile */}
+            {isMobile && (
+              <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
+                <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.15)" }} />
+              </div>
+            )}
+
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {motmStep === "athlete" && motmTeamId && (
+                    <button type="button" onClick={() => { setMotmStep("team"); setMotmSearch(""); }}
+                      style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
+                  )}
+                  <div>
+                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>
+                      {motmStep === "team" ? "Selecionar time" : "Selecionar atleta"}
+                    </p>
+                    {motmStep === "athlete" && motmTeamId && (() => {
+                      const t = motmTeamId === match.team_a_id ? teamA : teamB;
+                      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0, marginTop: 2 }}>{t?.short_name ?? t?.full_name}</p>;
+                    })()}
+                  </div>
+                </div>
+                <button type="button" onClick={() => setMotmStep(null)}
+                  style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              </div>
+
+              {/* ── STEP: escolher time ── */}
+              {motmStep === "team" && (
+                <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
+                    <div key={id}
+                      onClick={() => { setMotmTeamId(id); setMotmStep("athlete"); setMotmSearch(""); }}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 14,
+                        padding: "16px 18px", borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        backgroundColor: "rgba(255,255,255,0.03)",
+                        cursor: "pointer", transition: "all 0.12s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.05)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
+                    >
+                      <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {team?.logo_url
+                          ? <img src={team.logo_url} alt="" style={{ width: 44, height: 44, objectFit: "contain" }} />
+                          : <div style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "#444" }}>
+                              {(team?.short_name ?? team?.full_name ?? "?").slice(0, 2).toUpperCase()}
+                            </div>
+                        }
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.02em" }}>
+                          {team?.short_name ?? team?.full_name ?? "—"}
+                        </p>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 3 }}>
+                          {getAthletes(id).length} atletas
+                        </p>
+                      </div>
+                      <svg width="12" height="12" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.25, flexShrink: 0 }}>
+                        <path d="M4 2l3 3-3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* ── STEP: escolher atleta ── */}
+              {motmStep === "athlete" && (
+                <>
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <input autoFocus type="text" value={motmSearch} onChange={e => setMotmSearch(e.target.value)}
+                      placeholder="Buscar atleta…"
+                      style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)" }} />
+                  </div>
+                  <div style={{ overflowY: "auto", flex: 1 }}>
+                    {filteredAthletes.length === 0 && (
+                      <p style={{ padding: "24px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", textAlign: "center" }}>Nenhum atleta encontrado.</p>
+                    )}
+                    {filteredAthletes
+                      .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
+                      .map(a => {
+                        const isSelected = a.id === motmAthleteId;
+                        return (
+                          <div key={a.id}
+                            onClick={() => {
+                            setMotmAthleteId(a.id);
+                            setMotmTeamId(motmTeamId);
+                            setMotmTeamIdProp(motmTeamId);
+                            setMotmStep(null);
+                            setMotmSearch("");
+                            }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 12,
+                              padding: "12px 16px", cursor: "pointer",
+                              borderBottom: "1px solid rgba(255,255,255,0.04)",
+                              backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent",
+                              transition: "background 0.1s",
+                            }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}
+                          >
+                            <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
+                              {a.photo_url
+                                ? <img src={a.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#555" }}>
+                                    {(a.surname ?? a.full_name).slice(0, 2).toUpperCase()}
+                                  </div>
+                              }
+                            </div>
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: isSelected ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                              {a.surname ?? a.full_name}
+                            </span>
+                            {isSelected && (
+                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <path d="M2 7l4 4 6-6" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </div>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ══ LINKS DE MÍDIA ══ */}
+      <div style={{ marginBottom: 28 }}>
+        <SectionHeader title="Links de Mídia" subtitle="URLs externas para fotos e vídeos" />
+        <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+
+          {/* Fotos */}
+          <div style={{ padding: "16px 18px", borderBottom: border }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <rect x="1" y="2" width="10" height="8" rx="1.5" stroke="#BFF205" strokeWidth="1.2"/>
+                <circle cx="4.5" cy="5" r="1.2" stroke="#BFF205" strokeWidth="1.1"/>
+                <path d="M1 8.5l2.5-2.5 2 2 1.5-1.5L11 9.5" stroke="#BFF205" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-secondary)" }}>Fotos do jogo</span>
+            </div>
+            <input type="url" value={photosUrl} onChange={e => setPhotosUrl(e.target.value)}
+              placeholder="https://drive.google.com/…"
+              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: photosUrl ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", background: "none", border: "none", outline: "none", padding: 0 }} />
+            {photosUrl && (
+              <a href={photosUrl} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(191,242,5,0.5)", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--color-brand)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(191,242,5,0.5)")}
+              >
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                  <path d="M4 2H2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V6M6 1h3v3M9 1 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Abrir link
+              </a>
+            )}
+          </div>
+
+          {/* Vídeos */}
+          <div style={{ padding: "16px 18px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+                <rect x="1" y="2.5" width="7.5" height="7" rx="1.2" stroke="#BFF205" strokeWidth="1.2"/>
+                <path d="M8.5 5l2.5-1.5v5L8.5 7" stroke="#BFF205" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-secondary)" }}>Vídeos / Highlights</span>
+            </div>
+            <input type="url" value={highlightsUrl} onChange={e => setHighlightsUrl(e.target.value)}
+              placeholder="https://youtube.com/…"
+              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: highlightsUrl ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", background: "none", border: "none", outline: "none", padding: 0 }} />
+            {highlightsUrl && (
+              <a href={highlightsUrl} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(191,242,5,0.5)", textDecoration: "none" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "var(--color-brand)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(191,242,5,0.5)")}
+              >
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
+                  <path d="M4 2H2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V6M6 1h3v3M9 1 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Abrir link
+              </a>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ══ SALVAR ══ */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button type="button" onClick={handleSaveInfo} disabled={saving}
+          style={{
+            padding: isMobile ? "12px 24px" : "12px 36px",
+            borderRadius: 10, border: "none",
+            backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+            fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+            letterSpacing: "0.08em", textTransform: "uppercase" as const,
+            cursor: "pointer", opacity: saving ? 0.5 : 1, width: isMobile ? "100%" : "auto",
+          }}>
+          {saving ? "Salvando…" : "Salvar"}
         </button>
       </div>
     </div>
@@ -1740,7 +2287,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
               />
             </div>
           )}
-          {isGoal && !isOwnGoal && (
+          {isGoal && !isOwnGoal && goalType !== "penalty" && goalType !== "shootout" && (
             <div style={fieldStyle}>
               <span style={labelStyle}>Assistência (opcional)</span>
               <AthleteDropdown
@@ -1891,6 +2438,17 @@ function ShootoutModal({ match, shootoutType, getAthletes, editingShootout, onCo
   );
 }
 
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 640); }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  return isMobile;
+}
+
 // ─── PosJogoTab ───────────────────────────────────────────────────────────────
 
 function PosJogoTab({
@@ -1913,6 +2471,9 @@ function PosJogoTab({
   const [openGoalTeam, setOpenGoalTeam] = useState<string | null>(null);
   const [openShootoutModal, setOpenShootoutModal] = useState(false);
   const [editingShootout, setEditingShootout] = useState<any | null>(null);
+
+  const [showPublishModal, setShowPublishModal] = useState(false);
+  const isMobile = useIsMobile();
 
   const secondHalf = [...actions]
     .filter((a: any) => a.period === "second")
@@ -2076,7 +2637,7 @@ function PosJogoTab({
 
     return (
       <div
-        style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", alignItems: "center", minHeight: 46, borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+        style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 48px 1fr" : "1fr 64px 1fr", alignItems: "center", minHeight: 46, borderBottom: "1px solid rgba(255,255,255,0.03)" }}
         onMouseEnter={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "1")}
         onMouseLeave={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "0")}
       >
@@ -2084,8 +2645,8 @@ function PosJogoTab({
           {isA ? <EventContent align="left" /> : null}
         </div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <span style={{
-            fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800,
+        <span style={{
+            fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 18, fontWeight: 800,
             color: "rgba(255,255,255,0.45)", letterSpacing: "0.01em", lineHeight: 1,
           }}>
             {action.minute ? `${action.minute}'` : "—"}
@@ -2219,7 +2780,7 @@ function PosJogoTab({
 
   // ── Render principal ────────────────────────────────────────────────────────
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", paddingBottom: 80, width: "100%" }}>
+    <div style={{ maxWidth: 960, margin: "0 auto", paddingBottom: 80, width: "100%", paddingLeft: isMobile ? 0 : 0, paddingRight: isMobile ? 0 : 0 }}>
 
       {/* ── Modal encerramento ── */}
       {showEndModal && (
@@ -2313,7 +2874,8 @@ function PosJogoTab({
 
       {/* ══ BLOCO 2 — SCOREBOARD COM + ══ */}
       <div style={{
-        display: "grid", gridTemplateColumns: "1fr auto 1fr",
+        display: "grid",
+        gridTemplateColumns: isMobile ? "1fr auto 1fr" : "1fr auto 1fr",
         borderRadius: 12, border, backgroundColor: "var(--color-surface)",
         overflow: "hidden", marginBottom: 10, position: "relative",
       }}>
@@ -2377,7 +2939,7 @@ function PosJogoTab({
           ))}
         </div>
         {/* Contadores */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr" }}>
           {([
             { teamId: match.team_a_id, fouls: foulsA, align: "left" as const },
             { teamId: match.team_b_id, fouls: foulsB, align: "right" as const },
@@ -2413,7 +2975,7 @@ function PosJogoTab({
       </div>
 
       {/* ══ BLOCO 4 — BOTÕES DE AÇÃO ══ */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginBottom: 20 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(3, 1fr)" : "repeat(6, 1fr)", gap: 6, marginBottom: 20 }}>
         {[
           { type: "yellow_card",     label: "Amarelo" },
           { type: "red_card",        label: "Vermelho" },
@@ -2480,7 +3042,7 @@ function PosJogoTab({
               {secondHalf.length > 0 && (
                 <div style={{ marginBottom: 4 }}>
                   {/* Separador 2º tempo */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 48px 1fr" : "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
                     <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
                     <div style={{ textAlign: "center" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#BFF205" }}>2º T</span>
@@ -2511,10 +3073,45 @@ function PosJogoTab({
       {/* Shootout tab */}
       {hasShootout && activeShootoutTab === "shootout" && <ShootoutSection />}
 
+      {/* ══ MODAL PÓS-PUBLICAÇÃO ══ */}
+      {showPublishModal && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.78)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowPublishModal(false); }}>
+          <div style={{ width: "100%", maxWidth: 380, borderRadius: 16, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "#111", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+            <div style={{ padding: "28px 24px 20px", textAlign: "center" }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", backgroundColor: "rgba(191,242,5,0.1)", border: "1px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                  <path d="M4 11l5 5 9-9" stroke="#BFF205" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.04em", marginBottom: 10 }}>
+                Resultado publicado!
+              </p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 4 }}>
+                As estatísticas foram atualizadas.
+              </p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-brand)", lineHeight: 1.6 }}>
+                Lembre-se de atualizar o status da partida para "Finalizada".
+              </p>
+            </div>
+            <div style={{ padding: "0 24px 24px" }}>
+              <button type="button" onClick={() => { setShowPublishModal(false); setShowEndModal(true); }}
+                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", marginBottom: 8 }}>
+                Atualizar status agora
+              </button>
+              <button type="button" onClick={() => setShowPublishModal(false)}
+                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ══ RODAPÉ FIXO ══ */}
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
-        padding: "12px 32px",
+        padding: isMobile ? "12px 16px" : "12px 32px",
         backgroundColor: "rgba(10,10,10,0.95)",
         borderTop: "1px solid rgba(255,255,255,0.05)",
         backdropFilter: "blur(12px)",
@@ -2524,7 +3121,13 @@ function PosJogoTab({
         {published && (
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(191,242,5,0.45)", textTransform: "uppercase" }}>✓ Publicado</span>
         )}
-        <button type="button" onClick={handlePublish} disabled={publishing}
+        <button type="button"
+          onClick={async () => {
+            if (published) return;
+            await handlePublish();
+            setShowPublishModal(true);
+          }}
+          disabled={publishing}
           style={{
             padding: "11px 32px", borderRadius: 9,
             border: published ? "1px solid rgba(191,242,5,0.25)" : "none",
@@ -2532,7 +3135,7 @@ function PosJogoTab({
             color: published ? "var(--color-brand)" : "var(--color-background)",
             fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
             letterSpacing: "0.1em", textTransform: "uppercase",
-            cursor: publishing ? "not-allowed" : "pointer",
+            cursor: publishing || published ? "default" : "pointer",
             opacity: publishing ? 0.5 : 1, transition: "all 0.15s",
           }}>
           {publishing ? "Publicando…" : published ? "✓ Publicado" : "Publicar resultado"}
