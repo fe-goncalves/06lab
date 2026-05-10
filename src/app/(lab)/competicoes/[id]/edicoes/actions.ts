@@ -1093,3 +1093,18 @@ export async function editarStintStaff(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function recalcularEstatisticasEdicao(
+  editionId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+  
+  const { error: e1 } = await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: editionId });
+  if (e1) return { error: e1.message };
+  const { error: e2 } = await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: editionId });
+  if (e2) return { error: e2.message };
+  
+  return { success: true };
+}

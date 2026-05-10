@@ -20,10 +20,10 @@ export default async function CompeticaoPage({
   const orgId = profile?.organization_id ?? "";
 
   const [
-    { data: comp, error },
-    { data: editions },
-    { data: seasons },
-    { data: allTeams },
+    compResult,
+    editionsResult,
+    seasonsResult,
+    allTeamsResult,
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competition_editions")
@@ -38,6 +38,16 @@ export default async function CompeticaoPage({
       .select("id, full_name, abbreviation, logo_url")
       .eq("organization_id", orgId).order("full_name"),
   ]);
+
+  const comp = compResult?.data ?? null;
+  const error = compResult?.error ?? null;
+  const editions = editionsResult?.data ?? [];
+  const seasons = seasonsResult?.data ?? [];
+  const allTeams = allTeamsResult?.data ?? [];
+
+  if (error) {
+    console.error("[CompeticaoPage] erro ao buscar competição:", error);
+  }
 
   if (error || !comp) redirect("/competicoes");
 
