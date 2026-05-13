@@ -4,24 +4,49 @@ import { criarMembro } from "./actions";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { X } from "lucide-react";
 
 type StaffRole = { id: string; full_name: string };
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "9px 12px",
+  backgroundColor: "rgba(255,255,255,0.04)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 9,
+  fontFamily: "var(--font-mono)",
+  fontSize: 12,
+  color: "var(--color-text-primary)",
+  outline: "none",
+  colorScheme: "dark" as any,
+};
+
+const labelStyle: React.CSSProperties = {
+  fontFamily: "var(--font-mono)",
+  fontSize: 9,
+  fontWeight: 700,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase" as const,
+  color: "rgba(255,255,255,0.35)",
+  marginBottom: 6,
+  display: "block",
+};
 
 export function NovoMembroModal({
   isOpen,
   onClose,
-  defaultRoleId,
+  defaultGender,
 }: {
   isOpen: boolean;
   onClose: () => void;
-  defaultRoleId?: string;
+  defaultGender?: string;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [surname, setSurname] = useState("");
-  const [gender, setGender] = useState("");
-  const [staffRoleId, setStaffRoleId] = useState(defaultRoleId ?? "");
+  const [gender, setGender] = useState(defaultGender ?? "");
+  const [staffRoleId, setStaffRoleId] = useState("");
   const [rg, setRg] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [roles, setRoles] = useState<StaffRole[]>([]);
@@ -39,16 +64,16 @@ export function NovoMembroModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setFullName(""); setSurname(""); setGender("");
+      setFullName(""); setSurname(""); setStaffRoleId("");
       setRg(""); setBirthDate(""); setFile(null); setError(null); setLoading(false);
-      setStaffRoleId(defaultRoleId ?? "");
+      setGender(defaultGender ?? "");
       setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
     }
-  }, [isOpen, defaultRoleId]);
+  }, [isOpen, defaultGender]);
 
   useEffect(() => {
-    if (defaultRoleId) setStaffRoleId(defaultRoleId);
-  }, [defaultRoleId]);
+    if (defaultGender) setGender(defaultGender);
+  }, [defaultGender]);
 
   function applyDateMask(v: string) {
     const d = v.replace(/\D/g, "").slice(0, 8);
@@ -85,69 +110,222 @@ export function NovoMembroModal({
 
   if (!isOpen) return null;
 
-  const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: "rgba(0,0,0,0.55)" }}>
-      <div role="dialog" aria-modal="true" className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border p-6"
-        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}
-        onClick={e => e.stopPropagation()}>
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>Novo membro</h2>
-          <button type="button" onClick={onClose} className="rounded-lg border px-2 py-1 text-sm"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>✕</button>
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        padding: 16,
+        backgroundColor: "rgba(0,0,0,0.78)",
+      }}
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 480,
+          maxHeight: "90vh",
+          overflowY: "auto",
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.08)",
+          backgroundColor: "#0e0e0e",
+          padding: 24,
+        }}
+      >
+        {/* Header do modal */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+          <span style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 13,
+            fontWeight: 700,
+            color: "var(--color-text-primary)",
+            letterSpacing: "0.04em",
+          }}>
+            NOVO MEMBRO
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.08)",
+              backgroundColor: "rgba(255,255,255,0.04)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", color: "rgba(255,255,255,0.4)",
+            }}
+          >
+            <X size={14} strokeWidth={2} />
+          </button>
         </div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Função</span>
-            <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} className={inputClass} style={inputStyle}>
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+          {/* Função */}
+          <div>
+            <span style={labelStyle}>Função</span>
+            <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} style={inputStyle}>
               <option value="">Selecione…</option>
               {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
             </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo *</span>
-            <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Apelido</span>
-            <input type="text" value={surname} onChange={e => setSurname(e.target.value)} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Gênero</span>
-            <select value={gender} onChange={e => setGender(e.target.value)} className={inputClass} style={inputStyle}>
-              <option value="">Selecione…</option>
-              <option value="male">Masculino</option>
-              <option value="female">Feminino</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>RG</span>
-            <input type="text" value={rg} onChange={e => setRg(e.target.value.replace(/[^\d.\-]/g, ""))} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Data de nascimento</span>
-            <input type="text" placeholder="DD/MM/AAAA" value={birthDate}
+          </div>
+
+          {/* Nome completo */}
+          <div>
+            <span style={labelStyle}>Nome completo *</span>
+            <input
+              type="text"
+              required
+              value={fullName}
+              onChange={e => setFullName(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Apelido */}
+          <div>
+            <span style={labelStyle}>Apelido</span>
+            <input
+              type="text"
+              value={surname}
+              onChange={e => setSurname(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Gênero — pill buttons */}
+          <div>
+            <span style={labelStyle}>Gênero</span>
+            <div style={{ display: "flex", gap: 8 }}>
+              {[
+                { value: "male",   label: "Masculino" },
+                { value: "female", label: "Feminino"  },
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setGender(opt.value)}
+                  style={{
+                    padding: "6px 16px",
+                    borderRadius: 20,
+                    border: gender === opt.value
+                      ? "1px solid rgba(191,242,5,0.4)"
+                      : "1px solid rgba(255,255,255,0.08)",
+                    backgroundColor: gender === opt.value
+                      ? "rgba(191,242,5,0.08)"
+                      : "rgba(255,255,255,0.03)",
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 11,
+                    fontWeight: gender === opt.value ? 700 : 400,
+                    color: gender === opt.value ? "#BFF205" : "rgba(255,255,255,0.4)",
+                    cursor: "pointer",
+                    transition: "all 0.15s",
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* RG */}
+          <div>
+            <span style={labelStyle}>RG</span>
+            <input
+              type="text"
+              value={rg}
+              onChange={e => setRg(e.target.value.replace(/[^\d.\-]/g, ""))}
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Data de nascimento */}
+          <div>
+            <span style={labelStyle}>Data de nascimento</span>
+            <input
+              type="text"
+              placeholder="DD/MM/AAAA"
+              value={birthDate}
               onChange={e => setBirthDate(applyDateMask(e.target.value))}
               onPaste={e => { e.preventDefault(); setBirthDate(applyDateMask(e.clipboardData.getData("text"))); }}
-              maxLength={10} className={inputClass} style={inputStyle} />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Foto</span>
-            <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFileChange} />
-            <button type="button" onClick={() => fileRef.current?.click()}
-              className="rounded-lg border px-3 py-2 text-sm text-left"
-              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+              maxLength={10}
+              style={{ ...inputStyle, letterSpacing: "0.05em" }}
+            />
+          </div>
+
+          {/* Foto */}
+          <div>
+            <span style={labelStyle}>Foto</span>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              style={{ display: "none" }}
+              onChange={handleFileChange}
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              style={{
+                ...inputStyle,
+                textAlign: "left" as const,
+                cursor: "pointer",
+                color: file ? "var(--color-text-primary)" : "rgba(255,255,255,0.25)",
+              }}
+            >
               {file ? file.name : "Escolher foto…"}
             </button>
-            {previewUrl && <img src={previewUrl} alt="" className="mt-2 mx-auto h-24 w-24 rounded-full object-cover border" style={{ borderColor: "var(--color-border)" }} />}
-          </label>
-          {error && <p className="text-sm" style={{ color: "var(--color-danger)" }} role="alert">{error}</p>}
-          <button type="submit" disabled={loading}
-            className="mt-2 rounded-lg px-4 py-2.5 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            {loading ? "Salvando…" : "Criar membro"}
+            {previewUrl && (
+              <div style={{ marginTop: 12, display: "flex", justifyContent: "center" }}>
+                <img
+                  src={previewUrl}
+                  alt=""
+                  style={{
+                    width: 80, height: 80, borderRadius: "50%",
+                    objectFit: "cover",
+                    border: "2px solid rgba(191,242,5,0.3)",
+                  }}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Erro */}
+          {error && (
+            <p style={{
+              fontFamily: "var(--font-mono)", fontSize: 11,
+              color: "#FF4444",
+              backgroundColor: "rgba(255,68,68,0.07)",
+              border: "1px solid rgba(255,68,68,0.2)",
+              borderRadius: 8, padding: "8px 12px", margin: 0,
+            }}>
+              {error}
+            </p>
+          )}
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              marginTop: 8,
+              padding: "10px 16px",
+              borderRadius: 9,
+              border: "none",
+              backgroundColor: loading ? "rgba(191,242,5,0.3)" : "#BFF205",
+              color: "#0a0a0a",
+              fontFamily: "var(--font-mono)",
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: "0.06em",
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: "background-color 0.15s",
+            }}
+          >
+            {loading ? "Salvando…" : "CRIAR MEMBRO"}
           </button>
         </form>
       </div>

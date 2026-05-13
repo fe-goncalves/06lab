@@ -22,12 +22,8 @@ export async function criarSuspensao(
   const games_total = Number(formData.get("games_total") ?? 0);
   if (!games_total || games_total < 1) return { error: "Quantidade de jogos deve ser maior que zero." };
 
-  const scope_type = String(formData.get("scope_type") ?? "global");
-  const scope_edition_id = String(formData.get("scope_edition_id") ?? "").trim() || null;
-
-  if (scope_type === "edition" && !scope_edition_id) {
-    return { error: "Selecione a edição para suspensão por competição." };
-  }
+  const scope_edition_id = String(formData.get("scope_edition_id") ?? "").trim();
+  if (!scope_edition_id) return { error: "Edição é obrigatória." };
 
   const starts_at = String(formData.get("starts_at") ?? "").trim();
   if (!starts_at) return { error: "Data de início é obrigatória." };
@@ -41,7 +37,7 @@ export async function criarSuspensao(
       organization_id: profile.organization_id,
       athlete_id,
       origin_match_id,
-      scope_type,
+      scope_type: "edition",
       scope_edition_id,
       starts_at,
       games_total,
@@ -70,12 +66,6 @@ export async function editarSuspensao(
   const games_remaining = Number(formData.get("games_remaining") ?? 0);
   const starts_at = String(formData.get("starts_at") ?? "").trim();
   const reason = String(formData.get("reason") ?? "").trim() || null;
-  const scope_type = String(formData.get("scope_type") ?? "global");
-  const scope_edition_id = String(formData.get("scope_edition_id") ?? "").trim() || null;
-
-  if (scope_type === "edition" && !scope_edition_id) {
-    return { error: "Selecione a edição para suspensão por competição." };
-  }
 
   const { error } = await supabase
     .from("suspensions")
@@ -84,8 +74,6 @@ export async function editarSuspensao(
       games_remaining: Math.min(games_remaining, games_total),
       starts_at,
       reason,
-      scope_type,
-      scope_edition_id,
     })
     .eq("id", id);
 

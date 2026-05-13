@@ -98,7 +98,7 @@ function MemberRow({ member, roleMap, isFirst }: { member: Member; roleMap: Reco
           display: "flex",
           alignItems: "center",
           gap: 16,
-          padding: "12px 0",
+          padding: "12px 20px",
           textDecoration: "none",
         }}
       >
@@ -215,6 +215,8 @@ export default function ComissaoClient({
   const [activeTab, setActiveTab] = useState<string>("male");
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+
+  const roleMap = Object.fromEntries(roles.map(r => [r.id, r.full_name]));
 
   const filtered = initialMembers.filter(m => {
     const matchGender = m.gender === activeTab;
@@ -382,7 +384,6 @@ export default function ComissaoClient({
                   borderRadius: 14,
                   border: "1px solid rgba(255,255,255,0.08)",
                   backgroundColor: "var(--color-surface)",
-                  padding: "0 20px",
                 }}>
                   {members.map((m, idx) => (
                     <MemberRow key={m.id} member={m} roleMap={roleMap} isFirst={idx === 0} />

@@ -13,16 +13,21 @@ export default async function SuspensoesPage() {
 
   const orgId = profile?.organization_id ?? "";
 
-  const [{ data: suspensions }, { data: athletes }, { data: editions }] = await Promise.all([
+  const [{ data: suspensions }, { data: editions }] = await Promise.all([
     supabase.from("suspensions")
-      .select("id, athlete_id, scope_type, scope_edition_id, starts_at, games_total, games_remaining, is_active, reason, athletes(full_name, surname)")
+      .select(`
+        id, athlete_id, scope_type, scope_edition_id,
+        starts_at, games_total, games_remaining, is_active, reason,
+        athletes(full_name, surname),
+        competition_editions(
+          id,
+          seasons(name),
+          competitions(full_name)
+        )
+      `)
       .eq("organization_id", orgId)
       .order("is_active", { ascending: false })
       .order("created_at", { ascending: false }),
-    supabase.from("athletes")
-      .select("id, full_name, surname")
-      .eq("organization_id", orgId)
-      .order("full_name"),
     supabase.from("competition_editions")
       .select("id, seasons(name), competitions!inner(full_name, organization_id)")
       .eq("competitions.organization_id", orgId),
@@ -34,6 +39,9 @@ export default async function SuspensoesPage() {
     athlete_name: s.athletes?.full_name ?? "—",
     scope_type: s.scope_type,
     scope_edition_id: s.scope_edition_id ?? "",
+    edition_label: s.competition_editions
+      ? `${s.competition_editions.competitions?.full_name ?? "—"} · ${s.competition_editions.seasons?.name ?? "—"}`
+      : null,
     starts_at: s.starts_at,
     games_total: s.games_total,
     games_remaining: s.games_remaining,
@@ -52,14 +60,10 @@ export default async function SuspensoesPage() {
       <header className="mb-8">
         <h1 className="font-display text-2xl font-semibold" style={{ color: "var(--color-text-primary)" }}>Suspensões</h1>
         <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          Gerencie suspensões de atletas. O saldo é deduzido a cada partida que o atleta não é relacionado após a data de início.
+          Visão consolidada de todas as suspensões. Para criar ou editar, acesse o hub da competição.
         </p>
       </header>
-      <SuspensoesClient
-        suspensions={suspensionsList}
-        athletes={athletes ?? []}
-        editions={editionsList}
-      />
+      <SuspensoesClient suspensions={suspensionsList} editions={editionsList} />
     </div>
   );
 }

@@ -135,11 +135,9 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
       {/* Separador */}
       <div className="mx-5 mb-5 h-px" style={{ backgroundColor: "var(--color-border)" }} />
 
-      {/* SEÇÃO 4 — Cadastros gerais */}
+      {/* SEÇÃO 4 — Navegação geral */}
       <div className="flex flex-col gap-3 px-5 pb-6">
-        <SidebarTextItem href="/cadastros" label="CADASTROS" />
         <SidebarTextItem href="/organizacao" label="ORGANIZAÇÃO" />
-        <SidebarTextItem href="/rankings" label="RANKINGS" />
         <SidebarTextItem href="/configuracoes" label="CONFIGURAÇÕES" />
         <Link
           href={siteUrl}
