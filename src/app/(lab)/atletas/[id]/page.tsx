@@ -62,8 +62,10 @@ type RosterEntry = {
   id: string;
   edition_team_id: string;
   status: string;
+  submitted_at: string;
   edition_teams: {
     edition_id: string;
+    teams: { logo_url: string | null; full_name: string; abbreviation: string | null } | null;
     competition_editions: {
       seasons: { name: string } | null;
       competitions: { full_name: string; short_name: string | null } | null;
@@ -207,7 +209,7 @@ export default function AtletaPage() {
       // team_id e years(value) adicionados para suportar os filtros
       supabase.from("athlete_edition_stats").select("edition_id, team_id, goals, assists, yellow_cards, red_cards, matches_played, motm_count, competition_editions(seasons(name, years(value)), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
       supabase.from("edition_awards").select("id, award_type, edition_id, competition_editions(seasons(name), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
-      supabase.from("edition_roster_entries").select("id, edition_team_id, status, edition_teams(edition_id, competition_editions(seasons(name), competitions(full_name, short_name)))").eq("athlete_id", id).eq("member_type", "athlete"),
+      supabase.from("edition_roster_entries").select("id, edition_team_id, status, submitted_at, edition_teams(edition_id, teams(logo_url, full_name, abbreviation), competition_editions(seasons(name), competitions(full_name, short_name)))").eq("athlete_id", id).eq("member_type", "athlete").order("submitted_at", { ascending: true }),
     ]);
 
     if (athleteErr || !athlete) { setLoadError("Atleta não encontrado."); setLoading(false); return; }
@@ -338,18 +340,42 @@ export default function AtletaPage() {
     outline: "none", transition: "border-color 0.15s", colorScheme: "dark" as any,
   };
 
-  const tournaments = rosterEntries
-    .map(r => ({
-      editionId: r.edition_teams?.edition_id ?? "",
-      competition: r.edition_teams?.competition_editions?.competitions?.short_name ?? r.edition_teams?.competition_editions?.competitions?.full_name ?? "—",
-      season: r.edition_teams?.competition_editions?.seasons?.name ?? "—",
-      status: r.status,
-    }))
-    .filter((t, idx, arr) => arr.findIndex(x => x.editionId === t.editionId) === idx)
-    .filter(t => {
-      if (!tournamentSearch) return true;
-      return t.competition.toLowerCase().includes(tournamentSearch.toLowerCase()) || t.season.toLowerCase().includes(tournamentSearch.toLowerCase());
-    });
+  // Agrupa por editionId — preserva todas as logos (uma por entry aprovada)
+  const tournamentsMap = new Map<string, {
+    editionId: string;
+    competition: string;
+    season: string;
+    status: string;
+    logos: { logo_url: string | null; full_name: string; abbreviation: string | null }[];
+  }>();
+
+  for (const r of rosterEntries) {
+    const editionId = r.edition_teams?.edition_id ?? "";
+    if (!editionId) continue;
+    if (!tournamentsMap.has(editionId)) {
+      tournamentsMap.set(editionId, {
+        editionId,
+        competition: r.edition_teams?.competition_editions?.competitions?.short_name ?? r.edition_teams?.competition_editions?.competitions?.full_name ?? "—",
+        season: r.edition_teams?.competition_editions?.seasons?.name ?? "—",
+        status: r.status,
+        logos: [],
+      });
+    }
+    const entry = tournamentsMap.get(editionId)!;
+    // status: se qualquer entry for approved, marca como approved
+    if (r.status === "approved") entry.status = "approved";
+    // adiciona a logo da equipe desta entry (evita duplicatas de logo_url)
+    const teamLogo = r.edition_teams?.teams ?? null;
+    if (teamLogo) {
+      const alreadyAdded = entry.logos.some(l => l.full_name === teamLogo.full_name);
+      if (!alreadyAdded) entry.logos.push(teamLogo);
+    }
+  }
+
+  const tournaments = Array.from(tournamentsMap.values()).filter(t => {
+    if (!tournamentSearch) return true;
+    return t.competition.toLowerCase().includes(tournamentSearch.toLowerCase()) || t.season.toLowerCase().includes(tournamentSearch.toLowerCase());
+  });
 
   // ── Opções únicas para os dropdowns de filtro ────────────────────────
   const statsTeamOptions = Array.from(
@@ -868,14 +894,14 @@ export default function AtletaPage() {
               )}
             </div>
 
-            {/* Torneios inscritos */}
+            {/* Inscrições */}
             <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: accentColor }}>
-                    Torneios
+                    Inscrições
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{rosterEntries.length}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{tournaments.length}</span>
                 </div>
                 <input type="text" placeholder="Buscar…" value={tournamentSearch}
                   onChange={e => setTournamentSearch(e.target.value)}
@@ -885,19 +911,37 @@ export default function AtletaPage() {
               </div>
               {tournaments.length === 0 ? (
                 <p style={{ padding: "16px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-                  {tournamentSearch ? "Nenhum resultado." : "Nenhum torneio registrado."}
+                  {tournamentSearch ? "Nenhum resultado." : "Nenhuma inscrição registrada."}
                 </p>
               ) : (
                 tournaments.map((t, idx) => (
                   <div key={t.editionId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", opacity: 0.85, transition: "opacity 0.1s" }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}>
+
+                    {/* Logos das equipes pelas quais foi inscrito */}
+                    {t.logos.length > 0 && (
+                      <div style={{ display: "flex", alignItems: "center", gap: -4, flexShrink: 0 }}>
+                        {t.logos.map((logo, i) => (
+                          <div key={i} title={logo.full_name} style={{ width: 26, height: 26, borderRadius: "50%", border: "2px solid var(--color-surface)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", marginLeft: i > 0 ? -8 : 0, position: "relative", zIndex: t.logos.length - i }}>
+                            {logo.logo_url
+                              ? <img src={logo.logo_url} alt={logo.full_name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.4)" }}>
+                                  {(logo.abbreviation ?? logo.full_name).slice(0, 2).toUpperCase()}
+                                </span>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
                         {t.competition}
                       </p>
                       <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>{t.season}</p>
                     </div>
+
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0, backgroundColor: t.status === "approved" ? `${accentColor}18` : "rgba(255,255,255,0.06)", color: t.status === "approved" ? accentColor : "#A6A6A6", border: `1px solid ${t.status === "approved" ? accentColor + "33" : "rgba(255,255,255,0.08)"}` }}>
                       {t.status === "approved" ? "Aprovado" : "Pendente"}
                     </span>
