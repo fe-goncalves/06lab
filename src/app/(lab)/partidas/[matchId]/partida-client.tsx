@@ -33,6 +33,20 @@ type Athlete = {
   player_positions: { full_name: string; abbreviation: string; display_order: number } | null;
 };
 
+type StaffMember = {
+  id: string;
+  full_name: string;
+  surname: string | null;
+  photo_url: string | null;
+  staff_role_id: string | null;
+  edition_team_id: string;
+};
+
+type StaffLineupEntry = {
+  staff_member_id: string;
+  is_present: boolean;
+};
+
 type LineupEntry = {
   athlete_id: string;
   is_present: boolean;
@@ -215,6 +229,7 @@ export default function PartidaClient({
   match,
   actions: initialActions,
   lineups: initialLineups,
+  staffLineups: initialStaffLineups,
   editionTeamsWithAthletes,
   competitionId,
   edicaoId,
@@ -227,6 +242,7 @@ export default function PartidaClient({
   match: any;
   actions: any[];
   lineups: any[];
+  staffLineups: any[];
   editionTeamsWithAthletes: any[];
   competitionId: string;
   edicaoId: string;
@@ -303,6 +319,17 @@ export default function PartidaClient({
     return map;
   });
 
+  const [staffLineups, setStaffLineups] = useState<Record<string, StaffLineupEntry>>(() => {
+    const map: Record<string, StaffLineupEntry> = {};
+    (initialStaffLineups ?? []).forEach((l: any) => {
+      map[l.staff_member_id] = {
+        staff_member_id: l.staff_member_id,
+        is_present: l.is_present ?? false,
+      };
+    });
+    return map;
+  });
+
   const [savingLineups, setSavingLineups] = useState(false);
 
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -318,6 +345,12 @@ export default function PartidaClient({
     const et = (editionTeamsWithAthletes ?? []).find((e: any) => e.team_id === teamId);
     if (!et) return [];
     return et.athletes ?? [];
+  }
+
+  function getStaffMembers(teamId: string): StaffMember[] {
+    const et = (editionTeamsWithAthletes ?? []).find((e: any) => e.team_id === teamId);
+    if (!et) return [];
+    return et.staffMembers ?? [];
   }
 
   function getAthletesByPosition(teamId: string) {
@@ -398,8 +431,9 @@ export default function PartidaClient({
 
   async function handleSaveLineups() {
     setSavingLineups(true);
-    const entries = Object.values(lineups);
-    const r = await salvarFormacoes(match.id, entries);
+    const athleteEntries = Object.values(lineups);
+    const staffEntries = Object.values(staffLineups);
+    const r = await salvarFormacoes(match.id, athleteEntries, staffEntries);
     setSavingLineups(false);
     if ("error" in r) { toast("error", r.error); return; }
     toast("success", "Formações salvas.");
@@ -434,6 +468,7 @@ export default function PartidaClient({
     const goalType = fd.get("goal_type") as string;
     const missResult = fd.get("miss_result") as string;
     const primaryAthleteId = fd.get("primary_athlete_id") as string;
+    const primaryStaffId = fd.get("primary_staff_id") as string;
     const secondaryAthleteId = fd.get("secondary_athlete_id") as string;
     const goalkeeperIdVal = fd.get("goalkeeper_id") as string;
     const teamIdVal = fd.get("team_id") as string;
@@ -445,6 +480,10 @@ export default function PartidaClient({
     const athlete = allAthletes.find((a: any) => a.id === primaryAthleteId);
     const secondaryAthlete = allAthletes.find((a: any) => a.id === secondaryAthleteId);
 
+    // Resolve nome do staff para exibição na timeline sem reload
+    const allStaff = [...getStaffMembers(match.team_a_id), ...getStaffMembers(match.team_b_id)];
+    const staffMember = allStaff.find((s: any) => s.id === primaryStaffId);
+
     const payload = new FormData();
     payload.append("team_id", teamIdVal);
     payload.append("action_type", aType);
@@ -452,6 +491,7 @@ export default function PartidaClient({
     payload.append("match_id", match.id);
     if (minute) payload.append("minute", String(minute));
     if (primaryAthleteId) payload.append("primary_athlete_id", primaryAthleteId);
+    if (primaryStaffId) payload.append("primary_staff_id", primaryStaffId);
     if (secondaryAthleteId) payload.append("secondary_athlete_id", secondaryAthleteId);
     if (goalType) {
       payload.append("goal_type", goalType);
@@ -478,6 +518,7 @@ export default function PartidaClient({
         ...a, team_id: teamIdVal, period, minute,
         is_own_goal: goalType === "own_goal", goal_type: goalType || "normal",
         miss_result: missResult || null, primary_athlete: athlete ?? null,
+        primary_staff: staffMember ? { id: staffMember.id, full_name: staffMember.full_name, surname: staffMember.surname } : null,
         secondary_athlete: secondaryAthlete ?? null,
       } : a));
     } else {
@@ -492,7 +533,9 @@ export default function PartidaClient({
         id: r.id, action_type: aType, team_id: teamIdVal,
         period, minute, is_own_goal: goalType === "own_goal",
         goal_type: goalType || "normal", miss_result: missResult || null,
-        primary_athlete: athlete ?? null, secondary_athlete: secondaryAthlete ?? null,
+        primary_athlete: athlete ?? null,
+        primary_staff: staffMember ? { id: staffMember.id, full_name: staffMember.full_name, surname: staffMember.surname } : null,
+        secondary_athlete: secondaryAthlete ?? null,
       }]);
     }
     setShowActionModal(false);
@@ -745,7 +788,10 @@ export default function PartidaClient({
             match={match}
             lineups={lineups}
             setLineups={setLineups}
+            staffLineups={staffLineups}
+            setStaffLineups={setStaffLineups}
             getAthletes={getAthletes}
+            getStaffMembers={getStaffMembers}
             savingLineups={savingLineups}
             handleSaveLineups={handleSaveLineups}
             toggleLineup={toggleLineup}
@@ -787,6 +833,9 @@ export default function PartidaClient({
             setMotmAthleteId={setMotmAthleteId}
             halfDuration={halfDuration}
             getAthletes={getAthletes}
+            getStaffMembers={getStaffMembers}
+            staffLineups={staffLineups}
+            lineups={lineups}
             handleChangeFouls={handleChangeFouls}
             getFouls={getFouls}
             handleAddAction={handleAddAction}
@@ -1302,11 +1351,14 @@ function InfoTab({
 
 // ─── FormacoesTab ─────────────────────────────────────────────────────────────
 
-function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, handleSaveLineups, toggleLineup }: {
+function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup }: {
   match: any;
   lineups: Record<string, LineupEntry>;
   setLineups: React.Dispatch<React.SetStateAction<Record<string, LineupEntry>>>;
+  staffLineups: Record<string, StaffLineupEntry>;
+  setStaffLineups: React.Dispatch<React.SetStateAction<Record<string, StaffLineupEntry>>>;
   getAthletes: (teamId: string) => Athlete[];
+  getStaffMembers: (teamId: string) => StaffMember[];
   savingLineups: boolean;
   handleSaveLineups: () => void;
   toggleLineup: (athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) => void;
@@ -1511,6 +1563,72 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
       );
     }
 
+    const allStaff = getStaffMembers(teamId).sort((a, b) =>
+      (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)
+    );
+    const staffPresentCount = allStaff.filter(s => staffLineups[s.id]?.is_present).length;
+
+    function toggleStaff(staffId: string) {
+      setStaffLineups(prev => {
+        const current = prev[staffId] ?? { staff_member_id: staffId, is_present: false };
+        return { ...prev, [staffId]: { ...current, is_present: !current.is_present } };
+      });
+    }
+
+    function StaffRow({ member }: { member: StaffMember }) {
+      const entry = staffLineups[member.id] ?? { staff_member_id: member.id, is_present: false };
+      const isPresent = entry.is_present;
+      const name = member.surname ?? member.full_name;
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "9px 14px",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          backgroundColor: "transparent",
+          transition: "background 0.12s",
+        }}>
+          {/* Avatar */}
+          <div style={{
+            width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
+            backgroundColor: "rgba(255,255,255,0.06)",
+            border: "1.5px solid rgba(255,255,255,0.08)",
+            opacity: isPresent ? 1 : 0.3,
+            transition: "all 0.15s",
+          }}>
+            {member.photo_url
+              ? <img src={member.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
+                  {name.slice(0, 2).toUpperCase()}
+                </div>
+            }
+          </div>
+          {/* Nome */}
+          <span style={{
+            flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
+            color: isPresent ? "var(--color-text-primary)" : "rgba(255,255,255,0.25)",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
+            transition: "color 0.15s",
+          }}>{name}</span>
+          {/* Toggle presença */}
+          <button type="button"
+            onClick={() => toggleStaff(member.id)}
+            title={isPresent ? "Marcar ausência" : "Marcar presença"}
+            style={{
+              width: 28, height: 28, borderRadius: 6, border: "1px solid",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.12s",
+              borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.1)",
+              backgroundColor: isPresent ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
+            }}>
+            {isPresent
+              ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4"/></svg>
+            }
+          </button>
+        </div>
+      );
+    }
+
     return (
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Header do time */}
@@ -1530,14 +1648,14 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
               {team?.short_name ?? team?.full_name ?? "Equipe"}
             </p>
           </div>
-          {/* Contador */}
+          {/* Contador atletas */}
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
           </div>
         </div>
 
-        {/* Header das colunas */}
+        {/* Header das colunas — atletas */}
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "5px 14px",
@@ -1555,9 +1673,8 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
           </div>
         </div>
 
-        {/* Lista */}
+        {/* Lista de atletas */}
         <div style={{
-          borderRadius: "0 0 12px 12px",
           border, borderTop: "none",
           backgroundColor: "var(--color-surface)",
           overflow: "hidden",
@@ -1589,6 +1706,37 @@ function FormacoesTab({ match, lineups, setLineups, getAthletes, savingLineups, 
             </>
           )}
         </div>
+
+        {/* Seção Comissão Técnica */}
+        {allStaff.length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            {/* Header comissão */}
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "8px 14px",
+              borderRadius: "10px 10px 0 0",
+              backgroundColor: "rgba(255,255,255,0.02)",
+              border, borderBottom: "none",
+            }}>
+              <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.35)" }}>
+                Comissão Técnica
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 900, color: staffPresentCount > 0 ? "rgba(191,242,5,0.7)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{staffPresentCount}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>/{allStaff.length}</span>
+              </div>
+            </div>
+            {/* Lista comissão */}
+            <div style={{
+              borderRadius: "0 0 10px 10px",
+              border, borderTop: "none",
+              backgroundColor: "var(--color-surface)",
+              overflow: "hidden",
+            }}>
+              {allStaff.map(s => <StaffRow key={s.id} member={s} />)}
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -2153,23 +2301,34 @@ function MinutePicker({ value, max, onChange, onClose }: {
 
 // ─── ActionModal ──────────────────────────────────────────────────────────────
 
-function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDuration, onConfirm, onClose, editingAction, getPeriodFromMinute }: {
+function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getStaffMembers, staffLineups, lineups, halfDuration, onConfirm, onClose, editingAction, getPeriodFromMinute }: {
   actionType: string; preselectedTeamId?: string; match: any;
-  getAthletes: (teamId: string) => Athlete[]; halfDuration: number;
+  getAthletes: (teamId: string) => Athlete[];
+  getStaffMembers: (teamId: string) => StaffMember[];
+  staffLineups: Record<string, StaffLineupEntry>;
+  lineups: Record<string, LineupEntry>;
+  halfDuration: number;
   onConfirm: (fd: FormData) => void; onClose: () => void;
   editingAction?: any; getPeriodFromMinute: (m: number) => "first" | "second";
 }) {
   const teamA = match.teams_a;
   const teamB = match.teams_b;
   const isGoal = actionType === "goal";
+  const isCard = ["yellow_card", "red_card", "red_yellow_card"].includes(actionType);
   const needsAthlete = actionType !== "fifth_foul";
   const needsMiss = ["penalty_missed", "shootout_missed"].includes(actionType);
   const needsTeam = !preselectedTeamId;
+
+  // Para cartões, o alvo pode ser atleta ou membro da comissão técnica
+  const [targetType, setTargetType] = useState<"athlete" | "staff">(
+    editingAction?.primary_staff_id ? "staff" : "athlete"
+  );
 
   const [teamId, setTeamId] = useState<string>(editingAction?.team_id ?? preselectedTeamId ?? match.team_a_id ?? "");
   const [minute, setMinute] = useState<number>(editingAction?.minute ?? 1);
   const [showMinutePicker, setShowMinutePicker] = useState(false);
   const [athleteId, setAthleteId] = useState<string>(editingAction?.primary_athlete?.id ?? "");
+  const [staffId, setStaffId] = useState<string>(editingAction?.primary_staff?.id ?? "");
   const [assistId, setAssistId] = useState<string>(editingAction?.secondary_athlete?.id ?? "");
   const [goalType, setGoalType] = useState<string>(editingAction?.goal_type ?? "normal");
   const [missResult, setMissResult] = useState<string>(editingAction?.miss_result ?? "");
@@ -2197,9 +2356,30 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
   const isOwnGoal = goalType === "own_goal";
   const period = getPeriodFromMinute(minute);
   const athleteTeamId = isOwnGoal ? (teamId === match.team_a_id ? match.team_b_id : match.team_a_id) : teamId;
-  const athletes = getAthletes(athleteTeamId);
+
+  // Filtra apenas atletas presentes (is_present = true em match_lineups).
+  // Se não houver nenhum registro de lineup, usa todos como fallback.
+  const allAthletes = getAthletes(athleteTeamId);
+  const hasAnyLineup = Object.keys(lineups).length > 0;
+  const presentAthletes = hasAnyLineup
+    ? allAthletes.filter(a => lineups[a.id]?.is_present === true)
+    : allAthletes;
+  const athletes = presentAthletes;
+  const noLineupsWarning = hasAnyLineup && presentAthletes.length === 0;
+
   const opposingTeamId = teamId === match.team_a_id ? match.team_b_id : match.team_a_id;
-  const opposingAthletes = getAthletes(opposingTeamId);
+  const allOpposingAthletes = getAthletes(opposingTeamId);
+  const presentOpposingAthletes = hasAnyLineup
+    ? allOpposingAthletes.filter(a => lineups[a.id]?.is_present === true)
+    : allOpposingAthletes;
+  const opposingAthletes = presentOpposingAthletes;
+
+  // Staff presente para cartões
+  const hasAnyStaffLineup = Object.keys(staffLineups).length > 0;
+  const allStaff = getStaffMembers(teamId);
+  const presentStaff = hasAnyStaffLineup
+    ? allStaff.filter(s => staffLineups[s.id]?.is_present === true)
+    : allStaff;
 
   const border = "1px solid var(--color-border)";
   const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)", position: "relative", transition: "background 0.12s" };
@@ -2209,11 +2389,14 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
   function handleConfirm() {
     const fd = new FormData();
     fd.append("action_type", actionType);
-    // team_id = o time que RECEBE o gol (quem o admin clicou no +, ou selecionou no modal)
-    // Para gol contra: team_id = Time A (clicado), atleta = jogador do Time B. Correto.
     fd.append("team_id", teamId);
     fd.append("minute", String(minute));
-    if (needsAthlete && athleteId) fd.append("primary_athlete_id", athleteId);
+    // Para cartões: gravar primary_staff_id se alvo for comissão, primary_athlete_id se atleta
+    if (isCard && targetType === "staff") {
+      if (staffId) fd.append("primary_staff_id", staffId);
+    } else {
+      if (needsAthlete && athleteId) fd.append("primary_athlete_id", athleteId);
+    }
     if (isGoal && !isOwnGoal && assistId) fd.append("secondary_athlete_id", assistId);
     if (isGoal) fd.append("goal_type", goalType);
     if (needsMiss && missResult) fd.append("miss_result", missResult);
@@ -2232,6 +2415,15 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
           <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)" }}>
+          {/* Aviso: formações não salvas */}
+          {needsAthlete && !hasAnyLineup && (
+            <div style={{ padding: "8px 14px", backgroundColor: "rgba(242,192,5,0.07)", borderBottom: "1px solid rgba(242,192,5,0.12)", display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M6 1L1 10h10L6 1z" stroke="#F2C005" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6 5v2.5M6 9v.5" stroke="#F2C005" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#F2C005" }}>
+                Formações não salvas — exibindo todos os inscritos
+              </span>
+            </div>
+          )}
           {needsTeam && (
             <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 10, padding: "12px 14px" }}>
               {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
@@ -2271,7 +2463,30 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
               </div>
             </div>
           )}
-          {needsAthlete && (
+          {/* Toggle Atleta / Comissão — só para cartões */}
+          {isCard && (
+            <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 6, padding: "10px 14px" }}>
+              <span style={{ ...labelStyle, alignSelf: "center", marginRight: 4 }}>Alvo</span>
+              {([
+                { value: "athlete", label: "Atleta" },
+                { value: "staff", label: "Comissão" },
+              ] as const).map(opt => (
+                <button key={opt.value} type="button"
+                  onClick={() => { setTargetType(opt.value); setAthleteId(""); setStaffId(""); }}
+                  style={{
+                    padding: "5px 14px", borderRadius: 7, cursor: "pointer",
+                    fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+                    transition: "all 0.12s",
+                    border: `1px solid ${targetType === opt.value ? "rgba(191,242,5,0.45)" : "rgba(255,255,255,0.08)"}`,
+                    backgroundColor: targetType === opt.value ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
+                    color: targetType === opt.value ? "var(--color-brand)" : "#777",
+                  }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {needsAthlete && (!isCard || targetType === "athlete") && (
             <div style={fieldStyle}>
               <span style={labelStyle}>{isOwnGoal ? "Atleta (equipe oposta)" : "Atleta"}</span>
               <AthleteDropdown
@@ -2285,6 +2500,30 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, halfDu
                 dropdownRef={athleteDropRef}
                 placeholder="Selecione o atleta…"
               />
+            </div>
+          )}
+          {/* Seletor de membro da comissão — só para cartões com targetType=staff */}
+          {isCard && targetType === "staff" && (
+            <div style={fieldStyle}>
+              <span style={labelStyle}>Membro da comissão</span>
+              <select
+                value={staffId}
+                onChange={e => setStaffId(e.target.value)}
+                style={{ ...selectStyle, marginTop: 4 }}
+              >
+                <option value="">Selecione…</option>
+                {presentStaff
+                  .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
+                  .map(s => (
+                    <option key={s.id} value={s.id}>{s.surname ?? s.full_name}</option>
+                  ))
+                }
+              </select>
+              {presentStaff.length === 0 && (
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "#555", marginTop: 4 }}>
+                  {hasAnyStaffLineup ? "Nenhum membro presente nesta partida." : "Formações da comissão não salvas."}
+                </p>
+              )}
             </div>
           )}
           {isGoal && !isOwnGoal && goalType !== "penalty" && goalType !== "shootout" && (
@@ -2538,7 +2777,8 @@ function PosJogoTab({
     const isA = action.team_id === match.team_a_id;
     const isGoal = action.action_type === "goal";
     const isOwnGoal = action.is_own_goal;
-    const name = action.primary_athlete?.surname ?? action.primary_athlete?.full_name ?? "";
+    const name = action.primary_athlete?.surname ?? action.primary_athlete?.full_name
+      ?? action.primary_staff?.surname ?? action.primary_staff?.full_name ?? "";
     const assistName = action.secondary_athlete?.surname ?? action.secondary_athlete?.full_name ?? "";
 
     // Ícone correto por tipo
@@ -2831,6 +3071,9 @@ function PosJogoTab({
           preselectedTeamId={openGoalTeam ?? undefined}
           match={match}
           getAthletes={getAthletes}
+          getStaffMembers={getStaffMembers}
+          staffLineups={staffLineups}
+          lineups={lineups}
           halfDuration={halfDuration}
           editingAction={editingAction}
           onConfirm={(fd) => handleAddAction(fd)}

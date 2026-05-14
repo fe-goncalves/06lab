@@ -62,7 +62,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [loadingSuspensions, setLoadingSuspensions] = useState(false);
   const [suspActiveFilter, setSuspActiveFilter] = useState<"active" | "all">("active");
   const [showSuspModal, setShowSuspModal] = useState(false);
+  const [suspTeamId, setSuspTeamId] = useState("");
+  const [suspMemberType, setSuspMemberType] = useState<"athlete" | "staff">("athlete");
   const [suspAthleteId, setSuspAthleteId] = useState("");
+  const [suspStaffId, setSuspStaffId] = useState("");
+  const [suspOriginMatchId, setSuspOriginMatchId] = useState("");
   const [suspGamesTotal, setSuspGamesTotal] = useState("1");
   const [suspStartsAt, setSuspStartsAt] = useState("");
   const [suspReason, setSuspReason] = useState("");
@@ -74,6 +78,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [suspEditReason, setSuspEditReason] = useState("");
   const [suspSaving, setSuspSaving] = useState(false);
   const [suspProcessing, setSuspProcessing] = useState<string | null>(null);
+  const [editionStaff, setEditionStaff] = useState<any[]>([]);
   const [activeStatsTab, setActiveStatsTab] = useState<"geral" | "semanal">(
     (searchParams.get("stats") as any) ?? "geral"
   );
@@ -253,13 +258,96 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setLoadingMatches(false);
   }, [orgId]);
 
+  const [yellowAlerts, setYellowAlerts] = useState<{ athleteId: string; athleteName: string; teamName: string; count: number; threshold: number }[]>([]);
+  const [loadingAlerts, setLoadingAlerts] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
+
+  async function loadYellowAlerts(editionId: string) {
+    if (!editionId) return;
+    setLoadingAlerts(true);
+    const supabase = createClient();
+
+    // Buscar threshold configurado para a edição
+    const { data: settings } = await supabase
+      .from("edition_settings")
+      .select("yellow_card_suspension_threshold")
+      .eq("edition_id", editionId)
+      .maybeSingle();
+
+    const threshold = settings?.yellow_card_suspension_threshold;
+    if (!threshold || threshold < 1) { setYellowAlerts([]); setLoadingAlerts(false); return; }
+
+    // Buscar todas as fases da edição
+    const { data: phases } = await supabase
+      .from("phases")
+      .select("id")
+      .eq("edition_id", editionId);
+
+    const phaseIds = (phases ?? []).map((p: any) => p.id);
+    if (phaseIds.length === 0) { setYellowAlerts([]); setLoadingAlerts(false); return; }
+
+    // Buscar partidas dessas fases
+    const { data: matchRows } = await supabase
+      .from("matches")
+      .select("id")
+      .in("phase_id", phaseIds);
+
+    const matchIds = (matchRows ?? []).map((m: any) => m.id);
+    if (matchIds.length === 0) { setYellowAlerts([]); setLoadingAlerts(false); return; }
+
+    // Contar cartões amarelos por atleta nessas partidas (yellow_card + red_yellow_card)
+    const { data: actions } = await supabase
+      .from("match_actions")
+      .select("primary_athlete_id, match_id")
+      .in("action_type", ["yellow_card", "red_yellow_card"])
+      .in("match_id", matchIds)
+      .not("primary_athlete_id", "is", null);
+
+    if (!actions || actions.length === 0) { setYellowAlerts([]); setLoadingAlerts(false); return; }
+
+    // Agrupar contagem por atleta
+    const countMap: Record<string, number> = {};
+    for (const a of actions) {
+      countMap[a.primary_athlete_id] = (countMap[a.primary_athlete_id] ?? 0) + 1;
+    }
+
+    // Filtrar apenas quem atingiu ou passou o threshold
+    const alertIds = Object.entries(countMap)
+      .filter(([, count]) => count >= threshold)
+      .map(([id]) => id);
+
+    if (alertIds.length === 0) { setYellowAlerts([]); setLoadingAlerts(false); return; }
+
+    // Buscar nomes dos atletas e equipes via edition_roster_entries
+    const { data: roster } = await supabase
+      .from("edition_roster_entries")
+      .select("athlete_id, athletes(id, full_name, surname), edition_teams(team_id, teams(full_name, abbreviation))")
+      .eq("member_type", "athlete")
+      .eq("status", "approved")
+      .in("athlete_id", alertIds);
+
+    const alerts = alertIds.map(athleteId => {
+      const entry = (roster ?? []).find((r: any) => r.athlete_id === athleteId);
+      return {
+        athleteId,
+        athleteName: entry?.athletes?.surname ?? entry?.athletes?.full_name ?? "Atleta desconhecido",
+        teamName: entry?.edition_teams?.teams?.abbreviation ?? entry?.edition_teams?.teams?.full_name ?? "—",
+        count: countMap[athleteId],
+        threshold,
+      };
+    }).sort((a, b) => b.count - a.count);
+
+    setYellowAlerts(alerts);
+    setLoadingAlerts(false);
+  }
+
   async function loadSuspensions(editionId: string) {
     if (!editionId) return;
     setLoadingSuspensions(true);
     const supabase = createClient();
     const { data } = await supabase
       .from("suspensions")
-      .select("id, athlete_id, starts_at, games_total, games_remaining, is_active, reason, athletes(full_name, surname)")
+      .select("id, athlete_id, staff_member_id, origin_match_id, starts_at, games_total, games_remaining, is_active, reason, athletes(full_name, surname), staff_members(full_name, surname)")
       .eq("scope_edition_id", editionId)
       .order("is_active", { ascending: false })
       .order("created_at", { ascending: false });
@@ -295,13 +383,19 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     const supabase = createClient();
     const { data: etData } = await supabase.from("edition_teams").select("id").eq("edition_id", editionId);
     const editionTeamIds = (etData ?? []).map((e: any) => e.id);
-    if (editionTeamIds.length === 0) { setEditionAthletes([]); return; }
-    const { data } = await supabase
-      .from("edition_roster_entries")
-      .select("athlete_id, edition_team_id, athletes(id, full_name, surname), edition_teams(team_id, teams(full_name))")
-      .eq("member_type", "athlete").eq("status", "approved")
-      .in("edition_team_id", editionTeamIds);
-    setEditionAthletes(data ?? []);
+    if (editionTeamIds.length === 0) { setEditionAthletes([]); setEditionStaff([]); return; }
+    const [{ data: athleteData }, { data: staffData }] = await Promise.all([
+      supabase.from("edition_roster_entries")
+        .select("athlete_id, edition_team_id, athletes(id, full_name, surname), edition_teams(team_id, teams(full_name))")
+        .eq("member_type", "athlete").eq("status", "approved")
+        .in("edition_team_id", editionTeamIds),
+      supabase.from("edition_roster_entries")
+        .select("staff_member_id, edition_team_id, staff_members(id, full_name, surname), edition_teams(team_id, teams(full_name))")
+        .eq("member_type", "staff").eq("status", "approved")
+        .in("edition_team_id", editionTeamIds),
+    ]);
+    setEditionAthletes(athleteData ?? []);
+    setEditionStaff(staffData ?? []);
   }
 
   useEffect(() => {
@@ -310,6 +404,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       loadAwards(selectedEditionId);
       loadEditionAthletes(selectedEditionId);
       loadSuspensions(selectedEditionId);
+      loadYellowAlerts(selectedEditionId);
     }
   }, [selectedEditionId, loadEditionData]);
 
@@ -1801,6 +1896,58 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         )}
       {activeTab === "suspensoes" && (
           <div>
+            {/* Alertas de acúmulo de amarelos */}
+            {!loadingAlerts && yellowAlerts.filter(a => !dismissedAlerts.has(a.athleteId)).length > 0 && (
+              <div className="mb-5 rounded-xl border overflow-hidden"
+                style={{ borderColor: "rgba(250,180,0,0.3)", backgroundColor: "rgba(250,180,0,0.06)" }}>
+                <div className="flex items-center gap-2 px-5 py-3 border-b" style={{ borderColor: "rgba(250,180,0,0.2)" }}>
+                  <AlertTriangle size={14} style={{ color: "rgb(250,180,0)" }} />
+                  <p className="font-mono text-xs font-bold" style={{ color: "rgb(250,180,0)" }}>
+                    ATLETAS NO LIMITE DE FALTAS — sugestão de suspensão
+                  </p>
+                </div>
+                {yellowAlerts.filter(a => !dismissedAlerts.has(a.athleteId)).map((alert, idx) => (
+                  <div key={alert.athleteId} className="flex items-center gap-4 px-5 py-3"
+                    style={{ borderTop: idx > 0 ? "1px solid rgba(250,180,0,0.15)" : "none" }}>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>
+                        {alert.athleteName}
+                      </span>
+                      <span className="font-mono text-xs ml-2" style={{ color: "var(--color-text-secondary)" }}>
+                        {alert.teamName}
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs px-2 py-1 rounded"
+                      style={{ backgroundColor: "rgba(250,180,0,0.15)", color: "rgb(250,180,0)" }}>
+                      {alert.count}/{alert.threshold} faltas
+                    </span>
+                    <button type="button"
+                      className="rounded-lg px-3 py-1.5 font-mono text-xs font-bold transition-opacity hover:opacity-80"
+                      style={{ backgroundColor: "rgb(250,180,0)", color: "#000" }}
+                      onClick={() => {
+                        // Pré-preencher o modal com esse atleta
+                        const entry = editionAthletes.find((a: any) => a.athlete_id === alert.athleteId);
+                        if (entry) setSuspTeamId(entry.edition_teams?.team_id ?? "");
+                        setSuspMemberType("athlete");
+                        setSuspAthleteId(alert.athleteId);
+                        setSuspStartsAt(new Date().toISOString().split("T")[0]);
+                        setSuspGamesTotal("1");
+                        setSuspReason(`Acúmulo de faltas (${alert.count})`);
+                        setShowSuspModal(true);
+                      }}>
+                      Criar suspensão
+                    </button>
+                    <button type="button"
+                      onClick={() => setDismissedAlerts(prev => new Set([...prev, alert.athleteId]))}
+                      className="shrink-0 transition-opacity hover:opacity-60"
+                      style={{ color: "var(--color-text-secondary)" }}>
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Toolbar */}
             <div className="mb-5 flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1851,7 +1998,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     const cumpridos = s.games_total - s.games_remaining;
                     const completa = s.games_remaining === 0;
                     const pct = s.games_total > 0 ? (cumpridos / s.games_total) * 100 : 0;
-                    const athleteName = s.athletes?.full_name ?? "—";
+                    const athleteName = s.athletes
+                      ? (s.athletes.surname ?? s.athletes.full_name)
+                      : s.staff_members
+                        ? (s.staff_members.surname ?? s.staff_members.full_name)
+                        : "—";
 
                     if (isEditing) return (
                       <div key={s.id} className="px-5 py-4 space-y-3"
@@ -1989,81 +2140,179 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             })()}
 
             {/* Modal nova suspensão */}
-            {showSuspModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
-                onClick={e => { if (e.target === e.currentTarget) setShowSuspModal(false); }}>
-                <div className="w-full max-w-lg rounded-xl border shadow-xl"
-                  style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-                  <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
-                    <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Nova suspensão</h2>
-                    <button type="button" onClick={() => setShowSuspModal(false)} style={{ color: "var(--color-text-secondary)" }}>
-                      <X size={18} />
-                    </button>
-                  </div>
-                  <div className="px-6 py-4 space-y-4">
-                    <label className="flex flex-col gap-1">
-                      <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>ATLETA *</span>
-                      <select value={suspAthleteId} onChange={e => setSuspAthleteId(e.target.value)}
-                        className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
-                        <option value="">Selecione…</option>
-                        {editionAthletes.map((a: any) => (
-                          <option key={a.athlete_id} value={a.athlete_id}>
-                            {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
-                          </option>
+            {showSuspModal && (() => {
+              const teamsInEdition = editionTeams.filter(et => !et.is_free_agent_pool && et.teams != null);
+              const membersForTeam = suspTeamId
+                ? suspMemberType === "athlete"
+                  ? editionAthletes.filter((a: any) => a.edition_teams?.team_id === suspTeamId)
+                  : editionStaff.filter((s: any) => s.edition_teams?.team_id === suspTeamId)
+                : [];
+              const matchesForEdition = matches.filter(m =>
+                m.status === "finished" || m.status === "ongoing" || m.match_date
+              ).sort((a, b) => (b.match_date ?? "").localeCompare(a.match_date ?? ""));
+
+              function resetSuspModal() {
+                setSuspTeamId(""); setSuspMemberType("athlete"); setSuspAthleteId("");
+                setSuspStaffId(""); setSuspOriginMatchId(""); setSuspGamesTotal("1");
+                setSuspStartsAt(""); setSuspReason("");
+              }
+
+              return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4"
+                  onClick={e => { if (e.target === e.currentTarget) { resetSuspModal(); setShowSuspModal(false); } }}>
+                  <div className="w-full max-w-lg rounded-xl border shadow-xl"
+                    style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+
+                    {/* Header */}
+                    <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: "var(--color-border)" }}>
+                      <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Nova suspensão</h2>
+                      <button type="button" onClick={() => { resetSuspModal(); setShowSuspModal(false); }} style={{ color: "var(--color-text-secondary)" }}>
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="px-6 py-4 space-y-4">
+
+                      {/* Tipo de membro */}
+                      <div className="flex gap-2">
+                        {(["athlete", "staff"] as const).map(type => (
+                          <button key={type} type="button"
+                            onClick={() => { setSuspMemberType(type); setSuspAthleteId(""); setSuspStaffId(""); }}
+                            className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
+                            style={{
+                              borderColor: suspMemberType === type ? "var(--color-brand)" : "var(--color-border)",
+                              backgroundColor: suspMemberType === type ? "rgba(191,242,5,0.08)" : "transparent",
+                              color: suspMemberType === type ? "var(--color-brand)" : "var(--color-text-secondary)",
+                            }}>
+                            {type === "athlete" ? "Atleta" : "Comissão técnica"}
+                          </button>
                         ))}
-                      </select>
-                    </label>
-                    <div className="grid grid-cols-2 gap-4">
+                      </div>
+
+                      {/* Equipe */}
                       <label className="flex flex-col gap-1">
-                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>JOGOS SUSPENSO *</span>
-                        <input type="number" min={1} value={suspGamesTotal} onChange={e => setSuspGamesTotal(e.target.value)}
-                          className={inputClass} style={inputStyle} />
+                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>EQUIPE *</span>
+                        <select value={suspTeamId}
+                          onChange={e => { setSuspTeamId(e.target.value); setSuspAthleteId(""); setSuspStaffId(""); }}
+                          className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
+                          <option value="">Selecione…</option>
+                          {teamsInEdition.map((et: any) => (
+                            <option key={et.team_id} value={et.team_id}>
+                              {et.teams?.full_name ?? "—"}
+                            </option>
+                          ))}
+                        </select>
                       </label>
+
+                      {/* Membro */}
+                      {suspTeamId && (
+                        <label className="flex flex-col gap-1">
+                          <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
+                            {suspMemberType === "athlete" ? "ATLETA *" : "MEMBRO *"}
+                          </span>
+                          <select
+                            value={suspMemberType === "athlete" ? suspAthleteId : suspStaffId}
+                            onChange={e => suspMemberType === "athlete" ? setSuspAthleteId(e.target.value) : setSuspStaffId(e.target.value)}
+                            className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
+                            <option value="">Selecione…</option>
+                            {membersForTeam.length === 0
+                              ? <option disabled value="">Nenhum cadastrado</option>
+                              : suspMemberType === "athlete"
+                                ? membersForTeam.map((a: any) => (
+                                    <option key={a.athlete_id} value={a.athlete_id}>
+                                      {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
+                                    </option>
+                                  ))
+                                : membersForTeam.map((s: any) => (
+                                    <option key={s.staff_member_id} value={s.staff_member_id}>
+                                      {s.staff_members?.surname ?? s.staff_members?.full_name ?? "—"}
+                                    </option>
+                                  ))
+                            }
+                          </select>
+                        </label>
+                      )}
+
+                      {/* Partida de origem */}
                       <label className="flex flex-col gap-1">
-                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>DATA DE INÍCIO *</span>
-                        <input type="date" value={suspStartsAt} onChange={e => setSuspStartsAt(e.target.value)}
-                          className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }} />
+                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>PARTIDA DE ORIGEM</span>
+                        <select value={suspOriginMatchId} onChange={e => setSuspOriginMatchId(e.target.value)}
+                          className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
+                          <option value="">Nenhuma / Manual</option>
+                          {matchesForEdition.map((m: any) => {
+                            const teamA = m.teams_a?.abbreviation ?? m.teams_a?.full_name ?? "?";
+                            const teamB = m.teams_b?.abbreviation ?? m.teams_b?.full_name ?? "?";
+                            const date = m.match_date ? new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "s/data";
+                            return (
+                              <option key={m.id} value={m.id}>
+                                {date} · {teamA} × {teamB}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </label>
+
+                      {/* Jogos + Data */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <label className="flex flex-col gap-1">
+                          <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>JOGOS SUSPENSO *</span>
+                          <input type="number" min={1} value={suspGamesTotal} onChange={e => setSuspGamesTotal(e.target.value)}
+                            className={inputClass} style={inputStyle} />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>DATA DE INÍCIO *</span>
+                          <input type="date" value={suspStartsAt} onChange={e => setSuspStartsAt(e.target.value)}
+                            className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }} />
+                        </label>
+                      </div>
+
+                      {/* Motivo */}
+                      <label className="flex flex-col gap-1">
+                        <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>MOTIVO</span>
+                        <input type="text" value={suspReason} onChange={e => setSuspReason(e.target.value)}
+                          placeholder="Ex: Cartão vermelho direto" className={inputClass} style={inputStyle} />
                       </label>
                     </div>
-                    <label className="flex flex-col gap-1">
-                      <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>MOTIVO</span>
-                      <input type="text" value={suspReason} onChange={e => setSuspReason(e.target.value)}
-                        placeholder="Ex: Cartão vermelho direto" className={inputClass} style={inputStyle} />
-                    </label>
-                  </div>
-                  <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
-                    <button type="button" onClick={() => setShowSuspModal(false)}
-                      className="rounded-lg border px-4 py-2 font-mono text-xs"
-                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                      Cancelar
-                    </button>
-                    <button type="button" disabled={suspCreating}
-                      className="rounded-lg px-4 py-2 font-mono text-xs font-bold disabled:opacity-50"
-                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
-                      onClick={async () => {
-                        if (!suspAthleteId) { toast("error", "Selecione o atleta."); return; }
-                        if (!suspStartsAt) { toast("error", "Data de início é obrigatória."); return; }
-                        setSuspCreating(true);
-                        const fd = new FormData();
-                        fd.append("athlete_id", suspAthleteId);
-                        fd.append("scope_edition_id", selectedEditionId);
-                        fd.append("games_total", suspGamesTotal);
-                        fd.append("starts_at", suspStartsAt);
-                        fd.append("reason", suspReason);
-                        const result = await criarSuspensao(fd);
-                        setSuspCreating(false);
-                        if ("error" in result) { toast("error", result.error); return; }
-                        toast("success", "Suspensão criada.");
-                        setShowSuspModal(false);
-                        setSuspAthleteId(""); setSuspGamesTotal("1"); setSuspStartsAt(""); setSuspReason("");
-                        await loadSuspensions(selectedEditionId);
-                      }}>
-                      {suspCreating ? "Salvando…" : "Criar suspensão"}
-                    </button>
+
+                    {/* Footer */}
+                    <div className="flex gap-3 border-t px-6 py-4 justify-end" style={{ borderColor: "var(--color-border)" }}>
+                      <button type="button" onClick={() => { resetSuspModal(); setShowSuspModal(false); }}
+                        className="rounded-lg border px-4 py-2 font-mono text-xs"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        Cancelar
+                      </button>
+                      <button type="button" disabled={suspCreating}
+                        className="rounded-lg px-4 py-2 font-mono text-xs font-bold disabled:opacity-50"
+                        style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+                        onClick={async () => {
+                          const memberId = suspMemberType === "athlete" ? suspAthleteId : suspStaffId;
+                          if (!suspTeamId) { toast("error", "Selecione a equipe."); return; }
+                          if (!memberId) { toast("error", suspMemberType === "athlete" ? "Selecione o atleta." : "Selecione o membro."); return; }
+                          if (!suspStartsAt) { toast("error", "Data de início é obrigatória."); return; }
+                          setSuspCreating(true);
+                          const fd = new FormData();
+                          if (suspMemberType === "athlete") fd.append("athlete_id", suspAthleteId);
+                          if (suspMemberType === "staff") fd.append("staff_member_id", suspStaffId);
+                          fd.append("scope_edition_id", selectedEditionId);
+                          fd.append("games_total", suspGamesTotal);
+                          fd.append("starts_at", suspStartsAt);
+                          fd.append("reason", suspReason);
+                          if (suspOriginMatchId) fd.append("origin_match_id", suspOriginMatchId);
+                          const result = await criarSuspensao(fd);
+                          setSuspCreating(false);
+                          if ("error" in result) { toast("error", result.error); return; }
+                          toast("success", "Suspensão criada.");
+                          resetSuspModal();
+                          setShowSuspModal(false);
+                          await loadSuspensions(selectedEditionId);
+                        }}>
+                        {suspCreating ? "Salvando…" : "Criar suspensão"}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 

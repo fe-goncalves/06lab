@@ -16,8 +16,10 @@ export async function criarSuspensao(
 
   if (!profile?.organization_id) return { error: "Organização não encontrada." };
 
-  const athlete_id = String(formData.get("athlete_id") ?? "").trim();
-  if (!athlete_id) return { error: "Atleta é obrigatório." };
+  const athlete_id = String(formData.get("athlete_id") ?? "").trim() || null;
+  const staff_member_id = String(formData.get("staff_member_id") ?? "").trim() || null;
+
+  if (!athlete_id && !staff_member_id) return { error: "Atleta ou membro da comissão é obrigatório." };
 
   const games_total = Number(formData.get("games_total") ?? 0);
   if (!games_total || games_total < 1) return { error: "Quantidade de jogos deve ser maior que zero." };
@@ -36,6 +38,7 @@ export async function criarSuspensao(
     .insert({
       organization_id: profile.organization_id,
       athlete_id,
+      staff_member_id,
       origin_match_id,
       scope_type: "edition",
       scope_edition_id,

@@ -134,7 +134,8 @@ export async function editarPartida(
 
 export async function salvarFormacoes(
   matchId: string,
-  lineups: { athlete_id: string; is_present: boolean; is_starter: boolean; is_captain: boolean }[],
+  lineups: { athlete_id: string; is_present: boolean; is_captain: boolean; played_as_goalkeeper?: boolean }[],
+  staffLineups: { staff_member_id: string; is_present: boolean }[] = [],
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -164,6 +165,7 @@ export async function salvarFormacoes(
     teamToEditionTeam[et.team_id] = et.id;
   });
 
+  // ── Atletas ──────────────────────────────────────────────────────────────
   const athleteIds = lineups.map(l => l.athlete_id);
   const { data: rosterEntries } = await supabase
     .from("edition_roster_entries")
@@ -178,7 +180,7 @@ export async function salvarFormacoes(
     }
   });
 
-  const records = lineups
+  const athleteRecords = lineups
     .map(l => {
       const editionTeamId = athleteToEditionTeam[l.athlete_id];
       if (!editionTeamId) return null;
@@ -194,8 +196,46 @@ export async function salvarFormacoes(
     .filter(Boolean);
 
   await supabase.from("match_lineups").delete().eq("match_id", matchId);
-  if (records.length > 0) {
-    const { error } = await supabase.from("match_lineups").insert(records);
+  if (athleteRecords.length > 0) {
+    const { error } = await supabase.from("match_lineups").insert(athleteRecords);
+    if (error) return { error: error.message };
+  }
+
+  // ── Comissão técnica ─────────────────────────────────────────────────────
+  const editionTeamIds = Object.values(teamToEditionTeam);
+  const staffMemberIds = staffLineups.map(s => s.staff_member_id);
+
+  // Descobre edition_team_id de cada staff_member_id via edition_roster_entries
+  const staffToEditionTeam: Record<string, string> = {};
+  if (staffMemberIds.length > 0 && editionTeamIds.length > 0) {
+    const { data: staffRosterEntries } = await supabase
+      .from("edition_roster_entries")
+      .select("staff_member_id, edition_team_id")
+      .in("staff_member_id", staffMemberIds)
+      .in("edition_team_id", editionTeamIds)
+      .eq("member_type", "staff");
+
+    (staffRosterEntries ?? []).forEach((r: any) => {
+      staffToEditionTeam[r.staff_member_id] = r.edition_team_id;
+    });
+  }
+
+  const staffRecords = staffLineups
+    .map(s => {
+      const editionTeamId = staffToEditionTeam[s.staff_member_id];
+      if (!editionTeamId) return null;
+      return {
+        match_id: matchId,
+        staff_member_id: s.staff_member_id,
+        edition_team_id: editionTeamId,
+        is_present: s.is_present,
+      };
+    })
+    .filter(Boolean);
+
+  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
+  if (staffRecords.length > 0) {
+    const { error } = await supabase.from("match_staff_lineups").insert(staffRecords);
     if (error) return { error: error.message };
   }
 
@@ -223,6 +263,7 @@ export async function adicionarAcao(
   const minute = minute_raw !== null && minute_raw !== "" ? Number(minute_raw) : null;
 
   const primary_athlete_id = String(formData.get("primary_athlete_id") ?? "").trim() || null;
+  const primary_staff_id = String(formData.get("primary_staff_id") ?? "").trim() || null;
   const secondary_athlete_id = String(formData.get("secondary_athlete_id") ?? "").trim() || null;
   const goalkeeper_id = String(formData.get("goalkeeper_id") ?? "").trim() || null;
   const goal_type = String(formData.get("goal_type") ?? "").trim() || null;
@@ -238,6 +279,7 @@ export async function adicionarAcao(
       period,
       minute,
       primary_athlete_id,
+      primary_staff_id,
       secondary_athlete_id,
       goalkeeper_id,
       goal_type,
@@ -545,6 +587,7 @@ export async function editarAcao(
   const minute_raw = formData.get("minute");
   const minute = minute_raw !== null && minute_raw !== "" ? Number(minute_raw) : null;
   const primary_athlete_id = String(formData.get("primary_athlete_id") ?? "").trim() || null;
+  const primary_staff_id = String(formData.get("primary_staff_id") ?? "").trim() || null;
   const secondary_athlete_id = String(formData.get("secondary_athlete_id") ?? "").trim() || null;
   const goalkeeper_id = String(formData.get("goalkeeper_id") ?? "").trim() || null;
   const goal_type = String(formData.get("goal_type") ?? "").trim() || null;
@@ -562,7 +605,7 @@ export async function editarAcao(
 
   const { error } = await supabase
     .from("match_actions")
-    .update({ team_id, period, minute, primary_athlete_id, secondary_athlete_id, goalkeeper_id, goal_type, is_own_goal, miss_result })
+    .update({ team_id, period, minute, primary_athlete_id, primary_staff_id, secondary_athlete_id, goalkeeper_id, goal_type, is_own_goal, miss_result })
     .eq("id", actionId);
 
   if (error) return { error: error.message };
