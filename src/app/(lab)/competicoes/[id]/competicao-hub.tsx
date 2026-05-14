@@ -4694,23 +4694,92 @@ function PremiacoesTab({
   selectedEditionId: string;
 }) {
   const [activeSub, setActiveSub] = useState<"individuais" | "coletivas">("individuais");
-  const [saving, setSaving] = useState<string | null>(null); // award_type sendo salvo
+  const [savingBatch, setSavingBatch] = useState(false);
+  const [savingColetiva, setSavingColetiva] = useState<string | null>(null);
   const border = "1px solid rgba(255,255,255,0.08)";
 
   // Equipes reais (sem free agent pool)
   const realTeams = editionTeams.filter((et: any) => !et.is_free_agent_pool && et.teams);
   const teamCount = realTeams.length;
 
-  function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
-          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 1 }}>{subtitle}</p>}
-        </div>
-        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
-      </div>
-    );
+  // Estado centralizado das seleções individuais: { [awardType]: { teamId, memberId } }
+  const INDIVIDUAL_AWARDS = [
+    { awardType: "top_scorer",     label: "Artilheiro",             icon: <span style={{ fontSize: 16 }}>⚽</span> },
+    { awardType: "top_assists",    label: "Líder de assistências",  icon: <span style={{ fontSize: 16 }}>🎯</span> },
+    { awardType: "mvp",            label: "MVP",                    icon: <span style={{ fontSize: 16 }}>⭐</span> },
+    { awardType: "best_goalkeeper",label: "Melhor goleiro",         icon: <span style={{ fontSize: 16 }}>🧤</span> },
+    { awardType: "best_coach",     label: "Melhor técnico",         icon: <span style={{ fontSize: 16 }}>📋</span> },
+  ];
+
+  // Inicializa seleções a partir dos awards já salvos
+  function buildInitialSelections() {
+    const result: Record<string, { teamId: string; memberId: string }> = {};
+    for (const { awardType } of INDIVIDUAL_AWARDS) {
+      const isCoach = awardType === "best_coach";
+      const idField = isCoach ? "staff_member_id" : "athlete_id";
+      const memberList = isCoach ? editionStaff : editionAthletes;
+      const existing = awards.find((a: any) => a.award_type === awardType);
+      const existingMemberId = existing?.[idField] ?? "";
+      const existingEntry = memberList.find((a: any) => a[idField] === existingMemberId);
+      result[awardType] = {
+        teamId: existingEntry?.edition_team_id ?? "",
+        memberId: existingMemberId,
+      };
+    }
+    return result;
+  }
+
+  const [selections, setSelections] = useState<Record<string, { teamId: string; memberId: string }>>(buildInitialSelections);
+
+  // Re-inicializa quando awards carregam (ex: troca de edição)
+  useEffect(() => {
+    setSelections(buildInitialSelections());
+  }, [awards]);
+
+  function setTeamForAward(awardType: string, teamId: string) {
+    setSelections(prev => ({ ...prev, [awardType]: { teamId, memberId: "" } }));
+  }
+
+  function setMemberForAward(awardType: string, memberId: string) {
+    setSelections(prev => ({ ...prev, [awardType]: { ...prev[awardType], memberId } }));
+  }
+
+  // Verifica se alguma seleção mudou em relação ao que está salvo
+  const hasIndividualChanges = INDIVIDUAL_AWARDS.some(({ awardType }) => {
+    const isCoach = awardType === "best_coach";
+    const idField = isCoach ? "staff_member_id" : "athlete_id";
+    const existing = awards.find((a: any) => a.award_type === awardType);
+    const savedMemberId = existing?.[idField] ?? "";
+    return selections[awardType]?.memberId !== savedMemberId;
+  });
+
+  async function handleSaveBatchIndividual() {
+    setSavingBatch(true);
+    const toSave = INDIVIDUAL_AWARDS.filter(({ awardType }) => {
+      const isCoach = awardType === "best_coach";
+      const idField = isCoach ? "staff_member_id" : "athlete_id";
+      const existing = awards.find((a: any) => a.award_type === awardType);
+      const savedMemberId = existing?.[idField] ?? "";
+      return selections[awardType]?.memberId && selections[awardType].memberId !== savedMemberId;
+    });
+
+    let hasError = false;
+    for (const { awardType } of toSave) {
+      const isCoach = awardType === "best_coach";
+      const { memberId } = selections[awardType];
+      const fd = new FormData();
+      fd.append("award_type", awardType);
+      if (isCoach) fd.append("staff_member_id", memberId);
+      else fd.append("athlete_id", memberId);
+      const result = await atribuirPremiacao(selectedEditionId, fd);
+      if ("error" in result) { toast("error", result.error); hasError = true; break; }
+    }
+
+    setSavingBatch(false);
+    if (!hasError) {
+      toast("success", "Premiações individuais salvas.");
+      onRefreshAwards(selectedEditionId);
+    }
   }
 
   // Busca premiação atual por tipo
@@ -4718,62 +4787,33 @@ function PremiacoesTab({
     return awards.find((a: any) => a.award_type === type);
   }
 
-  // Salva / atualiza premiação individual
-  async function handleSaveIndividual(awardType: string, memberId: string) {
-    if (!memberId) return;
-    setSaving(awardType);
+  // Salva premiação coletiva (mantém save individual por card nas coletivas)
+  async function handleSaveColetiva(awardType: string, teamId: string) {
+    if (!teamId) return;
+    setSavingColetiva(awardType);
     const fd = new FormData();
     fd.append("award_type", awardType);
-    if (awardType === "best_coach") {
-      fd.append("staff_member_id", memberId);
-    } else {
-      fd.append("athlete_id", memberId);
-    }
+    fd.append("winning_team_id", teamId);
     const result = await atribuirPremiacao(selectedEditionId, fd);
-    setSaving(null);
+    setSavingColetiva(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Premiação salva.");
     onRefreshAwards(selectedEditionId);
   }
 
-  // Salva premiação coletiva
-  async function handleSaveColetiva(awardType: string, teamId: string) {
-    if (!teamId) return;
-    setSaving(awardType);
-    const fd = new FormData();
-    fd.append("award_type", awardType);
-    fd.append("winning_team_id", teamId);
-    const result = await atribuirPremiacao(selectedEditionId, fd);
-    setSaving(null);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Premiação salva.");
-  }
-
-  // ── AwardCard individual ──────────────────────────────────────────────────
+  // ── AwardCard individual (controlado pelo pai) ────────────────────────────
   function IndividualAwardCard({ awardType, label, icon }: { awardType: string; label: string; icon: React.ReactNode }) {
     const isCoach = awardType === "best_coach";
-    const existing = getAward(awardType);
-    const existingMemberId = isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? "");
-
-    // Descobre a edition_team_id atual do membro já salvo (para pré-selecionar a equipe)
-    const memberList = isCoach ? editionStaff : editionAthletes;
     const idField = isCoach ? "staff_member_id" : "athlete_id";
     const nameField = isCoach ? "staff_members" : "athletes";
-    const existingEntry = memberList.find((a: any) => a[idField] === existingMemberId);
-    const existingTeamId = existingEntry?.edition_team_id ?? "";
+    const memberList = isCoach ? editionStaff : editionAthletes;
 
-    const [selectedTeamId, setSelectedTeamId] = useState(existingTeamId);
-    const [selectedMemberId, setSelectedMemberId] = useState(existingMemberId);
+    const existing = getAward(awardType);
+    const { teamId: selectedTeamId, memberId: selectedMemberId } = selections[awardType] ?? { teamId: "", memberId: "" };
+
     const [showDropdown, setShowDropdown] = useState(false);
     const [search, setSearch] = useState("");
     const dropRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-      const newMemberId = isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? "");
-      const newEntry = memberList.find((a: any) => a[idField] === newMemberId);
-      setSelectedMemberId(newMemberId);
-      setSelectedTeamId(newEntry?.edition_team_id ?? "");
-    }, [existing?.athlete_id, existing?.staff_member_id]);
 
     useEffect(() => {
       function handle(e: MouseEvent) {
@@ -4783,7 +4823,6 @@ function PremiacoesTab({
       return () => document.removeEventListener("mousedown", handle);
     }, []);
 
-    // Filtra membros pela equipe selecionada no primeiro passo
     const membersForTeam = selectedTeamId
       ? memberList.filter((a: any) => a.edition_team_id === selectedTeamId)
       : [];
@@ -4799,12 +4838,13 @@ function PremiacoesTab({
     const selectedPerson = selectedEntry?.[nameField];
     const selectedET = realTeams.find((et: any) => et.id === selectedTeamId);
 
-    const isDirty = selectedMemberId !== existingMemberId;
+    // Determina se este card tem mudança pendente (para highlight visual)
+    const savedMemberId = existing?.[idField] ?? "";
+    const isDirty = selectedMemberId !== savedMemberId;
 
     return (
-      <div style={{ borderRadius: 12, border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
+      <div style={{ borderRadius: 12, border: isDirty ? "1px solid rgba(191,242,5,0.25)" : border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
         <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Ícone / troféu */}
           <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${existing ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>
             {icon}
           </div>
@@ -4825,7 +4865,6 @@ function PremiacoesTab({
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", margin: 0, marginTop: 1 }}>Não atribuído</p>
             )}
           </div>
-          {/* Botão remover */}
           {existing && (
             <button type="button" onClick={() => onRemover(existing.id)}
               style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid rgba(255,100,100,0.2)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
@@ -4837,13 +4876,13 @@ function PremiacoesTab({
         {/* Passo 1 — Selecionar equipe / Passo 2 — Selecionar membro */}
         <div style={{ padding: "0 16px 14px", display: "flex", flexDirection: "column", gap: 8 }} ref={dropRef}>
 
-          {/* Passo 1: equipe */}
+          {/* Passo 1: grid de equipes */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 6 }}>
             {realTeams.map((et: any) => {
               const isSelected = et.id === selectedTeamId;
               return (
                 <div key={et.id}
-                  onClick={() => { setSelectedTeamId(isSelected ? "" : et.id); setSelectedMemberId(""); setSearch(""); }}
+                  onClick={() => { setTeamForAward(awardType, isSelected ? "" : et.id); setSearch(""); }}
                   style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.1s" }}>
                   {et.teams?.logo_url
                     ? <img src={et.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
@@ -4857,7 +4896,7 @@ function PremiacoesTab({
             })}
           </div>
 
-          {/* Passo 2: membro (só aparece depois de selecionar equipe) */}
+          {/* Passo 2: dropdown de membro (só após selecionar equipe) */}
           {selectedTeamId && (
             <div style={{ position: "relative" }}>
               <div onClick={() => { setShowDropdown(v => !v); setSearch(""); }}
@@ -4893,7 +4932,7 @@ function PremiacoesTab({
                           const isSelected = entry[idField] === selectedMemberId;
                           return (
                             <div key={entry[idField]}
-                              onClick={() => { setSelectedMemberId(entry[idField]); setShowDropdown(false); setSearch(""); }}
+                              onClick={() => { setMemberForAward(awardType, entry[idField]); setShowDropdown(false); setSearch(""); }}
                               style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
                               onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
                               onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}>
@@ -4914,15 +4953,6 @@ function PremiacoesTab({
               )}
             </div>
           )}
-
-          {/* Botão confirmar se mudou */}
-          {isDirty && selectedMemberId && (
-            <button type="button" onClick={() => handleSaveIndividual(awardType, selectedMemberId)}
-              disabled={saving === awardType}
-              style={{ width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving === awardType ? 0.5 : 1 }}>
-              {saving === awardType ? "Salvando…" : "Confirmar"}
-            </button>
-          )}
         </div>
       </div>
     );
@@ -4933,23 +4963,13 @@ function PremiacoesTab({
     const existing = getAward(awardType);
     const existingTeamId = existing?.winning_team_id ?? "";
     const [selectedTeamId, setSelectedTeamId] = useState(existingTeamId);
-    const [showDropdown, setShowDropdown] = useState(false);
     const dropRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => { setSelectedTeamId(existing?.winning_team_id ?? ""); }, [existing?.winning_team_id]);
 
-    useEffect(() => {
-      function handle(e: MouseEvent) {
-        if (dropRef.current && !dropRef.current.contains(e.target as Node)) setShowDropdown(false);
-      }
-      document.addEventListener("mousedown", handle);
-      return () => document.removeEventListener("mousedown", handle);
-    }, []);
-
     const selectedET = realTeams.find((et: any) => et.team_id === selectedTeamId);
     const isDirty = selectedTeamId !== existingTeamId;
 
-    // Times já usados em outras posições (exceto a atual)
     const usedTeamIds = new Set(
       awards.filter((a: any) => a.award_type !== awardType && a.winning_team_id).map((a: any) => a.winning_team_id)
     );
@@ -4957,11 +4977,9 @@ function PremiacoesTab({
     return (
       <div style={{ borderRadius: 12, border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
         <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-          {/* Rank badge */}
           <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${existing ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             {icon ?? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: existing ? "#BFF205" : "rgba(255,255,255,0.3)" }}>{rank}°</span>}
           </div>
-
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "#BFF205" : "rgba(255,255,255,0.35)", margin: 0 }}>{label}</p>
             {existing && selectedET ? (
@@ -4973,7 +4991,6 @@ function PremiacoesTab({
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", margin: 0, marginTop: 1 }}>Não atribuído</p>
             )}
           </div>
-
           {existing && (
             <button type="button" onClick={() => onRemover(existing.id)}
               style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid rgba(255,100,100,0.2)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
@@ -4982,7 +4999,6 @@ function PremiacoesTab({
           )}
         </div>
 
-        {/* Grid de logos das equipes */}
         <div style={{ padding: "0 16px 14px" }} ref={dropRef}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 6 }}>
             {realTeams.map((et: any) => {
@@ -5006,9 +5022,9 @@ function PremiacoesTab({
 
           {isDirty && selectedTeamId && (
             <button type="button" onClick={() => handleSaveColetiva(awardType, selectedTeamId)}
-              disabled={saving === awardType}
-              style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving === awardType ? 0.5 : 1 }}>
-              {saving === awardType ? "Salvando…" : "Confirmar"}
+              disabled={savingColetiva === awardType}
+              style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: savingColetiva === awardType ? 0.5 : 1 }}>
+              {savingColetiva === awardType ? "Salvando…" : "Confirmar"}
             </button>
           )}
         </div>
@@ -5019,24 +5035,16 @@ function PremiacoesTab({
   // ── Posições coletivas dinâmicas baseadas no número de equipes ───────────
   function buildCollectiveSlots(): { awardType: string; label: string; rank: number; icon?: React.ReactNode }[] {
     const slots: { awardType: string; label: string; rank: number; icon?: React.ReactNode }[] = [];
-
     if (teamCount >= 1) slots.push({ awardType: "champion", label: "Campeão", rank: 1, icon: <span style={{ fontSize: 16 }}>🏆</span> });
     if (teamCount >= 2) slots.push({ awardType: "runner_up", label: "Vice-campeão", rank: 2, icon: <span style={{ fontSize: 16 }}>🥈</span> });
     if (teamCount >= 3) slots.push({ awardType: "third_place", label: "Terceiro lugar", rank: 3, icon: <span style={{ fontSize: 16 }}>🥉</span> });
     if (teamCount >= 4) slots.push({ awardType: "fourth_place", label: "Quarto lugar", rank: 4 });
-
-    // 5° ao 8°
     const rankLabels: Record<number, string> = { 5: "5° lugar", 6: "6° lugar", 7: "7° lugar", 8: "8° lugar", 9: "9° lugar", 10: "10° lugar", 11: "11° lugar", 12: "12° lugar", 13: "13° lugar", 14: "14° lugar", 15: "15° lugar", 16: "16° lugar", 17: "17° lugar", 18: "18° lugar", 19: "19° lugar", 20: "20° lugar" };
     const typeLabels: Record<number, string> = { 5: "fifth_place", 6: "sixth_place", 7: "seventh_place", 8: "eighth_place", 9: "ninth_place", 10: "tenth_place", 11: "eleventh_place", 12: "twelfth_place", 13: "thirteenth_place", 14: "fourteenth_place", 15: "fifteenth_place", 16: "sixteenth_place", 17: "seventeenth_place", 18: "eighteenth_place", 19: "nineteenth_place", 20: "twentieth_place" };
-
     for (let r = 5; r <= Math.min(teamCount, 20); r++) {
       slots.push({ awardType: typeLabels[r], label: rankLabels[r], rank: r });
     }
-
-    if (teamCount > 20) {
-      slots.push({ awardType: "twenty_first_or_more", label: "21° ou mais", rank: 21 });
-    }
-
+    if (teamCount > 20) slots.push({ awardType: "twenty_first_or_more", label: "21° ou mais", rank: 21 });
     return slots;
   }
 
@@ -5059,11 +5067,15 @@ function PremiacoesTab({
       {/* INDIVIDUAIS */}
       {activeSub === "individuais" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <IndividualAwardCard awardType="top_scorer" label="Artilheiro" icon={<span style={{ fontSize: 16 }}>⚽</span>} />
-          <IndividualAwardCard awardType="top_assists" label="Líder de assistências" icon={<span style={{ fontSize: 16 }}>🎯</span>} />
-          <IndividualAwardCard awardType="mvp" label="MVP" icon={<span style={{ fontSize: 16 }}>⭐</span>} />
-          <IndividualAwardCard awardType="best_goalkeeper" label="Melhor goleiro" icon={<span style={{ fontSize: 16 }}>🧤</span>} />
-          <IndividualAwardCard awardType="best_coach" label="Melhor técnico" icon={<span style={{ fontSize: 16 }}>📋</span>} />
+          {INDIVIDUAL_AWARDS.map(({ awardType, label, icon }) => (
+            <IndividualAwardCard key={awardType} awardType={awardType} label={label} icon={icon} />
+          ))}
+          {/* Botão unificado */}
+          <button type="button" onClick={handleSaveBatchIndividual}
+            disabled={savingBatch || !hasIndividualChanges}
+            style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasIndividualChanges ? "#BFF205" : "rgba(255,255,255,0.06)", color: hasIndividualChanges ? "#0a0a0a" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasIndividualChanges ? "pointer" : "default", opacity: savingBatch ? 0.5 : 1, transition: "all 0.15s" }}>
+            {savingBatch ? "Salvando…" : "Salvar Premiações Individuais"}
+          </button>
         </div>
       )}
 
