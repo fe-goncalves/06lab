@@ -18,6 +18,7 @@ export default async function DashboardPage() {
     supabase.from("teams")
       .select("id, full_name, abbreviation, logo_url, primary_color")
       .eq("organization_id", orgId)
+      .eq("is_virtual", false)
       .order("full_name"),
     supabase.from("dashboard_cache")
       .select("data, updated_at")

@@ -11,10 +11,11 @@ export default async function EquipesPage() {
     .from("user_profiles").select("organization_id")
     .eq("auth_user_id", user.id).maybeSingle();
 
-  const { data: teams } = await supabase
+    const { data: teams } = await supabase
     .from("teams")
-    .select("id, full_name, short_name, abbreviation, gender, logo_url, primary_color, secondary_color, founded_year")
+    .select("id, full_name, short_name, abbreviation, gender, logo_url, primary_color, secondary_color, founded_year, is_virtual")
     .eq("organization_id", profile?.organization_id ?? "")
+    .order("is_virtual")
     .order("full_name");
 
   return <EquipesClient teams={teams ?? []} />;

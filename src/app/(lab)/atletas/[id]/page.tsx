@@ -34,6 +34,7 @@ type StintHistory = {
 };
 type EditionStat = {
   edition_id: string;
+  team_id: string | null;
   goals: number;
   assists: number;
   yellow_cards: number;
@@ -41,7 +42,7 @@ type EditionStat = {
   matches_played: number;
   motm_count: number;
   competition_editions: {
-    seasons: { name: string } | null;
+    seasons: { name: string; years: { value: number } | null } | null;
     competitions: { full_name: string; short_name: string | null } | null;
   } | null;
 };
@@ -170,6 +171,12 @@ export default function AtletaPage() {
 
   const [tournamentSearch, setTournamentSearch] = useState("");
 
+  // ── Filtros de estatísticas ──────────────────────────────────────────
+  const [filterTeamId, setFilterTeamId] = useState("");
+  const [filterYear, setFilterYear] = useState("");
+  const [filterSeason, setFilterSeason] = useState("");
+  const [filterCompetition, setFilterCompetition] = useState("");
+
   const load = useCallback(async () => {
     if (!id) { setLoadError("ID inválido."); setLoading(false); return; }
     setLoading(true);
@@ -194,7 +201,8 @@ export default function AtletaPage() {
       supabase.from("teams").select("id, full_name, logo_url, primary_color").eq("organization_id", profile.organization_id).order("full_name"),
       supabase.from("athlete_team_stints").select("id, team_id, teams(id, full_name, logo_url, primary_color)").eq("athlete_id", id).eq("is_current", true).maybeSingle(),
       supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, movement_type, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
-      supabase.from("athlete_edition_stats").select("edition_id, goals, assists, yellow_cards, red_cards, matches_played, motm_count, competition_editions(seasons(name), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
+      // team_id e years(value) adicionados para suportar os filtros
+      supabase.from("athlete_edition_stats").select("edition_id, team_id, goals, assists, yellow_cards, red_cards, matches_played, motm_count, competition_editions(seasons(name, years(value)), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
       supabase.from("edition_awards").select("id, award_type, edition_id, competition_editions(seasons(name), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
       supabase.from("edition_roster_entries").select("id, edition_team_id, status, edition_teams(edition_id, competition_editions(seasons(name), competitions(full_name, short_name)))").eq("athlete_id", id).eq("member_type", "athlete"),
     ]);
@@ -332,6 +340,63 @@ export default function AtletaPage() {
       if (!tournamentSearch) return true;
       return t.competition.toLowerCase().includes(tournamentSearch.toLowerCase()) || t.season.toLowerCase().includes(tournamentSearch.toLowerCase());
     });
+
+  // ── Opções únicas para os dropdowns de filtro ────────────────────────
+  const statsTeamOptions = Array.from(
+    new Map(
+      editionStats
+        .filter(s => s.team_id)
+        .map(s => {
+          const team = teams.find(t => t.id === s.team_id);
+          return [s.team_id!, team?.full_name ?? s.team_id!];
+        })
+    ).entries()
+  ).map(([id, name]) => ({ id, name }));
+
+  const statsYearOptions = Array.from(
+    new Set(
+      editionStats
+        .map(s => s.competition_editions?.seasons?.years?.value)
+        .filter((v): v is number => v != null)
+    )
+  ).sort((a, b) => b - a);
+
+  const statsSeasonOptions = Array.from(
+    new Map(
+      editionStats
+        .filter(s => s.competition_editions?.seasons?.name)
+        .map(s => [s.competition_editions!.seasons!.name, s.competition_editions!.seasons!.name])
+    ).entries()
+  ).map(([value]) => value);
+
+  const statsCompetitionOptions = Array.from(
+    new Map(
+      editionStats
+        .filter(s => s.competition_editions?.competitions?.full_name)
+        .map(s => [
+          s.competition_editions!.competitions!.full_name,
+          s.competition_editions!.competitions!.short_name ?? s.competition_editions!.competitions!.full_name,
+        ])
+    ).entries()
+  ).map(([full, short]) => ({ full, short }));
+
+  // ── Filtragem client-side cumulativa ─────────────────────────────────
+  const filteredStats = editionStats.filter(s => {
+    if (filterTeamId && s.team_id !== filterTeamId) return false;
+    if (filterYear && s.competition_editions?.seasons?.years?.value !== Number(filterYear)) return false;
+    if (filterSeason && s.competition_editions?.seasons?.name !== filterSeason) return false;
+    if (filterCompetition && s.competition_editions?.competitions?.full_name !== filterCompetition) return false;
+    return true;
+  });
+
+  const hasActiveFilter = filterTeamId || filterYear || filterSeason || filterCompetition;
+
+  function clearFilters() {
+    setFilterTeamId("");
+    setFilterYear("");
+    setFilterSeason("");
+    setFilterCompetition("");
+  }
 
   if (loading) return (
     <div style={{ padding: "48px 32px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
@@ -838,42 +903,145 @@ export default function AtletaPage() {
               </div>
             ) : (
               <>
+                {/* ── Filtros ────────────────────────────────────────────── */}
+                {editionStats.length > 0 && (
+                  <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "16px 18px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: accentColor }}>
+                        Filtros
+                      </span>
+                      {hasActiveFilter && (
+                        <button type="button" onClick={clearFilters}
+                          style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.08em", textTransform: "uppercase" as const }}
+                          onMouseEnter={e => e.currentTarget.style.color = accentColor}
+                          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}>
+                          Limpar filtros
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
+
+                      {/* Filtro — Clube */}
+                      <div>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
+                          Clube
+                        </span>
+                        <select
+                          value={filterTeamId}
+                          onChange={e => setFilterTeamId(e.target.value)}
+                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterTeamId ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
+                        >
+                          <option value="">Todos</option>
+                          {statsTeamOptions.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filtro — Ano */}
+                      <div>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
+                          Ano
+                        </span>
+                        <select
+                          value={filterYear}
+                          onChange={e => setFilterYear(e.target.value)}
+                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterYear ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
+                        >
+                          <option value="">Todos</option>
+                          {statsYearOptions.map(y => (
+                            <option key={y} value={String(y)}>{y}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filtro — Temporada */}
+                      <div>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
+                          Temporada
+                        </span>
+                        <select
+                          value={filterSeason}
+                          onChange={e => setFilterSeason(e.target.value)}
+                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterSeason ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
+                        >
+                          <option value="">Todas</option>
+                          {statsSeasonOptions.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Filtro — Competição */}
+                      <div>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
+                          Competição
+                        </span>
+                        <select
+                          value={filterCompetition}
+                          onChange={e => setFilterCompetition(e.target.value)}
+                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterCompetition ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
+                        >
+                          <option value="">Todas</option>
+                          {statsCompetitionOptions.map(c => (
+                            <option key={c.full} value={c.full}>{c.short}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Tabela de stats ───────────────────────────────────── */}
                 {editionStats.length > 0 && (
                   <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-                    <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <SectionHeader title="Por edição" color={accentColor} />
+                      {hasActiveFilter && (
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>
+                          {filteredStats.length} de {editionStats.length} edições
+                        </span>
+                      )}
                     </div>
-                    <div style={{ overflowX: "auto" }}>
-                      <table style={{ width: "100%", borderCollapse: "collapse" as const }}>
-                        <thead>
-                          <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                            {["Competição", "Temporada", "J", "G", "A", "AM", "VM", "MOTM"].map(h => (
-                              <th key={h} style={{ padding: "10px 14px", textAlign: "left" as const, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" as const }}>
-                                {h}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {editionStats.map((stat, idx) => (
-                            <tr key={stat.edition_id} style={{ borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", whiteSpace: "nowrap" as const }}>
-                                {stat.competition_editions?.competitions?.short_name ?? stat.competition_editions?.competitions?.full_name ?? "—"}
-                              </td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", whiteSpace: "nowrap" as const }}>
-                                {stat.competition_editions?.seasons?.name ?? "—"}
-                              </td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.matches_played ?? 0}</td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: accentColor }}>{stat.goals ?? 0}</td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.assists ?? 0}</td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#F2C005" }}>{stat.yellow_cards ?? 0}</td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#FF4444" }}>{stat.red_cards ?? 0}</td>
-                              <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: accentColor }}>{stat.motm_count ?? 0}</td>
+
+                    {filteredStats.length === 0 ? (
+                      <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
+                        Nenhum resultado para os filtros selecionados.
+                      </p>
+                    ) : (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse" as const }}>
+                          <thead>
+                            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+                              {["Competição", "Temporada", "J", "G", "A", "AM", "VM", "MOTM"].map(h => (
+                                <th key={h} style={{ padding: "10px 14px", textAlign: "left" as const, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" as const }}>
+                                  {h}
+                                </th>
+                              ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {filteredStats.map((stat, idx) => (
+                              <tr key={stat.edition_id} style={{ borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", whiteSpace: "nowrap" as const }}>
+                                  {stat.competition_editions?.competitions?.short_name ?? stat.competition_editions?.competitions?.full_name ?? "—"}
+                                </td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", whiteSpace: "nowrap" as const }}>
+                                  {stat.competition_editions?.seasons?.name ?? "—"}
+                                </td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.matches_played ?? 0}</td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: accentColor }}>{stat.goals ?? 0}</td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.assists ?? 0}</td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#F2C005" }}>{stat.yellow_cards ?? 0}</td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#FF4444" }}>{stat.red_cards ?? 0}</td>
+                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: accentColor }}>{stat.motm_count ?? 0}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
 

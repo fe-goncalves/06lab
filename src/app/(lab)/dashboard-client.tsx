@@ -175,12 +175,68 @@ export default function DashboardClient({
     setLoadingMatches(true);
     const supabase = createClient();
     const dateStr = toDateStr(date);
-    const { data } = await supabase
+  
+    // Passo 1: busca as partidas do dia com times
+    const { data: matchesRaw } = await supabase
       .from("matches")
-      .select("id, match_date, match_time, status, score_a, score_b, team_a_id, team_b_id, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url), phases(competition_editions(competitions(full_name, logo_url)))")
+      .select("id, match_date, match_time, status, score_a, score_b, team_a_id, team_b_id, phase_id, teams_a:teams!matches_team_a_id_fkey(full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(full_name, abbreviation, logo_url)")
       .eq("match_date", dateStr)
       .order("match_time", { nullsFirst: false });
-    setMatches((data as any) ?? []);
+  
+    const raw = matchesRaw ?? [];
+  
+    // Passo 2: enriquece com nome da competição via phase_id
+    const phaseIds = [...new Set(raw.map((m: any) => m.phase_id).filter(Boolean))];
+    let competitionMap: Record<string, { full_name: string; logo_url: string | null }> = {};
+  
+    if (phaseIds.length > 0) {
+      const { data: phasesData } = await supabase
+        .from("phases")
+        .select("id, edition_id")
+        .in("id", phaseIds);
+  
+      const editionIds = [...new Set((phasesData ?? []).map((p: any) => p.edition_id).filter(Boolean))];
+  
+      if (editionIds.length > 0) {
+        const { data: editionsData } = await supabase
+          .from("competition_editions")
+          .select("id, competition_id")
+          .in("id", editionIds);
+  
+        const competitionIds = [...new Set((editionsData ?? []).map((e: any) => e.competition_id).filter(Boolean))];
+  
+        if (competitionIds.length > 0) {
+          const { data: competitionsData } = await supabase
+            .from("competitions")
+            .select("id, full_name, logo_url")
+            .in("id", competitionIds);
+  
+          // Monta mapa: phase_id → competition
+          const editionToComp: Record<string, { full_name: string; logo_url: string | null }> = {};
+          (competitionsData ?? []).forEach((c: any) => {
+            (editionsData ?? [])
+              .filter((e: any) => e.competition_id === c.id)
+              .forEach((e: any) => { editionToComp[e.id] = { full_name: c.full_name, logo_url: c.logo_url }; });
+          });
+  
+          (phasesData ?? []).forEach((p: any) => {
+            if (editionToComp[p.edition_id]) {
+              competitionMap[p.id] = editionToComp[p.edition_id];
+            }
+          });
+        }
+      }
+    }
+  
+    // Passo 3: monta o shape final compatível com o tipo Match
+    const enriched = raw.map((m: any) => ({
+      ...m,
+      phases: m.phase_id && competitionMap[m.phase_id]
+        ? { competition_editions: { competitions: competitionMap[m.phase_id] } }
+        : null,
+    }));
+  
+    setMatches(enriched);
     setLoadingMatches(false);
   }
 
