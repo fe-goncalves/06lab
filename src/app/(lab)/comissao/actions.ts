@@ -1,3 +1,5 @@
+// comissao/actions
+
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
@@ -204,3 +206,4 @@ export async function editarStintMembro(
   if (error) return { error: error.message };
   return { success: true };
 }
+

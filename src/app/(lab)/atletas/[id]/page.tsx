@@ -1,9 +1,11 @@
+/// ATLETAS / ID / PAGE
+
 "use client";
 
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
-import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint } from "../actions";
+import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint, toggleStintAtivo } from "../actions";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
@@ -29,6 +31,7 @@ type StintHistory = {
   started_at: string;
   ended_at: string | null;
   is_current: boolean;
+  is_active: boolean;
   movement_type: string | null;
   teams: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; primary_color?: string | null } | null;
 };
@@ -200,7 +203,7 @@ export default function AtletaPage() {
       supabase.from("player_positions").select("id, full_name, abbreviation").eq("sport_slug", "football7").order("display_order"),
       supabase.from("teams").select("id, full_name, logo_url, primary_color").eq("organization_id", profile.organization_id).order("full_name"),
       supabase.from("athlete_team_stints").select("id, team_id, teams(id, full_name, logo_url, primary_color)").eq("athlete_id", id).eq("is_current", true).maybeSingle(),
-      supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, movement_type, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
+      supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
       // team_id e years(value) adicionados para suportar os filtros
       supabase.from("athlete_edition_stats").select("edition_id, team_id, goals, assists, yellow_cards, red_cards, matches_played, motm_count, competition_editions(seasons(name, years(value)), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
       supabase.from("edition_awards").select("id, award_type, edition_id, competition_editions(seasons(name), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
@@ -302,6 +305,13 @@ export default function AtletaPage() {
     toast("success", "Vínculo adicionado.");
     setShowAddStint(false);
     setAddStintTeamId(""); setAddStintMovement("arrival"); setAddStintStarted(""); setAddStintEnded("");
+    await load();
+  }
+
+  async function handleToggleStintAtivo(stintId: string, currentValue: boolean) {
+    const result = await toggleStintAtivo(stintId, !currentValue);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", !currentValue ? "Passagem exibida." : "Passagem ocultada.");
     await load();
   }
 
@@ -788,9 +798,9 @@ export default function AtletaPage() {
                         </div>
                       </div>
                     ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", opacity: 0.85, transition: "opacity 0.1s" }}
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", opacity: stint.is_active !== false ? 0.85 : 0.35, transition: "opacity 0.1s" }}
                         onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}>
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = stint.is_active !== false ? "0.85" : "0.35"}>
 
                         {/* Badge de movimento */}
                         <div style={{ flexShrink: 0, width: 80 }}>
@@ -802,7 +812,7 @@ export default function AtletaPage() {
                         {/* Logo do time */}
                         <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                           {stint.teams?.logo_url
-                            ? <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
+                            ? <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", filter: stint.is_active !== false ? "none" : "grayscale(1)" }} />
                             : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
                                   {(stint.teams?.abbreviation ?? stint.teams?.full_name ?? "?").slice(0, 2).toUpperCase()}
@@ -828,13 +838,19 @@ export default function AtletaPage() {
                           </span>
                         )}
 
-                        {/* Ações — hover */}
-                        <div className="opacity-0 group-hover:opacity-100" style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        {/* Ações */}
+                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                           <button type="button" onClick={() => openEditStint(stint)}
                             style={{ padding: "4px 10px", borderRadius: 7, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor = `${accentColor}44`; e.currentTarget.style.color = accentColor; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>
                             Editar
+                          </button>
+                          <button type="button" onClick={() => handleToggleStintAtivo(stint.id, stint.is_active !== false)}
+                            style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${stint.is_active !== false ? "rgba(255,255,255,0.1)" : "rgba(191,242,5,0.25)"}`, background: "none", color: stint.is_active !== false ? "rgba(255,255,255,0.3)" : "rgba(191,242,5,0.7)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = "0.85"; }}>
+                            {stint.is_active !== false ? "Ocultar" : "Exibir"}
                           </button>
                           {!stint.is_current && (
                             <button type="button" onClick={() => handleRemoveStint(stint.id)}

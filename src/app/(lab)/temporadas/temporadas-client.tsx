@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { criarAno, criarTemporada, editarTemporada, deletarTemporada, desativarTemporada } from "./actions";
+import { criarAno, editarAno, criarTemporada, editarTemporada, deletarTemporada } from "./actions";
 import { toast } from "@/app/(lab)/components/toast";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 
@@ -11,14 +11,142 @@ type Season = {
   display_order: number; starts_at: string | null;
   ends_at: string | null; is_current: boolean;
 };
-
 type Props = { years: Year[]; seasons: Season[] };
 
-// ─── Modal genérico de Temporada ─────────────────────────────────────────────
+// ─── Helpers de estilo ────────────────────────────────────────────────────────
 
-function SeasonModal({
-  mode, years, initial, onClose, onSave,
-}: {
+const fieldLabel: React.CSSProperties = {
+  fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+  letterSpacing: "0.12em", textTransform: "uppercase",
+  color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "9px 12px", borderRadius: 9,
+  border: "1px solid rgba(255,255,255,0.08)",
+  backgroundColor: "rgba(255,255,255,0.04)",
+  color: "var(--color-text-primary)",
+  fontFamily: "var(--font-mono)", fontSize: 12,
+  outline: "none", boxSizing: "border-box",
+  transition: "border-color 0.12s",
+};
+
+function focusBrand(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) {
+  e.currentTarget.style.borderColor = "#BFF205";
+}
+function blurBrand(e: React.FocusEvent<HTMLInputElement | HTMLSelectElement>) {
+  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+}
+
+// ─── Modal compartilhado (header + body + footer) ─────────────────────────────
+
+function ModalShell({ title, subtitle, onClose, children, footer }: {
+  title: string; subtitle: string; onClose: () => void;
+  children: React.ReactNode; footer: React.ReactNode;
+}) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(0,0,0,0.78)" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>{title}</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>{subtitle}</p>
+          </div>
+          <button type="button" onClick={onClose} style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.4)", transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>{children}</div>
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>{footer}</div>
+      </div>
+    </div>
+  );
+}
+
+function CancelBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={{ flex: 1, padding: 10, borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+      Cancelar
+    </button>
+  );
+}
+
+function ConfirmBtn({ onClick, disabled, label }: { onClick: () => void; disabled: boolean; label: string }) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: disabled ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", cursor: disabled ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+      {label}
+    </button>
+  );
+}
+
+// ─── Modal de Ano (criar) ─────────────────────────────────────────────────────
+
+function YearModal({ onClose, onSave }: { onClose: () => void; onSave: (value: number) => Promise<void> }) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit() {
+    const n = parseInt(value);
+    if (!n || n < 2000 || n > 2100) { toast("error", "Ano inválido. Use um valor entre 2000 e 2100."); return; }
+    setSaving(true);
+    await onSave(n);
+    setSaving(false);
+  }
+
+  return (
+    <ModalShell title="Novo ano" subtitle="Adiciona um ano ao calendário da organização" onClose={onClose}
+      footer={<><CancelBtn onClick={onClose} /><ConfirmBtn onClick={handleSubmit} disabled={saving || !value.trim()} label={saving ? "Adicionando…" : "Adicionar ano"} /></>}>
+      <div>
+        <span style={fieldLabel}>Ano *</span>
+        <input type="number" value={value} onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+          placeholder="2027" min={2000} max={2100} autoFocus
+          style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 8, marginBottom: 0 }}>
+          Você poderá criar temporadas dentro dele após adicionar.
+        </p>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Modal de Ano (editar) ────────────────────────────────────────────────────
+
+function EditYearModal({ year, onClose, onSave }: { year: Year; onClose: () => void; onSave: (id: string, value: number) => Promise<void> }) {
+  const [value, setValue] = useState(String(year.value));
+  const [saving, setSaving] = useState(false);
+
+  async function handleSubmit() {
+    const n = parseInt(value);
+    if (!n || n < 2000 || n > 2100) { toast("error", "Ano inválido. Use um valor entre 2000 e 2100."); return; }
+    setSaving(true);
+    await onSave(year.id, n);
+    setSaving(false);
+  }
+
+  return (
+    <ModalShell title="Editar ano" subtitle={`Alterando o ano ${year.value}`} onClose={onClose}
+      footer={<><CancelBtn onClick={onClose} /><ConfirmBtn onClick={handleSubmit} disabled={saving || !value.trim()} label={saving ? "Salvando…" : "Salvar alterações"} /></>}>
+      <div>
+        <span style={fieldLabel}>Ano *</span>
+        <input type="number" value={value} onChange={e => setValue(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+          min={2000} max={2100} autoFocus
+          style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)", marginTop: 8, marginBottom: 0 }}>
+          Alterar o valor do ano não afeta as temporadas vinculadas a ele.
+        </p>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ─── Modal de Temporada ────────────────────────────────────────────────────────
+
+function SeasonModal({ mode, years, initial, onClose, onSave }: {
   mode: "create" | "edit";
   years: Year[];
   initial?: Season;
@@ -32,9 +160,6 @@ function SeasonModal({
   const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
   const [saving, setSaving] = useState(false);
 
-  const ic = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const is = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-
   async function handleSubmit() {
     if (!name.trim()) { toast("error", "Nome é obrigatório."); return; }
     if (!yearId) { toast("error", "Ano é obrigatório."); return; }
@@ -43,155 +168,71 @@ function SeasonModal({
     setSaving(false);
   }
 
+  const title = mode === "create" ? "Nova temporada" : "Editar temporada";
+  const btnLabel = saving ? (mode === "create" ? "Criando…" : "Salvando…") : (mode === "create" ? "Criar temporada" : "Salvar alterações");
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-xl border shadow-xl"
-        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+    <ModalShell title={title} subtitle="Período global da organização" onClose={onClose}
+      footer={<><CancelBtn onClick={onClose} /><ConfirmBtn onClick={handleSubmit} disabled={saving || years.length === 0 || !name.trim()} label={btnLabel} /></>}>
 
-        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <h2 className="font-display text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            {mode === "create" ? "Nova temporada" : "Editar temporada"}
-          </h2>
-          <button type="button" onClick={onClose} style={{ color: "var(--color-text-secondary)" }}>
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="px-5 py-5 flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 col-span-2">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome</span>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Ex: 2026 I" className={ic} style={is} autoFocus />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Ano</span>
-              {years.length === 0 ? (
-                <p className="text-xs rounded-lg border px-3 py-2" style={{ borderColor: "var(--color-border)", color: "#A6A6A6" }}>
-                  Nenhum ano cadastrado.
-                </p>
-              ) : (
-                <select value={yearId} onChange={e => setYearId(e.target.value)} className={ic} style={is}>
-                  {years.map(y => <option key={y.id} value={y.id}>{y.value}</option>)}
-                </select>
-              )}
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Ordem de exibição</span>
-              <input type="number" placeholder="0" className={ic} style={is} disabled />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Início</span>
-              <input type="date" value={startsAt} onChange={e => setStartsAt(e.target.value)} className={ic} style={is} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Fim</span>
-              <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} className={ic} style={is} />
-            </label>
-          </div>
-
-          <div className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer"
-            style={{ borderColor: isCurrent ? "var(--color-brand)" : "var(--color-border)", backgroundColor: isCurrent ? "rgba(191,242,5,0.05)" : "transparent" }}
-            onClick={() => setIsCurrent(v => !v)}>
-            <div className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center"
-              style={{ borderColor: isCurrent ? "var(--color-brand)" : "var(--color-border)", backgroundColor: isCurrent ? "var(--color-brand)" : "transparent" }}>
-              {isCurrent && <Check size={10} strokeWidth={3} style={{ color: "var(--color-background)" }} />}
-            </div>
-            <div>
-              <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Temporada atual</p>
-              <p className="text-xs mt-0.5" style={{ color: "#666" }}>
-                Marca como a temporada em vigor da organização. Apenas uma pode ser a atual.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-            Cancelar
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={saving || years.length === 0}
-            className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            {saving ? (mode === "create" ? "Criando…" : "Salvando…") : (mode === "create" ? "Criar" : "Salvar")}
-          </button>
-        </div>
+      <div>
+        <span style={fieldLabel}>Nome *</span>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Ex: 2026 I" autoFocus style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
       </div>
-    </div>
-  );
-}
 
-// ─── Modal de adicionar Ano ───────────────────────────────────────────────────
-
-function YearModal({ onClose, onSave }: { onClose: () => void; onSave: (value: number) => Promise<void> }) {
-  const [value, setValue] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  const ic = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const is = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-
-  async function handleSubmit() {
-    const n = parseInt(value);
-    if (!n || n < 2000 || n > 2100) { toast("error", "Ano inválido. Use um valor entre 2000 e 2100."); return; }
-    setSaving(true);
-    await onSave(n);
-    setSaving(false);
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-sm rounded-xl border shadow-xl"
-        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <h2 className="font-display text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>Novo ano</h2>
-          <button type="button" onClick={onClose} style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
-        </div>
-        <div className="px-5 py-5">
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Ano</span>
-            <input type="number" value={value} onChange={e => setValue(e.target.value)}
-              onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
-              placeholder="2027" min={2000} max={2100}
-              className={ic} style={is} autoFocus />
-          </label>
-          <p className="mt-2 text-xs" style={{ color: "#666" }}>
-            Adiciona um novo ano ao calendário da organização. Você poderá criar temporadas dentro dele.
+      <div>
+        <span style={fieldLabel}>Ano *</span>
+        {years.length === 0 ? (
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", padding: "9px 12px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "rgba(255,255,255,0.04)" }}>
+            Nenhum ano cadastrado — adicione um ano primeiro.
           </p>
+        ) : (
+          <select value={yearId} onChange={e => setYearId(e.target.value)} style={{ ...inputStyle, appearance: "none" as const }} onFocus={focusBrand} onBlur={blurBrand}>
+            {years.map(y => <option key={y.id} value={y.id} style={{ backgroundColor: "#0e0e0e" }}>{y.value}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div>
+          <span style={fieldLabel}>Início</span>
+          <input type="date" value={startsAt} onChange={e => setStartsAt(e.target.value)} style={{ ...inputStyle, colorScheme: "dark" as const }} onFocus={focusBrand} onBlur={blurBrand} />
         </div>
-        <div className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-            Cancelar
-          </button>
-          <button type="button" onClick={handleSubmit} disabled={saving}
-            className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            {saving ? "Adicionando…" : "Adicionar"}
-          </button>
+        <div>
+          <span style={fieldLabel}>Fim</span>
+          <input type="date" value={endsAt} onChange={e => setEndsAt(e.target.value)} style={{ ...inputStyle, colorScheme: "dark" as const }} onFocus={focusBrand} onBlur={blurBrand} />
         </div>
       </div>
-    </div>
+
+      <div>
+        <span style={fieldLabel}>Status</span>
+        <div onClick={() => setIsCurrent(v => !v)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, cursor: "pointer", border: `1px solid ${isCurrent ? "#BFF205" : "rgba(255,255,255,0.08)"}`, backgroundColor: isCurrent ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", transition: "all 0.15s" }}>
+          <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `2px solid ${isCurrent ? "#BFF205" : "rgba(255,255,255,0.2)"}`, backgroundColor: isCurrent ? "#BFF205" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+            {isCurrent && <Check size={10} strokeWidth={3} color="#0a0a0a" />}
+          </div>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: isCurrent ? "#BFF205" : "var(--color-text-primary)", margin: 0 }}>Temporada atual</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>Marca como a temporada em vigor. Apenas uma pode ser a atual.</p>
+          </div>
+        </div>
+      </div>
+    </ModalShell>
   );
 }
 
-// ─── Componente principal ─────────────────────────────────────────────────────
+// ─── Componente principal ──────────────────────────────────────────────────────
 
 export default function TemporadasClient({ years: initialYears, seasons: initialSeasons }: Props) {
   const [years, setYears] = useState(initialYears);
   const [seasons, setSeasons] = useState(initialSeasons);
   const [showYearModal, setShowYearModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingYear, setEditingYear] = useState<Year | null>(null);
   const [editingSeason, setEditingSeason] = useState<Season | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Hover controlado via React — sem depender de group-hover do Tailwind
+  const [hoveredSeasonId, setHoveredSeasonId] = useState<string | null>(null);
 
-  // Agrupa temporadas por ano, ordena anos desc, temporadas por display_order
   const byYear = years
     .slice()
     .sort((a, b) => b.value - a.value)
@@ -210,6 +251,14 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
     toast("success", "Ano " + value + " adicionado.");
   }
 
+  async function handleEditYear(id: string, value: number) {
+    const result = await editarAno(id, value);
+    if ("error" in result) { toast("error", result.error); return; }
+    setYears(prev => prev.map(y => y.id === id ? { ...y, value } : y).sort((a, b) => b.value - a.value));
+    setEditingYear(null);
+    toast("success", "Ano atualizado.");
+  }
+
   async function handleCreateSeason(data: { name: string; yearId: string; startsAt: string; endsAt: string; isCurrent: boolean }) {
     const fd = new FormData();
     fd.append("name", data.name.trim());
@@ -220,11 +269,7 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
     fd.append("is_current", String(data.isCurrent));
     const result = await criarTemporada(fd);
     if ("error" in result) { toast("error", result.error); return; }
-    const newSeason: Season = {
-      id: result.id, name: data.name.trim(), year_id: data.yearId,
-      display_order: 0, starts_at: data.startsAt || null,
-      ends_at: data.endsAt || null, is_current: data.isCurrent,
-    };
+    const newSeason: Season = { id: result.id, name: data.name.trim(), year_id: data.yearId, display_order: 0, starts_at: data.startsAt || null, ends_at: data.endsAt || null, is_current: data.isCurrent };
     setSeasons(prev => {
       const updated = data.isCurrent ? prev.map(s => ({ ...s, is_current: false })) : prev;
       return [...updated, newSeason];
@@ -263,113 +308,129 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
   }
 
   return (
-    <div>
-      {/* Toolbar */}
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          Temporadas são períodos globais da organização (ex: 2026 I). Cada competição cria suas próprias Edições dentro de uma temporada.
-        </p>
-        <div className="flex gap-2 shrink-0">
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
+
+      {/* Header bar */}
+      <div style={{ display: "flex", alignItems: "center", height: 52, flexShrink: 0, borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", paddingLeft: 32, paddingRight: 32, justifyContent: "space-between" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
+          {seasons.length} {seasons.length === 1 ? "temporada" : "temporadas"} · {years.length} {years.length === 1 ? "ano" : "anos"}
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
           <button type="button" onClick={() => setShowYearModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-mono"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-            <Plus size={13} />
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.12)", backgroundColor: "transparent", color: "rgba(255,255,255,0.6)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#BFF205"; e.currentTarget.style.color = "#BFF205"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}>
+            <Plus size={13} strokeWidth={2.5} />
             Novo ano
           </button>
           <button type="button" onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-mono"
-            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-            <Plus size={13} />
+            style={{ display: "flex", alignItems: "center", gap: 7, padding: "7px 14px", borderRadius: 9, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "opacity 0.12s" }}
+            onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}>
+            <Plus size={13} strokeWidth={2.5} />
             Nova temporada
           </button>
         </div>
       </div>
 
-      {/* Lista por ano */}
-      {byYear.length === 0 ? (
-        <div className="rounded-xl border p-12 text-center" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-          <p className="font-display text-lg mb-2" style={{ color: "var(--color-text-primary)" }}>Nenhum ano cadastrado</p>
-          <p className="text-sm mb-4" style={{ color: "var(--color-text-secondary)" }}>Comece adicionando um ano para depois criar temporadas dentro dele.</p>
-          <button type="button" onClick={() => setShowYearModal(true)}
-            className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-mono mx-auto"
-            style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-            <Plus size={14} />
-            Adicionar primeiro ano
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {byYear.map(({ year, seasons: yearSeasons }) => (
-            <div key={year.id} className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-              {/* Header do ano */}
-              <div className="flex items-center justify-between px-5 py-3 border-b" style={{ borderColor: "var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-                <h2 className="font-display text-lg font-semibold" style={{ color: "var(--color-text-primary)" }}>{year.value}</h2>
-                <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                  {yearSeasons.length} temporada{yearSeasons.length !== 1 ? "s" : ""}
-                </span>
-              </div>
+      {/* Conteúdo */}
+      <div style={{ flex: 1, padding: "24px 32px" }}>
+        {byYear.length === 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)" }}>
+            <div style={{ width: 48, height: 48, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, fontSize: 20 }}>📅</div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Nenhum ano cadastrado</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 6, marginBottom: 20 }}>Comece adicionando um ano para depois criar temporadas dentro dele.</p>
+            <button type="button" onClick={() => setShowYearModal(true)}
+              style={{ display: "flex", alignItems: "center", gap: 7, padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(191,242,5,0.4)", backgroundColor: "rgba(191,242,5,0.08)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+              <Plus size={13} strokeWidth={2.5} />
+              Adicionar primeiro ano
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {byYear.map(({ year, seasons: yearSeasons }) => (
+              <div key={year.id} style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
 
-              {/* Temporadas do ano */}
-              {yearSeasons.length === 0 ? (
-                <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                  Nenhuma temporada neste ano.
-                </p>
-              ) : (
-                yearSeasons.map((season, idx) => (
-                  <div key={season.id}
-                    className="group flex items-center justify-between gap-4 px-5 py-4"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{season.name}</p>
-                        {season.is_current && (
-                          <span className="font-mono text-xs rounded px-1.5 py-0.5"
-                            style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-                            atual
-                          </span>
+                {/* Header do ano */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", borderBottom: yearSeasons.length > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", backgroundColor: "rgba(255,255,255,0.02)" }}>
+                  <span style={{ fontFamily: "var(--font-display)", fontSize: 18, fontWeight: 900, color: "var(--color-text-primary)" }}>{year.value}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>
+                      {yearSeasons.length} {yearSeasons.length === 1 ? "temporada" : "temporadas"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setEditingYear(year)}
+                      title="Editar ano"
+                      style={{ width: 26, height: 26, borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.3)", transition: "all 0.12s" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#BFF205"; e.currentTarget.style.color = "#BFF205"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                    >
+                      <Pencil size={12} strokeWidth={1.8} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Temporadas do ano */}
+                {yearSeasons.length === 0 ? (
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", padding: "16px 20px", margin: 0 }}>Nenhuma temporada neste ano.</p>
+                ) : (
+                  yearSeasons.map((season, idx) => (
+                    <div
+                      key={season.id}
+                      onMouseEnter={() => setHoveredSeasonId(season.id)}
+                      onMouseLeave={() => setHoveredSeasonId(null)}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        gap: 16, padding: "14px 20px",
+                        borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none",
+                        backgroundColor: hoveredSeasonId === season.id ? "rgba(255,255,255,0.02)" : "transparent",
+                        transition: "background-color 0.12s",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{season.name}</span>
+                          {season.is_current && (
+                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", padding: "2px 8px", borderRadius: 20, backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205", border: "1px solid rgba(191,242,5,0.2)" }}>ATUAL</span>
+                          )}
+                        </div>
+                        {(season.starts_at || season.ends_at) && (
+                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 3 }}>
+                            {season.starts_at ?? "—"} → {season.ends_at ?? "—"}
+                          </p>
                         )}
                       </div>
-                      {(season.starts_at || season.ends_at) && (
-                        <p className="text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
-                          {season.starts_at ?? "—"} {"\u2192"} {season.ends_at ?? "—"}
-                        </p>
-                      )}
+
+                      {/* Ações — visíveis no hover via estado React */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, opacity: hoveredSeasonId === season.id ? 1 : 0, transition: "opacity 0.15s" }}>
+                        <button type="button" onClick={() => setEditingSeason(season)}
+                          style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "rgba(255,255,255,0.4)", transition: "all 0.12s" }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = "#BFF205"; e.currentTarget.style.color = "#BFF205"; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>
+                          <Pencil size={13} strokeWidth={1.8} />
+                        </button>
+                        <button type="button" onClick={() => handleDelete(season.id)} disabled={deletingId === season.id}
+                          style={{ width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent", display: "flex", alignItems: "center", justifyContent: "center", cursor: deletingId === season.id ? "not-allowed" : "pointer", color: "rgba(255,100,100,0.5)", transition: "all 0.12s", opacity: deletingId === season.id ? 0.4 : 1 }}
+                          onMouseEnter={e => { e.currentTarget.style.borderColor = "#FF4444"; e.currentTarget.style.color = "#FF4444"; }}
+                          onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,100,100,0.5)"; }}>
+                          <Trash2 size={13} strokeWidth={1.8} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button type="button" onClick={() => setEditingSeason(season)}
-                        className="rounded border p-1.5"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        <Pencil size={13} />
-                      </button>
-                      <button type="button" onClick={() => handleDelete(season.id)}
-                        disabled={deletingId === season.id}
-                        className="rounded border p-1.5 disabled:opacity-40"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                  ))
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* Modal — Novo Ano */}
-      {showYearModal && (
-        <YearModal onClose={() => setShowYearModal(false)} onSave={handleAddYear} />
-      )}
-
-      {/* Modal — Nova Temporada */}
-      {showCreateModal && (
-        <SeasonModal mode="create" years={years} onClose={() => setShowCreateModal(false)} onSave={handleCreateSeason} />
-      )}
-
-      {/* Modal — Editar Temporada */}
-      {editingSeason && (
-        <SeasonModal mode="edit" years={years} initial={editingSeason} onClose={() => setEditingSeason(null)} onSave={handleEditSeason} />
-      )}
+      {/* Modais */}
+      {showYearModal && <YearModal onClose={() => setShowYearModal(false)} onSave={handleAddYear} />}
+      {editingYear && <EditYearModal year={editingYear} onClose={() => setEditingYear(null)} onSave={handleEditYear} />}
+      {showCreateModal && <SeasonModal mode="create" years={years} onClose={() => setShowCreateModal(false)} onSave={handleCreateSeason} />}
+      {editingSeason && <SeasonModal mode="edit" years={years} initial={editingSeason} onClose={() => setEditingSeason(null)} onSave={handleEditSeason} />}
     </div>
   );
 }

@@ -24,17 +24,5 @@ export default async function TemporadasPage() {
       .order("display_order"),
   ]);
 
-  return (
-    <div className="p-6 md:p-8">
-      <header className="mb-8">
-        <h1 className="font-display text-2xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
-          Temporadas
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          Períodos globais da organização. Cada competição cria suas edições dentro de uma temporada.
-        </p>
-      </header>
-      <TemporadasClient years={years ?? []} seasons={seasons ?? []} />
-    </div>
-  );
+  return <TemporadasClient years={years ?? []} seasons={seasons ?? []} />;
 }

@@ -234,3 +234,20 @@ export async function editarStint(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function toggleStintAtivo(
+  stintId: string,
+  isActive: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .update({ is_active: isActive })
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
