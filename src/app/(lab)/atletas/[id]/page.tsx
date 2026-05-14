@@ -858,7 +858,7 @@ export default function AtletaPage() {
                           </p>
                         </div>
 
-                        {stint.is_current && (
+                        {stint.ended_at === null && (
                           <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, backgroundColor: `${accentColor}18`, color: accentColor, border: `1px solid ${accentColor}33`, flexShrink: 0 }}>
                             atual
                           </span>
@@ -878,7 +878,7 @@ export default function AtletaPage() {
                             onMouseLeave={e => { e.currentTarget.style.opacity = "0.85"; }}>
                             {stint.is_active !== false ? "Ocultar" : "Exibir"}
                           </button>
-                          {!stint.is_current && (
+                          {stint.ended_at !== null && (
                             <button type="button" onClick={() => handleRemoveStint(stint.id)}
                               style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "rgba(255,68,68,0.5)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
                               onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.5)"; e.currentTarget.style.color = "#FF4444"; }}

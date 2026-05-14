@@ -169,11 +169,11 @@ export async function removerStintMembro(
 
   const { data: stint } = await supabase
     .from("staff_team_stints")
-    .select("is_current")
+    .select("ended_at")
     .eq("id", stintId)
     .maybeSingle();
 
-  if (stint?.is_current) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
+    if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
 
   const { error } = await supabase
     .from("staff_team_stints")

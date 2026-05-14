@@ -15,6 +15,20 @@ import { Camera } from "lucide-react";
 
 type StaffRole  = { id: string; full_name: string };
 type Team       = { id: string; full_name: string };
+type RosterEntry = {
+  id: string;
+  edition_team_id: string;
+  status: string;
+  submitted_at: string;
+  edition_teams: {
+    edition_id: string;
+    teams: { logo_url: string | null; full_name: string; abbreviation: string | null } | null;
+    competition_editions: {
+      seasons: { name: string } | null;
+      competitions: { full_name: string; short_name: string | null } | null;
+    } | null;
+  } | null;
+};
 type StintHistory = {
   id: string; team_id: string; started_at: string; ended_at: string | null;
   is_current: boolean; is_active: boolean; movement_type: string | null;
@@ -103,6 +117,7 @@ export default function MembroPage() {
   const [accentColor,   setAccentColor]   = useState("#BFF205");
   const [currentTeamName, setCurrentTeamName] = useState<string | null>(null);
   const [stintHistory,  setStintHistory]  = useState<StintHistory[]>([]);
+  const [rosterEntries, setRosterEntries] = useState<RosterEntry[]>([]);
 
   const [showTransfer,   setShowTransfer]   = useState(false);
   const [transferTeamId, setTransferTeamId] = useState("");
@@ -141,23 +156,27 @@ export default function MembroPage() {
       .from("user_profiles").select("organization_id")
       .eq("auth_user_id", user.id).maybeSingle();
 
-    const [
-      { data: member, error },
-      { data: rolesData },
-      { data: teamsData },
-      { data: stintData },
-      { data: historyData },
-    ] = await Promise.all([
-      supabase.from("staff_members").select("*").eq("id", id).maybeSingle(),
-      supabase.from("staff_roles").select("id, full_name").eq("sport_slug", "football7").order("display_order"),
-      supabase.from("teams").select("id, full_name").eq("organization_id", profile?.organization_id ?? "").order("full_name"),
-      supabase.from("staff_team_stints")
-        .select("id, team_id, teams(full_name, primary_color)")
-        .eq("staff_member_id", id).eq("is_current", true).maybeSingle(),
+      const [
+        { data: member, error },
+        { data: rolesData },
+        { data: teamsData },
+        { data: stintData },
+        { data: historyData },
+        { data: rosterData },
+      ] = await Promise.all([
+        supabase.from("staff_members").select("*").eq("id", id).maybeSingle(),
+        supabase.from("staff_roles").select("id, full_name").eq("sport_slug", "football7").order("display_order"),
+        supabase.from("teams").select("id, full_name").eq("organization_id", profile?.organization_id ?? "").order("full_name"),
         supabase.from("staff_team_stints")
-        .select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url)")
-        .eq("staff_member_id", id).order("started_at", { ascending: false }),
-    ]);
+          .select("id, team_id, teams(full_name, primary_color)")
+          .eq("staff_member_id", id).eq("is_current", true).maybeSingle(),
+        supabase.from("staff_team_stints")
+          .select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url)")
+          .eq("staff_member_id", id).order("started_at", { ascending: false }),
+        supabase.from("edition_roster_entries")
+          .select("id, edition_team_id, status, submitted_at, edition_teams(edition_id, teams(logo_url, full_name, abbreviation), competition_editions(seasons(name), competitions(full_name, short_name)))")
+          .eq("staff_member_id", id).eq("member_type", "staff").order("submitted_at", { ascending: true }),
+      ]);
 
     if (error || !member) { setLoadError("Membro não encontrado."); setLoading(false); return; }
 
@@ -174,6 +193,7 @@ export default function MembroPage() {
     setCurrentTeamName((stintData as any)?.teams?.full_name ?? null);
     setAccentColor((stintData as any)?.teams?.primary_color ?? "#BFF205");
     setStintHistory((historyData ?? []) as StintHistory[]);
+    setRosterEntries((rosterData ?? []) as RosterEntry[]);
     setLoading(false);
   }, [id, router]);
 
@@ -575,7 +595,7 @@ export default function MembroPage() {
 
         {/* ABA HISTÓRICO */}
         {activeTab === "historico" && (
-          <div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 720 }}>
             <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
               {/* Header do card */}
               <div style={{
@@ -750,7 +770,7 @@ export default function MembroPage() {
                         </div>
 
                         {/* Badge atual */}
-                        {stint.is_current && (
+                        {stint.ended_at === null && (
                           <span style={{
                             flexShrink: 0, padding: "2px 8px", borderRadius: 20,
                             backgroundColor: `${accentColor}18`,
@@ -782,7 +802,7 @@ export default function MembroPage() {
                           }}>
                             {stint.is_active !== false ? "Ocultar" : "Exibir"}
                           </button>
-                          {!stint.is_current && (
+                          {stint.ended_at !== null && (
                             <button type="button" onClick={() => handleRemoveStint(stint.id)} style={{
                               padding: "4px 12px", borderRadius: 7,
                               border: "1px solid rgba(255,68,68,0.25)", backgroundColor: "transparent",
@@ -799,6 +819,93 @@ export default function MembroPage() {
                 ))
               )}
             </div>
+          {/* Inscrições */}
+          {(() => {
+              const inscricoesMap = new Map<string, {
+                editionId: string;
+                competition: string;
+                season: string;
+                status: string;
+                logos: { logo_url: string | null; full_name: string; abbreviation: string | null }[];
+              }>();
+
+              for (const r of rosterEntries) {
+                const editionId = r.edition_teams?.edition_id ?? "";
+                if (!editionId) continue;
+                if (!inscricoesMap.has(editionId)) {
+                  inscricoesMap.set(editionId, {
+                    editionId,
+                    competition: r.edition_teams?.competition_editions?.competitions?.short_name ?? r.edition_teams?.competition_editions?.competitions?.full_name ?? "—",
+                    season: r.edition_teams?.competition_editions?.seasons?.name ?? "—",
+                    status: r.status,
+                    logos: [],
+                  });
+                }
+                const entry = inscricoesMap.get(editionId)!;
+                if (r.status === "approved") entry.status = "approved";
+                const teamLogo = r.edition_teams?.teams ?? null;
+                if (teamLogo) {
+                  const alreadyAdded = entry.logos.some(l => l.full_name === teamLogo.full_name);
+                  if (!alreadyAdded) entry.logos.push(teamLogo);
+                }
+              }
+
+              const inscricoes = Array.from(inscricoesMap.values());
+
+              return (
+                <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+                  <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 10 }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: accentColor }}>
+                      Inscrições
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>
+                      {inscricoes.length}
+                    </span>
+                  </div>
+
+                  {inscricoes.length === 0 ? (
+                    <p style={{ padding: "20px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
+                      Nenhuma inscrição registrada.
+                    </p>
+                  ) : (
+                    inscricoes.map((t, idx) => (
+                      <div key={t.editionId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", opacity: 0.85, transition: "opacity 0.1s" }}
+                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
+                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}>
+
+                        {t.logos.length > 0 && (
+                          <div style={{ display: "flex", alignItems: "center", flexShrink: 0 }}>
+                            {t.logos.map((logo, i) => (
+                              <div key={i} title={logo.full_name} style={{ width: 26, height: 26, borderRadius: "50%", border: "2px solid var(--color-surface)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", marginLeft: i > 0 ? -8 : 0, position: "relative", zIndex: t.logos.length - i }}>
+                                {logo.logo_url
+                                  ? <img src={logo.logo_url} alt={logo.full_name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+                                  : <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.4)" }}>
+                                      {(logo.abbreviation ?? logo.full_name).slice(0, 2).toUpperCase()}
+                                    </span>
+                                }
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
+                            {t.competition}
+                          </p>
+                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>
+                            {t.season}
+                          </p>
+                        </div>
+
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0, backgroundColor: t.status === "approved" ? `${accentColor}18` : "rgba(255,255,255,0.06)", color: t.status === "approved" ? accentColor : "#A6A6A6", border: `1px solid ${t.status === "approved" ? accentColor + "33" : "rgba(255,255,255,0.08)"}` }}>
+                          {t.status === "approved" ? "Aprovado" : "Pendente"}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 

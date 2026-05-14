@@ -197,11 +197,11 @@ export async function removerStint(
   // Nunca remove o stint is_current — protege o vínculo atual
   const { data: stint } = await supabase
     .from("athlete_team_stints")
-    .select("is_current")
+    .select("ended_at")
     .eq("id", stintId)
     .maybeSingle();
 
-  if (stint?.is_current) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o atleta." };
+    if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o atleta." };
 
   const { error } = await supabase
     .from("athlete_team_stints")
