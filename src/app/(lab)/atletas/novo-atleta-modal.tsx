@@ -38,6 +38,8 @@ export function NovoAtletaModal({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addAnother, setAddAnother] = useState(false);
+  const [successCount, setSuccessCount] = useState(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -49,10 +51,9 @@ export function NovoAtletaModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setFullName(""); setSurname(""); setPositionId("");
-      setBirthDate(""); setRg(""); setFile(null); setError(null);
-      setGender(defaultGender ?? "");
-      setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return null; });
+      resetForm();
+      setSuccessCount(0);
+      setAddAnother(false);
     }
   }, [isOpen, defaultGender]);
 
@@ -65,6 +66,19 @@ export function NovoAtletaModal({
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
+  function resetForm() {
+    setFullName("");
+    setSurname("");
+    setPositionId("");
+    setBirthDate("");
+    setRg("");
+    setError(null);
+    setGender(defaultGender ?? "");
+    setFile(null);
+    setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return null; });
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
     setPreviewUrl((p) => { if (p) URL.revokeObjectURL(p); return f ? URL.createObjectURL(f) : null; });
@@ -72,7 +86,9 @@ export function NovoAtletaModal({
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setLoading(true);
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
     try {
       const fd = new FormData();
       fd.append("full_name", fullName.trim());
@@ -84,9 +100,17 @@ export function NovoAtletaModal({
       if (file) fd.append("photo", file);
       const result = await criarAtleta(fd);
       if ("error" in result) { setError(result.error); return; }
-      router.push(`/atletas/${result.id}`);
-      onClose();
-    } finally { setLoading(false); }
+
+      if (addAnother) {
+        setSuccessCount(c => c + 1);
+        resetForm();
+      } else {
+        router.push(`/atletas/${result.id}`);
+        onClose();
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!isOpen) return null;
@@ -114,7 +138,11 @@ export function NovoAtletaModal({
         <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
           <div>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>Novo atleta</p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>Preencha as informações básicas</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+              {successCount > 0
+                ? <span style={{ color: "rgba(191,242,5,0.7)" }}>✓ {successCount} {successCount === 1 ? "atleta criado" : "atletas criados"} — próximo</span>
+                : "Preencha as informações básicas"}
+            </p>
           </div>
           <button type="button" onClick={onClose}
             style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
@@ -169,7 +197,7 @@ export function NovoAtletaModal({
                   onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
               </div>
 
-              {/* Gênero — pill buttons */}
+              {/* Gênero */}
               <div>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Gênero</span>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -182,7 +210,7 @@ export function NovoAtletaModal({
                 </div>
               </div>
 
-              {/* Posição — pill buttons */}
+              {/* Posição */}
               {positions.length > 0 && (
                 <div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Posição</span>
@@ -201,7 +229,7 @@ export function NovoAtletaModal({
                 </div>
               )}
 
-              {/* Data de nascimento + RG */}
+              {/* Nascimento + RG */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nascimento</span>
@@ -233,15 +261,44 @@ export function NovoAtletaModal({
         </div>
 
         {/* Footer */}
-        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <button type="button" onClick={onClose}
-            style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
-            Cancelar
-          </button>
-          <button type="submit" form="novo-atleta-form" disabled={loading || !fullName.trim()}
-            style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: loading || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: loading || !fullName.trim() ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
-            {loading ? "Criando…" : "Criar atleta"}
-          </button>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          {/* Checkbox adicionar outro */}
+          <div style={{ padding: "10px 18px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
+              <div
+                onClick={() => setAddAnother(v => !v)}
+                style={{
+                  width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  border: `1.5px solid ${addAnother ? "#BFF205" : "rgba(255,255,255,0.2)"}`,
+                  backgroundColor: addAnother ? "#BFF205" : "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.12s", cursor: "pointer",
+                }}>
+                {addAnother && (
+                  <svg width="9" height="7" viewBox="0 0 9 7" fill="none">
+                    <path d="M1 3.5L3.5 6L8 1" stroke="#0a0a0a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </div>
+              <span
+                onClick={() => setAddAnother(v => !v)}
+                style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, color: addAnother ? "rgba(191,242,5,0.8)" : "rgba(255,255,255,0.3)", transition: "color 0.12s" }}>
+                Adicionar outro atleta ao salvar
+              </span>
+            </label>
+          </div>
+
+          {/* Botões */}
+          <div style={{ display: "flex", gap: 8, padding: "14px 18px" }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+              Cancelar
+            </button>
+            <button type="submit" form="novo-atleta-form" disabled={loading || !fullName.trim()}
+              style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: loading || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: loading || !fullName.trim() ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+              {loading ? "Criando…" : addAnother ? "Criar e adicionar outro" : "Criar atleta"}
+            </button>
+          </div>
         </div>
       </div>
     </div>
