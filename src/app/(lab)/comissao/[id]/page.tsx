@@ -1,8 +1,10 @@
+/// comissao / ID / PAGE
+
 "use client";
 
 import {
   editarMembro, vincularMembroEquipe,
-  adicionarStintMembro, removerStintMembro, editarStintMembro,
+  adicionarStintMembro, removerStintMembro, editarStintMembro, toggleStintMembroAtivo,
 } from "../actions";
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
@@ -15,7 +17,7 @@ type StaffRole  = { id: string; full_name: string };
 type Team       = { id: string; full_name: string };
 type StintHistory = {
   id: string; team_id: string; started_at: string; ended_at: string | null;
-  is_current: boolean; movement_type: string | null;
+  is_current: boolean; is_active: boolean; movement_type: string | null;
   teams: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null } | null;
 };
 
@@ -152,8 +154,8 @@ export default function MembroPage() {
       supabase.from("staff_team_stints")
         .select("id, team_id, teams(full_name, primary_color)")
         .eq("staff_member_id", id).eq("is_current", true).maybeSingle(),
-      supabase.from("staff_team_stints")
-        .select("id, team_id, started_at, ended_at, is_current, movement_type, teams(id, full_name, abbreviation, logo_url)")
+        supabase.from("staff_team_stints")
+        .select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url)")
         .eq("staff_member_id", id).order("started_at", { ascending: false }),
     ]);
 
@@ -251,6 +253,13 @@ export default function MembroPage() {
     setShowAddStint(false);
     setAddStintTeamId(""); setAddStintMovement("arrival");
     setAddStintStarted(""); setAddStintEnded("");
+    await load();
+  }
+
+  async function handleToggleStintAtivo(stintId: string, currentValue: boolean) {
+    const result = await toggleStintMembroAtivo(stintId, !currentValue);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", !currentValue ? "Passagem exibida." : "Passagem ocultada.");
     await load();
   }
 
@@ -698,8 +707,7 @@ export default function MembroPage() {
                       </div>
                     ) : (
                       <div
-                        className="group"
-                        style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px" }}
+                        style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", opacity: stint.is_active !== false ? 1 : 0.35, transition: "opacity 0.15s" }}
                       >
                         {/* Badge de movimento */}
                         <div style={{ flexShrink: 0, width: 88 }}>
@@ -715,7 +723,7 @@ export default function MembroPage() {
 
                         {/* Logo */}
                         {stint.teams?.logo_url ? (
-                          <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
+                          <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0, filter: stint.is_active !== false ? "none" : "grayscale(1)" }} />
                         ) : (
                           <div style={{
                             width: 28, height: 28, flexShrink: 0, borderRadius: 6,
@@ -763,6 +771,16 @@ export default function MembroPage() {
                             color: "rgba(255,255,255,0.4)", cursor: "pointer",
                           }}>
                             Editar
+                          </button>
+                          <button type="button" onClick={() => handleToggleStintAtivo(stint.id, stint.is_active !== false)} style={{
+                            padding: "4px 12px", borderRadius: 7,
+                            border: `1px solid ${stint.is_active !== false ? "rgba(255,255,255,0.1)" : "rgba(191,242,5,0.25)"}`,
+                            backgroundColor: "transparent",
+                            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600,
+                            color: stint.is_active !== false ? "rgba(255,255,255,0.3)" : "rgba(191,242,5,0.7)",
+                            cursor: "pointer",
+                          }}>
+                            {stint.is_active !== false ? "Ocultar" : "Exibir"}
                           </button>
                           {!stint.is_current && (
                             <button type="button" onClick={() => handleRemoveStint(stint.id)} style={{
