@@ -4754,13 +4754,25 @@ function PremiacoesTab({
     const isCoach = awardType === "best_coach";
     const existing = getAward(awardType);
     const existingMemberId = isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? "");
+
+    // Descobre a edition_team_id atual do membro já salvo (para pré-selecionar a equipe)
+    const memberList = isCoach ? editionStaff : editionAthletes;
+    const idField = isCoach ? "staff_member_id" : "athlete_id";
+    const nameField = isCoach ? "staff_members" : "athletes";
+    const existingEntry = memberList.find((a: any) => a[idField] === existingMemberId);
+    const existingTeamId = existingEntry?.edition_team_id ?? "";
+
+    const [selectedTeamId, setSelectedTeamId] = useState(existingTeamId);
     const [selectedMemberId, setSelectedMemberId] = useState(existingMemberId);
     const [showDropdown, setShowDropdown] = useState(false);
     const [search, setSearch] = useState("");
     const dropRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-      setSelectedMemberId(isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? ""));
+      const newMemberId = isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? "");
+      const newEntry = memberList.find((a: any) => a[idField] === newMemberId);
+      setSelectedMemberId(newMemberId);
+      setSelectedTeamId(newEntry?.edition_team_id ?? "");
     }, [existing?.athlete_id, existing?.staff_member_id]);
 
     useEffect(() => {
@@ -4771,21 +4783,21 @@ function PremiacoesTab({
       return () => document.removeEventListener("mousedown", handle);
     }, []);
 
-    // Para best_coach usa editionStaff; para os demais usa editionAthletes
-    const memberList = isCoach ? editionStaff : editionAthletes;
-    const idField = isCoach ? "staff_member_id" : "athlete_id";
-    const nameField = isCoach ? "staff_members" : "athletes";
+    // Filtra membros pela equipe selecionada no primeiro passo
+    const membersForTeam = selectedTeamId
+      ? memberList.filter((a: any) => a.edition_team_id === selectedTeamId)
+      : [];
 
     const filteredMembers = search.trim()
-      ? memberList.filter((a: any) => {
+      ? membersForTeam.filter((a: any) => {
           const name = a[nameField]?.surname ?? a[nameField]?.full_name ?? "";
           return name.toLowerCase().includes(search.toLowerCase());
         })
-      : memberList;
+      : membersForTeam;
 
     const selectedEntry = memberList.find((a: any) => a[idField] === selectedMemberId);
     const selectedPerson = selectedEntry?.[nameField];
-    const selectedTeam = realTeams.find((et: any) => et.team_id === selectedEntry?.edition_teams?.team_id);
+    const selectedET = realTeams.find((et: any) => et.id === selectedTeamId);
 
     const isDirty = selectedMemberId !== existingMemberId;
 
@@ -4805,8 +4817,8 @@ function PremiacoesTab({
                   : <div style={{ width: 18, height: 18, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555" }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
                 }
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedPerson.surname ?? selectedPerson.full_name}</p>
-                {selectedTeam?.teams?.logo_url && <img src={selectedTeam.teams.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{selectedTeam?.teams?.abbreviation ?? selectedTeam?.teams?.full_name ?? ""}</span>
+                {selectedET?.teams?.logo_url && <img src={selectedET.teams.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{selectedET?.teams?.abbreviation ?? selectedET?.teams?.full_name ?? ""}</span>
               </div>
             )}
             {!existing && (
@@ -4822,70 +4834,92 @@ function PremiacoesTab({
           )}
         </div>
 
-        {/* Seletor de atleta */}
-        <div style={{ padding: "0 16px 14px" }} ref={dropRef}>
-          <div style={{ position: "relative" }}>
-            <div onClick={() => { setShowDropdown(v => !v); setSearch(""); }}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.03)", border: `1px solid ${showDropdown ? "rgba(191,242,5,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}>
-              {selectedMemberId && selectedPerson ? (
-                <>
-                  {selectedPerson.photo_url
-                    ? <img src={selectedPerson.photo_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    : <div style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
-                  }
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>{selectedPerson.surname ?? selectedPerson.full_name}</span>
-                </>
-              ) : (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flex: 1 }}>{isCoach ? "Selecionar técnico…" : "Selecionar atleta…"}</span>
-              )}
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3 }}>
-                <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-              </svg>
-            </div>
+        {/* Passo 1 — Selecionar equipe / Passo 2 — Selecionar membro */}
+        <div style={{ padding: "0 16px 14px", display: "flex", flexDirection: "column", gap: 8 }} ref={dropRef}>
 
-            {showDropdown && (
-              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                  <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
-                    placeholder="Buscar atleta…"
-                    style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
-                </div>
-                <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                  {filteredMembers.length === 0
-                    ? <p style={{ padding: "16px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444" }}>Nenhum resultado.</p>
-                    : filteredMembers.map((entry: any, idx: number) => {
-                        const person = entry[nameField];
-                        const team = realTeams.find((et: any) => et.team_id === entry.edition_teams?.team_id);
-                        const isSelected = entry[idField] === selectedMemberId;
-                        return (
-                          <div key={entry[idField]}
-                            onClick={() => { setSelectedMemberId(entry[idField]); setShowDropdown(false); setSearch(""); }}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
-                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}>
-                            {person?.photo_url
-                              ? <img src={person.photo_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                              : <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(person?.surname ?? person?.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
-                            }
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "#BFF205" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{person?.surname ?? person?.full_name ?? "—"}</p>
-                            </div>
-                            {team?.teams?.logo_url && <img src={team.teams.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />}
-                            {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                          </div>
-                        );
-                      })
+          {/* Passo 1: equipe */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 6 }}>
+            {realTeams.map((et: any) => {
+              const isSelected = et.id === selectedTeamId;
+              return (
+                <div key={et.id}
+                  onClick={() => { setSelectedTeamId(isSelected ? "" : et.id); setSelectedMemberId(""); setSearch(""); }}
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.1s" }}>
+                  {et.teams?.logo_url
+                    ? <img src={et.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
+                    : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{(et.teams?.abbreviation ?? "?").slice(0, 2)}</span></div>
                   }
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: isSelected ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center" as const }}>
+                    {et.teams?.abbreviation ?? et.teams?.full_name?.slice(0, 3)?.toUpperCase()}
+                  </span>
                 </div>
-              </div>
-            )}
+              );
+            })}
           </div>
+
+          {/* Passo 2: membro (só aparece depois de selecionar equipe) */}
+          {selectedTeamId && (
+            <div style={{ position: "relative" }}>
+              <div onClick={() => { setShowDropdown(v => !v); setSearch(""); }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.03)", border: `1px solid ${showDropdown ? "rgba(191,242,5,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}>
+                {selectedMemberId && selectedPerson ? (
+                  <>
+                    {selectedPerson.photo_url
+                      ? <img src={selectedPerson.photo_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                    }
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>{selectedPerson.surname ?? selectedPerson.full_name}</span>
+                  </>
+                ) : (
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flex: 1 }}>{isCoach ? "Selecionar técnico…" : "Selecionar atleta…"}</span>
+                )}
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3 }}>
+                  <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                </svg>
+              </div>
+
+              {showDropdown && (
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
+                      placeholder={isCoach ? "Buscar técnico…" : "Buscar atleta…"}
+                      style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
+                  </div>
+                  <div style={{ maxHeight: 220, overflowY: "auto" }}>
+                    {filteredMembers.length === 0
+                      ? <p style={{ padding: "16px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444" }}>Nenhum resultado.</p>
+                      : filteredMembers.map((entry: any, idx: number) => {
+                          const person = entry[nameField];
+                          const isSelected = entry[idField] === selectedMemberId;
+                          return (
+                            <div key={entry[idField]}
+                              onClick={() => { setSelectedMemberId(entry[idField]); setShowDropdown(false); setSearch(""); }}
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
+                              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}>
+                              {person?.photo_url
+                                ? <img src={person.photo_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                                : <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(person?.surname ?? person?.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                              }
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "#BFF205" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{person?.surname ?? person?.full_name ?? "—"}</p>
+                              </div>
+                              {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </div>
+                          );
+                        })
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Botão confirmar se mudou */}
           {isDirty && selectedMemberId && (
             <button type="button" onClick={() => handleSaveIndividual(awardType, selectedMemberId)}
               disabled={saving === awardType}
-              style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving === awardType ? 0.5 : 1 }}>
+              style={{ width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving === awardType ? 0.5 : 1 }}>
               {saving === awardType ? "Salvando…" : "Confirmar"}
             </button>
           )}
