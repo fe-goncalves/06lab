@@ -4787,20 +4787,24 @@ function PremiacoesTab({
     return awards.find((a: any) => a.award_type === type);
   }
 
-  // Salva premiação coletiva (mantém save individual por card nas coletivas)
-  async function handleSaveColetiva(awardType: string, teamId: string) {
-    if (!teamId) return;
-    setSavingColetiva(awardType);
-    const fd = new FormData();
-    fd.append("award_type", awardType);
-    fd.append("winning_team_id", teamId);
-    const result = await atribuirPremiacao(selectedEditionId, fd);
-    setSavingColetiva(null);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Premiação salva.");
-    onRefreshAwards(selectedEditionId);
-  }
+  // Seleções coletivas pendentes: { [awardType]: teamId }
+  const [collectiveSelections, setCollectiveSelections] = useState<Record<string, string>>(() => {
+    const result: Record<string, string> = {};
+    for (const a of awards) {
+      if (a.winning_team_id) result[a.award_type] = a.winning_team_id;
+    }
+    return result;
+  });
 
+  useEffect(() => {
+    const result: Record<string, string> = {};
+    for (const a of awards) {
+      if (a.winning_team_id) result[a.award_type] = a.winning_team_id;
+    }
+    setCollectiveSelections(result);
+  }, [awards]);
+
+  
   // ── AwardCard individual (controlado pelo pai) ────────────────────────────
   function IndividualAwardCard({ awardType, label, icon }: { awardType: string; label: string; icon: React.ReactNode }) {
     const isCoach = awardType === "best_coach";
@@ -4958,31 +4962,30 @@ function PremiacoesTab({
     );
   }
 
-  // ── AwardCard coletivo ────────────────────────────────────────────────────
+  // ── AwardCard coletivo (controlado pelo pai) ──────────────────────────────
   function CollectiveAwardCard({ awardType, label, icon, rank }: { awardType: string; label: string; icon: React.ReactNode; rank: number }) {
     const existing = getAward(awardType);
-    const existingTeamId = existing?.winning_team_id ?? "";
-    const [selectedTeamId, setSelectedTeamId] = useState(existingTeamId);
-    const dropRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => { setSelectedTeamId(existing?.winning_team_id ?? ""); }, [existing?.winning_team_id]);
-
+    const selectedTeamId = collectiveSelections[awardType] ?? "";
     const selectedET = realTeams.find((et: any) => et.team_id === selectedTeamId);
-    const isDirty = selectedTeamId !== existingTeamId;
+    const savedTeamId = existing?.winning_team_id ?? "";
+    const isDirty = selectedTeamId !== savedTeamId;
 
     const usedTeamIds = new Set(
-      awards.filter((a: any) => a.award_type !== awardType && a.winning_team_id).map((a: any) => a.winning_team_id)
+      Object.entries(collectiveSelections)
+        .filter(([type]) => type !== awardType)
+        .map(([, teamId]) => teamId)
+        .filter(Boolean)
     );
 
     return (
-      <div style={{ borderRadius: 12, border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
+      <div style={{ borderRadius: 12, border: isDirty ? "1px solid rgba(191,242,5,0.25)" : border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
         <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${existing ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
             {icon ?? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: existing ? "#BFF205" : "rgba(255,255,255,0.3)" }}>{rank}°</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "#BFF205" : "rgba(255,255,255,0.35)", margin: 0 }}>{label}</p>
-            {existing && selectedET ? (
+            {selectedET ? (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                 {selectedET.teams?.logo_url && <img src={selectedET.teams.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedET.teams?.short_name ?? selectedET.teams?.full_name}</p>
@@ -4999,14 +5002,14 @@ function PremiacoesTab({
           )}
         </div>
 
-        <div style={{ padding: "0 16px 14px" }} ref={dropRef}>
+        <div style={{ padding: "0 16px 14px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 6 }}>
             {realTeams.map((et: any) => {
               const isSelected = et.team_id === selectedTeamId;
               const isUsed = usedTeamIds.has(et.team_id);
               return (
                 <div key={et.team_id}
-                  onClick={() => !isUsed && setSelectedTeamId(isSelected ? "" : et.team_id)}
+                  onClick={() => !isUsed && setCollectiveSelections(prev => ({ ...prev, [awardType]: isSelected ? "" : et.team_id }))}
                   style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: isUsed ? "default" : "pointer", transition: "all 0.1s", opacity: isUsed && !isSelected ? 0.25 : 1 }}>
                   {et.teams?.logo_url
                     ? <img src={et.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
@@ -5019,14 +5022,6 @@ function PremiacoesTab({
               );
             })}
           </div>
-
-          {isDirty && selectedTeamId && (
-            <button type="button" onClick={() => handleSaveColetiva(awardType, selectedTeamId)}
-              disabled={savingColetiva === awardType}
-              style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: savingColetiva === awardType ? 0.5 : 1 }}>
-              {savingColetiva === awardType ? "Salvando…" : "Confirmar"}
-            </button>
-          )}
         </div>
       </div>
     );
@@ -5049,6 +5044,36 @@ function PremiacoesTab({
   }
 
   const collectiveSlots = buildCollectiveSlots();
+
+  const hasCollectiveChanges = collectiveSlots.some(({ awardType }) => {
+    const saved = awards.find((a: any) => a.award_type === awardType)?.winning_team_id ?? "";
+    return (collectiveSelections[awardType] ?? "") !== saved;
+  });
+
+  const [savingBatchColetiva, setSavingBatchColetiva] = useState(false);
+
+  async function handleSaveBatchColetiva() {
+    setSavingBatchColetiva(true);
+    const toSave = collectiveSlots.filter(({ awardType }) => {
+      const saved = awards.find((a: any) => a.award_type === awardType)?.winning_team_id ?? "";
+      return collectiveSelections[awardType] && collectiveSelections[awardType] !== saved;
+    });
+
+    let hasError = false;
+    for (const { awardType } of toSave) {
+      const fd = new FormData();
+      fd.append("award_type", awardType);
+      fd.append("winning_team_id", collectiveSelections[awardType]);
+      const result = await atribuirPremiacao(selectedEditionId, fd);
+      if ("error" in result) { toast("error", result.error); hasError = true; break; }
+    }
+
+    setSavingBatchColetiva(false);
+    if (!hasError) {
+      toast("success", "Premiações coletivas salvas.");
+      onRefreshAwards(selectedEditionId);
+    }
+  }
 
   if (loadingAwards) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#666", padding: "32px 0" }}>Carregando…</p>;
 
@@ -5094,6 +5119,11 @@ function PremiacoesTab({
               {collectiveSlots.map(slot => (
                 <CollectiveAwardCard key={slot.awardType} {...slot} />
               ))}
+              <button type="button" onClick={handleSaveBatchColetiva}
+                disabled={savingBatchColetiva || !hasCollectiveChanges}
+                style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasCollectiveChanges ? "#BFF205" : "rgba(255,255,255,0.06)", color: hasCollectiveChanges ? "#0a0a0a" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasCollectiveChanges ? "pointer" : "default", opacity: savingBatchColetiva ? 0.5 : 1, transition: "all 0.15s" }}>
+                {savingBatchColetiva ? "Salvando…" : "Salvar Premiações Coletivas"}
+              </button>
             </>
           )}
         </div>
