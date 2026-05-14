@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { NovoArbitroModal } from "./novo-arbitro-modal";
-import { Plus, Eye, SquarePen } from "lucide-react";
+import { Plus, SquarePen, Eye } from "lucide-react";
 
 type Referee = {
   id: string;
@@ -31,44 +31,61 @@ function RefereeRow({ referee, isFirst }: { referee: Referee; isFirst: boolean }
       onMouseLeave={() => setHovered(false)}
       style={{
         borderTop: isFirst ? "none" : "1px solid var(--color-border)",
-        opacity: hovered ? 1 : 0.45,
+        opacity: hovered ? 1 : 0.82,
         transition: "opacity 0.15s ease",
-      }}>
-      <Link href={`/arbitros/${referee.id}`} className="flex items-center gap-6 py-4 pr-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full overflow-hidden border"
-          style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
+      }}
+    >
+      <Link href={`/arbitros/${referee.id}`} className="flex items-center gap-6 py-4 pr-4" style={{ textDecoration: "none" }}>
+        <div
+          style={{
+            width: 38, height: 38, borderRadius: "50%", overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "rgba(255,255,255,0.04)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            flexShrink: 0,
+          }}
+        >
           {referee.photo_url ? (
-            <img src={referee.photo_url} alt="" className="h-full w-full object-cover" />
+            <img src={referee.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
-            <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
               {(referee.surname ?? referee.full_name).slice(0, 2).toUpperCase()}
             </span>
           )}
         </div>
-        <span className="min-w-[4rem] shrink-0 font-mono text-base font-bold" style={{ color: "var(--color-text-primary)" }}>
+
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", minWidth: "4rem", flexShrink: 0 }}>
           {(referee.surname ?? referee.full_name.split(" ")[0]).toUpperCase()}
         </span>
-        <span className="flex-1 font-mono text-sm font-normal" style={{ color: "var(--color-text-primary)" }}>
+
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 400, color: "var(--color-text-secondary)", flex: 1 }}>
           {referee.full_name.toUpperCase()}
         </span>
+
         <div className="flex items-center gap-4 shrink-0" onClick={e => e.preventDefault()}>
           {referee.profile_public && (
-            <span className="font-mono text-xs rounded px-2 py-0.5"
-              style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
+            <span style={{
+              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+              letterSpacing: "0.06em", padding: "3px 8px", borderRadius: 20,
+              backgroundColor: "rgba(191,242,5,0.1)", color: "#BFF205",
+              border: "1px solid rgba(191,242,5,0.2)",
+            }}>
               público
             </span>
           )}
           <Link href={`/arbitros/${referee.id}`}
-            className="transition-colors hover:text-[var(--color-brand)]"
-            style={{ color: "var(--color-text-secondary)" }}
+            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
             onClick={e => e.stopPropagation()}>
-            <SquarePen size={17} strokeWidth={1.8} />
+            <SquarePen size={16} strokeWidth={1.8} />
           </Link>
           <Link href="#"
-            className="transition-colors hover:text-[var(--color-brand)]"
-            style={{ color: "var(--color-text-secondary)" }}
+            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
+            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
+            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
             onClick={e => e.stopPropagation()}>
-            <Eye size={17} strokeWidth={1.8} />
+            <Eye size={16} strokeWidth={1.8} />
           </Link>
         </div>
       </Link>
@@ -93,60 +110,126 @@ export default function ArbitrosClient({ referees: initialReferees }: { referees
     ROLE_TABS.map(tab => [tab.id, referees.filter(r => r.referee_role_id === tab.id).length])
   );
 
-  const ic = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-[var(--color-brand)]";
-  const is = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-
   return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
-      {/* Header bar */}
-      <div className="flex h-14 shrink-0 items-center border-b px-8"
-        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <div className="flex flex-1 items-center justify-center gap-6">
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
+
+      {/* Header bar com abas */}
+      <div style={{
+        display: "flex", alignItems: "center", height: 52, flexShrink: 0,
+        borderBottom: "1px solid var(--color-border)",
+        backgroundColor: "var(--color-surface)",
+        paddingLeft: 32, paddingRight: 32, gap: 0,
+      }}>
+        {/* Abas de função */}
+        <div style={{ display: "flex", flex: 1, alignItems: "center", gap: 4 }}>
           {ROLE_TABS.map(tab => (
-            <button key={tab.id} type="button"
+            <button
+              key={tab.id}
+              type="button"
               onClick={() => setActiveTab(tab.id)}
-              className="flex items-center gap-2 font-mono text-sm transition-opacity"
-              style={{ color: activeTab === tab.id ? "var(--color-brand)" : "#A6A6A6" }}>
-              {tab.label}
-              <span className="font-mono text-xs rounded px-1.5 py-0.5"
-                style={{
-                  backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                  color: activeTab === tab.id ? "var(--color-brand)" : "#555",
-                }}>
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "6px 12px", borderRadius: 8, border: "none",
+                backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.08)" : "transparent",
+                cursor: "pointer", transition: "all 0.12s",
+              }}
+            >
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                letterSpacing: "0.12em",
+                color: activeTab === tab.id ? "#BFF205" : "rgba(255,255,255,0.3)",
+                transition: "color 0.12s",
+              }}>
+                {tab.label}
+              </span>
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700,
+                padding: "2px 6px", borderRadius: 10,
+                backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
+                color: activeTab === tab.id ? "#BFF205" : "rgba(255,255,255,0.2)",
+                transition: "all 0.12s",
+              }}>
                 {countByRole[tab.id] ?? 0}
               </span>
             </button>
           ))}
         </div>
-        <button type="button" onClick={() => setModalOpen(true)}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-          <Plus size={15} strokeWidth={2.5} />
+
+        {/* Botão novo árbitro */}
+        <button
+          type="button"
+          onClick={() => setModalOpen(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: 7,
+            padding: "7px 14px", borderRadius: 9, border: "none",
+            backgroundColor: "#BFF205", color: "#0a0a0a",
+            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            cursor: "pointer", transition: "opacity 0.12s",
+          }}
+          onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+        >
+          <Plus size={13} strokeWidth={2.5} />
           Novo árbitro
         </button>
       </div>
 
       {/* Conteúdo */}
-      <div className="flex-1 p-6 md:p-8">
-        <div className="mb-6">
-          <input type="text" placeholder="Buscar árbitro…" value={search}
+      <div style={{ flex: 1, padding: "24px 32px" }}>
+
+        {/* Busca + contagem */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
+          <input
+            type="text"
+            placeholder="Buscar árbitro…"
+            value={search}
             onChange={e => setSearch(e.target.value)}
-            className={`${ic} w-full max-w-md`} style={is} />
+            style={{
+              fontFamily: "var(--font-mono)", fontSize: 12,
+              padding: "8px 14px", borderRadius: 9,
+              border: "1px solid rgba(255,255,255,0.08)",
+              backgroundColor: "var(--color-surface)",
+              color: "var(--color-text-primary)",
+              outline: "none", width: 280,
+            }}
+            onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
+            onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+          />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
+            {filtered.length} {filtered.length === 1 ? "árbitro" : "árbitros"}
+          </span>
         </div>
 
-        <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-          {filtered.length} {filtered.length === 1 ? "árbitro" : "árbitros"}
-        </p>
-
+        {/* Lista */}
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center rounded-xl border py-16"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
-              {search ? "Nenhum árbitro encontrado." : "Nenhum árbitro cadastrado nesta função."}
+          <div style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", padding: "80px 0", textAlign: "center",
+            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
+            backgroundColor: "var(--color-surface)",
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 12,
+              border: "1px dashed rgba(255,255,255,0.1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              marginBottom: 14, fontSize: 20,
+            }}>
+              🧑‍⚖️
+            </div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+              {search ? "Nenhum árbitro encontrado" : "Nenhum árbitro nesta função"}
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>
+              {search ? "Tente outro nome." : "Adicione árbitros usando o botão acima."}
             </p>
           </div>
         ) : (
-          <div>
+          <div style={{
+            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
+            backgroundColor: "var(--color-surface)",
+            overflow: "hidden",
+          }}>
             {filtered.map((ref, idx) => (
               <RefereeRow key={ref.id} referee={ref} isFirst={idx === 0} />
             ))}
