@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { criarAno, criarTemporada, editarTemporada, deletarTemporada } from "./actions";
+import { criarAno, criarTemporada, editarTemporada, deletarTemporada, desativarTemporada } from "./actions";
 import { toast } from "@/app/(lab)/components/toast";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 
@@ -253,7 +253,7 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
   }
 
   async function handleDelete(id: string) {
-    if (!confirm("Remover esta temporada? Edições de competições vinculadas a ela ficarão sem temporada.")) return;
+    if (!confirm("Remover esta temporada? Esta ação não pode ser desfeita.")) return;
     setDeletingId(id);
     const result = await deletarTemporada(id);
     setDeletingId(null);

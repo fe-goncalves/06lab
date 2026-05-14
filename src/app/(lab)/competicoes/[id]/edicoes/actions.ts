@@ -38,11 +38,21 @@ export async function criarEdicao(
 
   await supabase.from("edition_settings").insert({ edition_id: inserted.id });
 
+  // Busca o gênero da competição para selecionar o "Sem Clube" correto
+  const { data: competition } = await supabase
+    .from("competitions")
+    .select("gender")
+    .eq("id", competitionId)
+    .maybeSingle();
+
+  const competitionGender = competition?.gender ?? "male";
+
   const { data: freeAgentTeam } = await supabase
     .from("teams")
     .select("id")
     .eq("organization_id", profile.organization_id)
     .eq("full_name", "Sem Clube")
+    .eq("gender", competitionGender)
     .maybeSingle();
 
   if (freeAgentTeam) {
@@ -147,11 +157,50 @@ export async function adicionarEquipeEdicao(
 
 export async function removerEquipeEdicao(
   editionTeamId: string,
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; deactivated?: boolean } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  // Busca o team_id desta edition_team para checar partidas
+  const { data: editionTeam } = await supabase
+    .from("edition_teams")
+    .select("team_id")
+    .eq("id", editionTeamId)
+    .maybeSingle();
+
+  if (!editionTeam) return { error: "Equipe não encontrada nesta edição." };
+
+  // Verifica se há atletas inscritos vinculados a esta edition_team
+  const { data: rosterEntries } = await supabase
+    .from("edition_roster_entries")
+    .select("id")
+    .eq("edition_team_id", editionTeamId)
+    .limit(1);
+
+  // Verifica se há partidas onde esta equipe participou (como team_a ou team_b)
+  // dentro desta edição — matches referencia team_id diretamente
+  const { data: matchesA } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("team_a_id", editionTeam.team_id)
+    .limit(1);
+
+  const hasMatches = matchesA && matchesA.length > 0;
+  const hasRoster = rosterEntries && rosterEntries.length > 0;
+
+  if (hasRoster || hasMatches) {
+    // Tem vínculos: desativa em vez de deletar
+    const { error } = await supabase
+      .from("edition_teams")
+      .update({ is_active: false })
+      .eq("id", editionTeamId);
+
+    if (error) return { error: error.message };
+    return { success: true, deactivated: true };
+  }
+
+  // Sem vínculos: pode deletar com segurança
   const { error } = await supabase
     .from("edition_teams")
     .delete()
@@ -225,10 +274,11 @@ export async function atribuirPremiacao(
 
   const award_type = String(formData.get("award_type") ?? "").trim();
   const athlete_id = String(formData.get("athlete_id") ?? "").trim() || null;
+  const staff_member_id = String(formData.get("staff_member_id") ?? "").trim() || null;
   const winning_team_id = String(formData.get("winning_team_id") ?? "").trim() || null;
 
   if (!award_type) return { error: "Tipo de premiação obrigatório." };
-  if (!athlete_id && !winning_team_id) return { error: "Atleta ou equipe é obrigatório." };
+  if (!athlete_id && !staff_member_id && !winning_team_id) return { error: "Atleta, membro de comissão ou equipe é obrigatório." };
 
   const { data: edition } = await supabase
     .from("competition_editions")
@@ -254,6 +304,7 @@ export async function atribuirPremiacao(
       year_id,
       award_type,
       athlete_id,
+      staff_member_id,
       winning_team_id,
       assigned_by: profile.id,
       assigned_at: new Date().toISOString(),

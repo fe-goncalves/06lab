@@ -35,8 +35,8 @@ export default async function EdicaoPage({
     supabase.from("edition_registration_windows")
       .select("id, opens_at, closes_at, is_active")
       .eq("edition_id", edicaoId).order("opens_at"),
-    supabase.from("edition_teams")
-      .select("id, team_id, arrival_origin, display_order, teams(id, full_name, logo_url, abbreviation)")
+      supabase.from("edition_teams")
+      .select("id, team_id, arrival_origin, display_order, is_free_agent_pool, teams(id, full_name, logo_url, abbreviation)")
       .eq("edition_id", edicaoId).order("display_order"),
     supabase.from("teams")
       .select("id, full_name, abbreviation, logo_url")

@@ -360,7 +360,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     const supabase = createClient();
     const { data } = await supabase
       .from("edition_awards")
-      .select("id, award_type, athlete_id, winning_team_id, athletes(id, full_name, surname, photo_url), teams:teams!edition_awards_winning_team_id_fkey(id, full_name, abbreviation, logo_url)")
+      .select("id, award_type, athlete_id, staff_member_id, winning_team_id, athletes(id, full_name, surname, photo_url), staff_members(id, full_name, surname), teams:teams!edition_awards_winning_team_id_fkey(id, full_name, abbreviation, logo_url)")
       .eq("edition_id", editionId).order("award_type");
     setAwards(data ?? []);
     setLoadingAwards(false);
@@ -522,6 +522,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     if (!confirm("Remover esta equipe da edição? Esta ação é irreversível.")) return;
     const result = await removerEquipeEdicao(editionTeamId);
     if ("error" in result) { toast("error", (result as any).error); return; }
+    if ("deactivated" in result && result.deactivated) {
+      toast("success", "Equipe desativada. Ela possui atletas ou partidas vinculadas e não pôde ser removida completamente.");
+      setEditionTeams(prev => prev.map(et => et.id === editionTeamId ? { ...et, is_active: false } as any : et));
+      return;
+    }
     setEditionTeams(prev => prev.filter(et => et.id !== editionTeamId));
     toast("success", "Equipe removida.");
   }
@@ -1870,13 +1875,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             )}
             {activeConfigTab === "premiacoes" && (
               <PremiacoesTab
-                awards={awards}
-                loadingAwards={loadingAwards}
-                editionTeams={editionTeams}
-                editionAthletes={editionAthletes}
-                onRemover={handleRemoverPremiacao}
-                selectedEditionId={selectedEditionId}
-              />
+              awards={awards}
+              loadingAwards={loadingAwards}
+              editionTeams={editionTeams}
+              editionAthletes={editionAthletes}
+              editionStaff={editionStaff}
+              onRemover={handleRemoverPremiacao}
+              onRefreshAwards={loadAwards}
+              selectedEditionId={selectedEditionId}
+            />
             )}
 
             {activeConfigTab === "inscricoes" && (
@@ -4675,13 +4682,15 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
 // ─── PremiacoesTab ────────────────────────────────────────────────────────────
 
 function PremiacoesTab({
-  awards, loadingAwards, editionTeams, editionAthletes, onRemover, selectedEditionId,
+  awards, loadingAwards, editionTeams, editionAthletes, editionStaff, onRemover, onRefreshAwards, selectedEditionId,
 }: {
   awards: any[];
   loadingAwards: boolean;
   editionTeams: any[];
   editionAthletes: any[];
+  editionStaff: any[];
   onRemover: (id: string) => void;
+  onRefreshAwards: (editionId: string) => void;
   selectedEditionId: string;
 }) {
   const [activeSub, setActiveSub] = useState<"individuais" | "coletivas">("individuais");
@@ -4710,16 +4719,21 @@ function PremiacoesTab({
   }
 
   // Salva / atualiza premiação individual
-  async function handleSaveIndividual(awardType: string, athleteId: string) {
-    if (!athleteId) return;
+  async function handleSaveIndividual(awardType: string, memberId: string) {
+    if (!memberId) return;
     setSaving(awardType);
     const fd = new FormData();
     fd.append("award_type", awardType);
-    fd.append("athlete_id", athleteId);
+    if (awardType === "best_coach") {
+      fd.append("staff_member_id", memberId);
+    } else {
+      fd.append("athlete_id", memberId);
+    }
     const result = await atribuirPremiacao(selectedEditionId, fd);
     setSaving(null);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Premiação salva.");
+    onRefreshAwards(selectedEditionId);
   }
 
   // Salva premiação coletiva
@@ -4737,14 +4751,17 @@ function PremiacoesTab({
 
   // ── AwardCard individual ──────────────────────────────────────────────────
   function IndividualAwardCard({ awardType, label, icon }: { awardType: string; label: string; icon: React.ReactNode }) {
+    const isCoach = awardType === "best_coach";
     const existing = getAward(awardType);
-    const existingAthleteId = existing?.athlete_id ?? "";
-    const [selectedAthleteId, setSelectedAthleteId] = useState(existingAthleteId);
+    const existingMemberId = isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? "");
+    const [selectedMemberId, setSelectedMemberId] = useState(existingMemberId);
     const [showDropdown, setShowDropdown] = useState(false);
     const [search, setSearch] = useState("");
     const dropRef = useRef<HTMLDivElement>(null);
 
-    useEffect(() => { setSelectedAthleteId(existing?.athlete_id ?? ""); }, [existing?.athlete_id]);
+    useEffect(() => {
+      setSelectedMemberId(isCoach ? (existing?.staff_member_id ?? "") : (existing?.athlete_id ?? ""));
+    }, [existing?.athlete_id, existing?.staff_member_id]);
 
     useEffect(() => {
       function handle(e: MouseEvent) {
@@ -4754,18 +4771,23 @@ function PremiacoesTab({
       return () => document.removeEventListener("mousedown", handle);
     }, []);
 
-    const filteredAthletes = search.trim()
-      ? editionAthletes.filter((a: any) => {
-          const name = a.athletes?.surname ?? a.athletes?.full_name ?? "";
+    // Para best_coach usa editionStaff; para os demais usa editionAthletes
+    const memberList = isCoach ? editionStaff : editionAthletes;
+    const idField = isCoach ? "staff_member_id" : "athlete_id";
+    const nameField = isCoach ? "staff_members" : "athletes";
+
+    const filteredMembers = search.trim()
+      ? memberList.filter((a: any) => {
+          const name = a[nameField]?.surname ?? a[nameField]?.full_name ?? "";
           return name.toLowerCase().includes(search.toLowerCase());
         })
-      : editionAthletes;
+      : memberList;
 
-    const selectedEntry = editionAthletes.find((a: any) => a.athlete_id === selectedAthleteId);
-    const selectedAthlete = selectedEntry?.athletes;
+    const selectedEntry = memberList.find((a: any) => a[idField] === selectedMemberId);
+    const selectedPerson = selectedEntry?.[nameField];
     const selectedTeam = realTeams.find((et: any) => et.team_id === selectedEntry?.edition_teams?.team_id);
 
-    const isDirty = selectedAthleteId !== existingAthleteId;
+    const isDirty = selectedMemberId !== existingMemberId;
 
     return (
       <div style={{ borderRadius: 12, border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
@@ -4776,13 +4798,13 @@ function PremiacoesTab({
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "#BFF205" : "rgba(255,255,255,0.35)", margin: 0 }}>{label}</p>
-            {existing && selectedAthlete && (
+            {existing && selectedPerson && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
-                {selectedAthlete.photo_url
-                  ? <img src={selectedAthlete.photo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
-                  : <div style={{ width: 18, height: 18, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555" }}>{(selectedAthlete.surname ?? selectedAthlete.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                {selectedPerson.photo_url
+                  ? <img src={selectedPerson.photo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
+                  : <div style={{ width: 18, height: 18, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555" }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
                 }
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedAthlete.surname ?? selectedAthlete.full_name}</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedPerson.surname ?? selectedPerson.full_name}</p>
                 {selectedTeam?.teams?.logo_url && <img src={selectedTeam.teams.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{selectedTeam?.teams?.abbreviation ?? selectedTeam?.teams?.full_name ?? ""}</span>
               </div>
@@ -4805,16 +4827,16 @@ function PremiacoesTab({
           <div style={{ position: "relative" }}>
             <div onClick={() => { setShowDropdown(v => !v); setSearch(""); }}
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.03)", border: `1px solid ${showDropdown ? "rgba(191,242,5,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}>
-              {selectedAthleteId && selectedAthlete ? (
+              {selectedMemberId && selectedPerson ? (
                 <>
-                  {selectedAthlete.photo_url
-                    ? <img src={selectedAthlete.photo_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    : <div style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(selectedAthlete.surname ?? selectedAthlete.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                  {selectedPerson.photo_url
+                    ? <img src={selectedPerson.photo_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <div style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
                   }
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>{selectedAthlete.surname ?? selectedAthlete.full_name}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>{selectedPerson.surname ?? selectedPerson.full_name}</span>
                 </>
               ) : (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flex: 1 }}>Selecionar atleta…</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flex: 1 }}>{isCoach ? "Selecionar técnico…" : "Selecionar atleta…"}</span>
               )}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3 }}>
                 <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -4829,24 +4851,24 @@ function PremiacoesTab({
                     style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
                 </div>
                 <div style={{ maxHeight: 220, overflowY: "auto" }}>
-                  {filteredAthletes.length === 0
+                  {filteredMembers.length === 0
                     ? <p style={{ padding: "16px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444" }}>Nenhum resultado.</p>
-                    : filteredAthletes.map((entry: any, idx: number) => {
-                        const ath = entry.athletes;
+                    : filteredMembers.map((entry: any, idx: number) => {
+                        const person = entry[nameField];
                         const team = realTeams.find((et: any) => et.team_id === entry.edition_teams?.team_id);
-                        const isSelected = entry.athlete_id === selectedAthleteId;
+                        const isSelected = entry[idField] === selectedMemberId;
                         return (
-                          <div key={entry.athlete_id}
-                            onClick={() => { setSelectedAthleteId(entry.athlete_id); setShowDropdown(false); setSearch(""); }}
+                          <div key={entry[idField]}
+                            onClick={() => { setSelectedMemberId(entry[idField]); setShowDropdown(false); setSearch(""); }}
                             style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
                             onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
                             onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}>
-                            {ath?.photo_url
-                              ? <img src={ath.photo_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                              : <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(ath?.surname ?? ath?.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                            {person?.photo_url
+                              ? <img src={person.photo_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                              : <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(person?.surname ?? person?.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
                             }
                             <div style={{ flex: 1, minWidth: 0 }}>
-                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "#BFF205" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{ath?.surname ?? ath?.full_name ?? "—"}</p>
+                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "#BFF205" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{person?.surname ?? person?.full_name ?? "—"}</p>
                             </div>
                             {team?.teams?.logo_url && <img src={team.teams.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0 }} />}
                             {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
@@ -4860,8 +4882,8 @@ function PremiacoesTab({
           </div>
 
           {/* Botão confirmar se mudou */}
-          {isDirty && selectedAthleteId && (
-            <button type="button" onClick={() => handleSaveIndividual(awardType, selectedAthleteId)}
+          {isDirty && selectedMemberId && (
+            <button type="button" onClick={() => handleSaveIndividual(awardType, selectedMemberId)}
               disabled={saving === awardType}
               style={{ marginTop: 8, width: "100%", padding: "8px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving === awardType ? 0.5 : 1 }}>
               {saving === awardType ? "Salvando…" : "Confirmar"}

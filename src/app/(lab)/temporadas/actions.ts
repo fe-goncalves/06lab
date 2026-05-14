@@ -124,9 +124,46 @@ export async function deletarTemporada(
 
   if (!profile?.organization_id) return { error: "Organização não encontrada." };
 
+  // Verifica se há edições de competição vinculadas
+  const { data: editions } = await supabase
+    .from("competition_editions")
+    .select("id")
+    .eq("season_id", id)
+    .limit(1);
+
+  if (editions && editions.length > 0) {
+    return {
+      error:
+        "Esta temporada possui edições de competição vinculadas e não pode ser excluída. Desative-a em vez de excluir.",
+    };
+  }
+
   const { error } = await supabase
     .from("seasons")
     .delete()
+    .eq("id", id)
+    .eq("organization_id", profile.organization_id);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function desativarTemporada(
+  id: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+
+  const { error } = await supabase
+    .from("seasons")
+    .update({ is_active: false })
     .eq("id", id)
     .eq("organization_id", profile.organization_id);
 

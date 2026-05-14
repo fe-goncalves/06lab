@@ -2374,6 +2374,11 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
     : allOpposingAthletes;
   const opposingAthletes = presentOpposingAthletes;
 
+  // Goleiros da equipe adversária: presentes + com played_as_goalkeeper = true.
+  // Fallback para todos os presentes se nenhum GK foi marcado (formações incompletas).
+  const markedGoalkeepers = presentOpposingAthletes.filter(a => lineups[a.id]?.played_as_goalkeeper === true);
+  const goalkeepersForSelect = markedGoalkeepers.length > 0 ? markedGoalkeepers : presentOpposingAthletes;
+
   // Staff presente para cartões
   const hasAnyStaffLineup = Object.keys(staffLineups).length > 0;
   const allStaff = getStaffMembers(teamId);
@@ -2408,13 +2413,13 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
     <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       {showMinutePicker && <MinutePicker value={minute} max={halfDuration * 2} onChange={v => setMinute(v)} onClose={() => setShowMinutePicker(false)} />}
-      <div style={{ width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "visible", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border }}>
+      <div style={{ width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border, flexShrink: 0 }}>
           <ActionIcon actionType={actionType} goalType={undefined} size={20} />
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>{ACTION_LABELS[actionType] ?? actionType}</span>
           <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)", overflowY: "auto", flex: 1 }}>
           {/* Aviso: formações não salvas */}
           {needsAthlete && !hasAnyLineup && (
             <div style={{ padding: "8px 14px", backgroundColor: "rgba(242,192,5,0.07)", borderBottom: "1px solid rgba(242,192,5,0.12)", display: "flex", alignItems: "center", gap: 8 }}>
@@ -2556,7 +2561,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
             <div style={fieldStyle}>
               <span style={labelStyle}>Goleiro que defendeu (opcional)</span>
               <AthleteDropdown
-                athletes={opposingAthletes}
+                athletes={goalkeepersForSelect}
                 selectedId={goalkeeperIdVal}
                 onSelect={id => { setGoalkeeperIdVal(id); setShowGkDropdown(false); }}
                 show={showGkDropdown}
@@ -2570,7 +2575,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
             </div>
           )}
         </div>
-        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border }}>
+        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border, flexShrink: 0 }}>
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
           <button type="button" onClick={() => { handleConfirm(); onClose(); }} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
         </div>
@@ -2581,9 +2586,10 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
 
 // ─── ShootoutModal ────────────────────────────────────────────────────────────
 
-function ShootoutModal({ match, shootoutType, getAthletes, editingShootout, onConfirm, onClose }: {
+function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShootout, onConfirm, onClose }: {
   match: any; shootoutType: string;
   getAthletes: (teamId: string) => Athlete[];
+  lineups: Record<string, LineupEntry>;
   editingShootout?: any;
   onConfirm: (fd: FormData) => void; onClose: () => void;
 }) {
@@ -2591,9 +2597,24 @@ function ShootoutModal({ match, shootoutType, getAthletes, editingShootout, onCo
   const [result, setResult] = useState<string>(editingShootout?.result ?? "goal");
   const [athleteId, setAthleteId] = useState<string>(editingShootout?.athlete?.id ?? "");
   const [goalkeeperIdVal, setGoalkeeperIdVal] = useState<string>(editingShootout?.goalkeeper_id ?? "");
-  const athletes = getAthletes(teamId);
+
+  const hasAnyLineup = Object.keys(lineups).length > 0;
+
+  // Cobrador: apenas atletas presentes do time selecionado (fallback: todos)
+  const allAthletes = getAthletes(teamId);
+  const athletes = hasAnyLineup
+    ? allAthletes.filter(a => lineups[a.id]?.is_present === true)
+    : allAthletes;
+
+  // Goleiro adversário: presentes + com played_as_goalkeeper = true.
+  // Fallback 1: presentes sem GK marcado. Fallback 2: todos (sem lineup salvo).
   const opposingTeamId = teamId === match.team_a_id ? match.team_b_id : match.team_a_id;
-  const opposingAthletes = getAthletes(opposingTeamId);
+  const allOpposingAthletes = getAthletes(opposingTeamId);
+  const presentOpposingAthletes = hasAnyLineup
+    ? allOpposingAthletes.filter(a => lineups[a.id]?.is_present === true)
+    : allOpposingAthletes;
+  const markedGoalkeepers = presentOpposingAthletes.filter(a => lineups[a.id]?.played_as_goalkeeper === true);
+  const goalkeepersForSelect = markedGoalkeepers.length > 0 ? markedGoalkeepers : presentOpposingAthletes;
   const border = "1px solid var(--color-border)";
   const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)" };
   const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#555" };
@@ -2661,7 +2682,7 @@ function ShootoutModal({ match, shootoutType, getAthletes, editingShootout, onCo
               <span style={labelStyle}>Goleiro que defendeu (opcional)</span>
               <select value={goalkeeperIdVal} onChange={e => setGoalkeeperIdVal(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
                 <option value="">Selecione…</option>
-                {opposingAthletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
+                {goalkeepersForSelect.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
                   <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
                 ))}
               </select>
@@ -2697,7 +2718,7 @@ function PosJogoTab({
   endAggregateWinnerId, setEndAggregateWinnerId, savingEnd, publishing, published,
   addingAction, editingAction, setEditingAction, showActionModal, setShowActionModal,
   openActionType, setOpenActionType, motmAthleteId, setMotmAthleteId,
-  halfDuration, getAthletes, handleChangeFouls, getFouls,
+  halfDuration, getAthletes, getStaffMembers, staffLineups, lineups, handleChangeFouls, getFouls,
   handleAddAction, handleDelete, handleAddShootout, handleDeleteShootout,
   handleEncerrar, handlePublish, getPeriodFromMinute,
 }: any) {
@@ -3088,6 +3109,7 @@ function PosJogoTab({
           match={match}
           shootoutType={tiebreaker ?? "shootouts"}
           getAthletes={getAthletes}
+          lineups={lineups}
           editingShootout={editingShootout}
           onConfirm={handleAddShootout}
           onClose={() => { setOpenShootoutModal(false); setEditingShootout(null); }}

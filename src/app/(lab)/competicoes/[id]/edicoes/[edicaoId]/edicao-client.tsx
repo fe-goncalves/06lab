@@ -7,6 +7,7 @@ import {
   removerEquipeEdicao,
 } from "../actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
+import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -137,7 +138,16 @@ export default function EdicaoClient({
   async function handleRemoveTeam(editionTeamId: string) {
     if (!confirm("Remover esta equipe da edição?")) return;
     const result = await removerEquipeEdicao(editionTeamId);
-    if ("error" in result) { alert(result.error); return; }
+    if ("error" in result) { toast("error", result.error); return; }
+    if ("deactivated" in result && result.deactivated) {
+      toast("success", "Equipe desativada. Ela possui atletas ou partidas vinculadas e não pôde ser removida completamente.");
+      setEditionTeams(prev =>
+        prev.map((et: any) =>
+          et.id === editionTeamId ? { ...et, is_active: false } : et
+        )
+      );
+      return;
+    }
     setEditionTeams(prev => prev.filter((et: any) => et.id !== editionTeamId));
   }
 
@@ -324,7 +334,13 @@ export default function EdicaoClient({
           <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe inscrita ainda.</p>
         ) : (
           <ul className="space-y-2">
-            {editionTeams.map((et: any) => (
+            {[...editionTeams]
+              .sort((a, b) => {
+                if (a.is_free_agent_pool && !b.is_free_agent_pool) return 1;
+                if (!a.is_free_agent_pool && b.is_free_agent_pool) return -1;
+                return (a.display_order ?? 0) - (b.display_order ?? 0);
+              })
+              .map((et: any) => (
               <li key={et.id} className="flex items-center gap-3 rounded-lg border px-4 py-3"
                 style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
                 {et.teams?.logo_url ? (

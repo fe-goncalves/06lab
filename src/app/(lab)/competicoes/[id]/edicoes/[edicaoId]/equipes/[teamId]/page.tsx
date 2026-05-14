@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import EquipeEdicaoClient from "./equipe-edicao-client";
+import SemClubeClient from "./sem-clube-client";
 
 export default async function EquipeEdicaoPage({
   params,
@@ -132,6 +133,20 @@ export default async function EquipeEdicaoPage({
   const availableStaff = (currentStaff ?? [])
     .filter(Boolean)
     .filter((s: any) => !globalInscribedStaffIds.has(s.id));
+
+  // Sem Clube: página própria sem abas
+  if ((editionTeam as any).is_free_agent_pool) {
+    return (
+      <SemClubeClient
+        competitionId={competitionId}
+        competitionName={competition?.short_name ?? competition?.full_name ?? "Competição"}
+        edicaoId={edicaoId}
+        edicaoName={(edition?.seasons as any)?.name ?? "Edição"}
+        gender={competitionGender ?? "male"}
+        rosterEntries={rosterEntries ?? []}
+      />
+    );
+  }
 
   return (
     <EquipeEdicaoClient

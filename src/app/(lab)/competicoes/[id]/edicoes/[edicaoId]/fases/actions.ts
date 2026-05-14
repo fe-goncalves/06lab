@@ -370,11 +370,51 @@ export async function adicionarEquipeFase(
 export async function removerEquipeFase(
   phaseId: string,
   editionTeamId: string,
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; deactivated?: boolean } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  // Busca o team_id real a partir do edition_team_id
+  const { data: editionTeam } = await supabase
+    .from("edition_teams")
+    .select("team_id")
+    .eq("id", editionTeamId)
+    .maybeSingle();
+
+  if (!editionTeam) return { error: "Equipe não encontrada." };
+
+  // Verifica se há partidas nesta fase com essa equipe
+  const { data: matchesA } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("phase_id", phaseId)
+    .eq("team_a_id", editionTeam.team_id)
+    .limit(1);
+
+  const { data: matchesB } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("phase_id", phaseId)
+    .eq("team_b_id", editionTeam.team_id)
+    .limit(1);
+
+  const hasMatches =
+    (matchesA && matchesA.length > 0) || (matchesB && matchesB.length > 0);
+
+  if (hasMatches) {
+    // Tem partidas: desativa em vez de deletar
+    const { error } = await supabase
+      .from("phase_teams")
+      .update({ is_active: false })
+      .eq("phase_id", phaseId)
+      .eq("edition_team_id", editionTeamId);
+
+    if (error) return { error: error.message };
+    return { success: true, deactivated: true };
+  }
+
+  // Sem partidas: pode deletar com segurança
   const { error } = await supabase
     .from("phase_teams")
     .delete()

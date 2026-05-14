@@ -230,6 +230,15 @@ export default function FaseClient({
     const result = await removerEquipeFase(phase.id, editionTeamId);
     setProcessing(null);
     if ("error" in result) { toast("error", result.error); return; }
+    if ("deactivated" in result && result.deactivated) {
+      toast("success", "Equipe desativada. Ela possui partidas nesta fase e não pôde ser removida completamente.");
+      setPhaseTeams(prev =>
+        prev.map((pt: any) =>
+          pt.edition_team_id === editionTeamId ? { ...pt, is_active: false } : pt
+        )
+      );
+      return;
+    }
     setPhaseTeams(prev => prev.filter((pt: any) => pt.edition_team_id !== editionTeamId));
     toast("success", "Equipe removida da fase.");
   }
