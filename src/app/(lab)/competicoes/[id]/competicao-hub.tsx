@@ -2525,6 +2525,27 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   const [windowId, setWindowId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
+
+  async function handleRecalculate() {
+    setRecalculating(true);
+    const supabase = createClient();
+    const { data: edition } = await supabase
+      .from("competition_editions")
+      .select("competition_id, competitions(organization_id, gender, sport_slug)")
+      .eq("id", selectedEditionId)
+      .maybeSingle();
+    const comp = (edition?.competitions as any);
+    if (!comp) { toast("error", "Competição não encontrada."); setRecalculating(false); return; }
+    const { error } = await supabase.rpc("calculate_ranking", {
+      p_organization_id: comp.organization_id,
+      p_gender: comp.gender,
+      p_sport_slug: comp.sport_slug,
+    });
+    setRecalculating(false);
+    if (error) { toast("error", error.message); return; }
+    toast("success", "Ranking recalculado.");
+  }
 
   useEffect(() => { setLoaded(false); }, [selectedEditionId]);
 
@@ -4815,15 +4836,24 @@ function RankingConfigTab({
         ))}
       </div>
 
-      <div className="mt-8">
+      <div className="mt-8 flex items-center gap-3">
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || recalculating}
           className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg transition-opacity disabled:opacity-50"
           style={{ backgroundColor: "var(--color-brand)", color: "#0a0a0a" }}
         >
           {saving ? "SALVANDO..." : "SALVAR CONFIGURAÇÃO DE RANKING"}
+        </button>
+        <button
+          type="button"
+          onClick={handleRecalculate}
+          disabled={saving || recalculating}
+          className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg border transition-colors disabled:opacity-50"
+          style={{ borderColor: "var(--color-border)", color: "var(--color-brand)", backgroundColor: "transparent" }}
+        >
+          {recalculating ? "CALCULANDO..." : "↻ RECALCULAR"}
         </button>
       </div>
     </div>
