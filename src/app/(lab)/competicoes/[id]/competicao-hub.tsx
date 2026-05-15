@@ -9,7 +9,7 @@ import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw } from "lucide-react";
-import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
+import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad, recalcularEstatisticasEdicao } from "./edicoes/actions";
 import { Star, Search, AlertTriangle } from "lucide-react";
@@ -1894,10 +1894,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               />
             )}
             {activeConfigTab === "ranking" && (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Ranking</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Em construção — configuração de pontos do ranking por categoria serão definidos aqui.</p>
-              </div>
+              <RankingConfigTab
+                selectedEditionId={selectedEditionId}
+                inputClass={inputClass}
+                inputStyle={inputStyle}
+              />
             )}
           </div>
         )}
@@ -4673,6 +4674,156 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
         <button type="button" onClick={handleSave} disabled={saving}
           style={{ padding: "10px 28px", borderRadius: 9, border: "none", cursor: "pointer", backgroundColor: saving ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}>
           {saving ? "Salvando…" : "Salvar configurações"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── RankingConfigTab ────────────────────────────────────────────────────────
+
+const RANKING_GROUPS = [
+  {
+    label: "PARTICIPAÇÃO GERAL",
+    categories: [
+      { code: "participation", label: "Participação na edição" },
+    ],
+  },
+  {
+    label: "FASE CLASSIFICATÓRIA",
+    categories: [
+      { code: "win_in_classification", label: "Vitória" },
+      { code: "draw_in_classification", label: "Empate" },
+      { code: "loss_in_classification", label: "Derrota" },
+    ],
+  },
+  {
+    label: "FASE ELIMINATÓRIA",
+    categories: [
+      { code: "participation_knockout", label: "Participação em mata-mata" },
+      { code: "win_in_knockout", label: "Vitória em mata-mata" },
+      { code: "draw_in_knockout", label: "Empate em mata-mata" },
+      { code: "loss_in_knockout", label: "Derrota em mata-mata" },
+    ],
+  },
+  {
+    label: "POSIÇÕES FINAIS",
+    categories: [
+      { code: "first_place", label: "1º lugar (Campeão)" },
+      { code: "second_place", label: "2º lugar (Vice)" },
+      { code: "third_place", label: "3º lugar" },
+      { code: "fourth_place", label: "4º lugar" },
+      { code: "fifth_to_eighth", label: "5º ao 8º lugar" },
+      { code: "ninth_plus", label: "9º lugar ou mais" },
+    ],
+  },
+];
+
+function RankingConfigTab({
+  selectedEditionId,
+  inputClass,
+  inputStyle,
+}: {
+  selectedEditionId: string;
+  inputClass: string;
+  inputStyle: React.CSSProperties;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [loaded, setLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!selectedEditionId) return;
+    setLoaded(false);
+    async function load() {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("edition_ranking_config")
+        .select("category_code, points_value")
+        .eq("edition_id", selectedEditionId);
+      const map: Record<string, string> = {};
+      (data ?? []).forEach(r => { map[r.category_code] = String(r.points_value); });
+      setValues(map);
+      setLoaded(true);
+    }
+    void load();
+  }, [selectedEditionId]);
+
+  function handleChange(code: string, val: string) {
+    setValues(prev => ({ ...prev, [code]: val }));
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    const allCodes = RANKING_GROUPS.flatMap(g => g.categories.map(c => c.code));
+    const configs = allCodes.map(code => ({
+      category_code: code,
+      points_value: parseInt(values[code] ?? "0", 10) || 0,
+    }));
+    const result = await salvarRankingConfig(selectedEditionId, configs);
+    setSaving(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Configuração de ranking salva.");
+  }
+
+  if (!loaded) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>CARREGANDO...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-xl">
+      <p className="mb-6 font-mono text-xs leading-relaxed" style={{ color: "#A6A6A6" }}>
+        Define quantos pontos cada equipe acumula no ranking histórico desta competição por cada resultado ou conquista nesta edição.
+      </p>
+
+      <div className="flex flex-col gap-8">
+        {RANKING_GROUPS.map(group => (
+          <div key={group.label}>
+            <p className="mb-3 font-mono text-xs font-bold tracking-widest uppercase"
+              style={{ color: "var(--color-text-secondary)", fontSize: "10px", letterSpacing: "0.16em" }}>
+              {group.label}
+            </p>
+            <div className="flex flex-col gap-2">
+              {group.categories.map(cat => (
+                <div
+                  key={cat.code}
+                  className="flex items-center justify-between gap-4 rounded-lg border px-4 py-3"
+                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}
+                >
+                  <span className="font-mono text-xs" style={{ color: "var(--color-text-primary)" }}>
+                    {cat.label}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="font-mono text-xs" style={{ color: "#A6A6A6" }}>pts</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={values[cat.code] ?? "0"}
+                      onChange={e => handleChange(cat.code, e.target.value)}
+                      className={inputClass}
+                      style={{ ...inputStyle, width: "72px", textAlign: "right" }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg transition-opacity disabled:opacity-50"
+          style={{ backgroundColor: "var(--color-brand)", color: "#0a0a0a" }}
+        >
+          {saving ? "SALVANDO..." : "SALVAR CONFIGURAÇÃO DE RANKING"}
         </button>
       </div>
     </div>

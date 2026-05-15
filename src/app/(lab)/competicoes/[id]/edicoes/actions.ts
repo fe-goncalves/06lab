@@ -1159,3 +1159,30 @@ export async function recalcularEstatisticasEdicao(
   
   return { success: true };
 }
+
+export async function salvarRankingConfig(
+  editionId: string,
+  configs: { category_code: string; points_value: number }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+
+  const rows = configs.map(c => ({
+    edition_id: editionId,
+    category_code: c.category_code,
+    points_value: c.points_value,
+  }));
+
+  const { error } = await supabase
+    .from("edition_ranking_config")
+    .upsert(rows, { onConflict: "edition_id,category_code" });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
