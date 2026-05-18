@@ -18,19 +18,31 @@ export default function LoginPage() {
     setLoading(true);
 
     const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
-    setLoading(false);
-
-    if (signInError) {
+    if (signInError || !signInData.user) {
       setError("Email ou senha incorretos.");
+      setLoading(false);
       return;
     }
 
-    router.push("/");
+    // Verifica se o usuário autenticado é um representante ativo
+    const { data: rep } = await supabase
+      .from("representatives")
+      .select("id")
+      .eq("auth_user_id", signInData.user.id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (rep) {
+      router.push("/representante");
+    } else {
+      router.push("/");
+    }
+
     router.refresh();
   }
 
@@ -160,14 +172,6 @@ export default function LoginPage() {
             </button>
           </form>
         </div>
-
-        {/* Rodapé */}
-        <p
-          className="mt-6 text-center text-xs"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          06.lab © {new Date().getFullYear()}
-        </p>
       </div>
     </div>
   );
