@@ -151,3 +151,4 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       initialRatings={matchRatings ?? []}
     />
   );
+}

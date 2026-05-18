@@ -207,10 +207,38 @@ export async function salvarFormacoes(
   }
 
   // ── Salvar staff_match_lineups ──
+  const staffMemberIds = staffLineups.map(s => s.staff_member_id);
+  const editionTeamIds = Object.values(teamToEditionTeam);
+
+  const staffToEditionTeam: Record<string, string> = {};
+  if (staffMemberIds.length > 0 && editionTeamIds.length > 0) {
+    const { data: staffRosterEntries } = await supabase
+      .from("edition_roster_entries")
+      .select("staff_member_id, edition_team_id")
+      .in("staff_member_id", staffMemberIds)
+      .in("edition_team_id", editionTeamIds)
+      .eq("member_type", "staff");
+
+    (staffRosterEntries ?? []).forEach((r: any) => {
+      staffToEditionTeam[r.staff_member_id] = r.edition_team_id;
+    });
+  }
+
   await supabase.from("staff_match_lineups").delete().eq("match_id", matchId);
+
   const staffRecords = staffLineups
-    .filter(s => s.is_present)
-    .map(s => ({ match_id: matchId, staff_member_id: s.staff_member_id, is_present: true }));
+    .map(s => {
+      const editionTeamId = staffToEditionTeam[s.staff_member_id];
+      if (!editionTeamId) return null;
+      return {
+        match_id: matchId,
+        staff_member_id: s.staff_member_id,
+        edition_team_id: editionTeamId,
+        is_present: s.is_present,
+      };
+    })
+    .filter(Boolean);
+
   if (staffRecords.length > 0) {
     await supabase.from("staff_match_lineups").insert(staffRecords);
   }

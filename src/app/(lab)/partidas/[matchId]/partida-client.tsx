@@ -238,6 +238,7 @@ export default function PartidaClient({
   allReferees,
   initialTeamStats,
   initialShootout,
+  initialRatings,
 }: {
   match: any;
   actions: any[];
@@ -1375,7 +1376,7 @@ function InfoTab({
 
 // ─── FormacoesTab ─────────────────────────────────────────────────────────────
 
-function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup, ratingsArePublic, savingVisibility, onToggleVisibility }: {
+function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup, ratingsArePublic, savingVisibility, onToggleVisibility, initialRatings }: {
   match: any;
   lineups: Record<string, LineupEntry>;
   setLineups: React.Dispatch<React.SetStateAction<Record<string, LineupEntry>>>;
