@@ -2,7 +2,7 @@
 
 "use client";
 
-import { adicionarAcao, editarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida, salvarFaltas, adicionarShootout, deletarShootout, encerrarPartida } from "./actions";
+import { adicionarAcao, editarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida, salvarFaltas, adicionarShootout, deletarShootout, encerrarPartida, salvarVisibilidadeNotas } from "./actions";
 
 // CSS global para forçar dark mode em todos os selects nativos
 if (typeof document !== "undefined") {
@@ -251,6 +251,7 @@ export default function PartidaClient({
   allReferees?: Referee[];
   initialTeamStats?: any[];
   initialShootout?: any[];
+  initialRatings?: { athlete_id: string; rating: number }[];
 }) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<"informacao" | "formacoes" | "posjogo" | "midia">("posjogo");
@@ -331,6 +332,25 @@ export default function PartidaClient({
   });
 
   const [savingLineups, setSavingLineups] = useState(false);
+
+  // Visibilidade das notas
+  const editionRatingsDefault: boolean =
+    match.phases?.competition_editions?.ratings_are_public ?? false;
+  const [ratingsArePublic, setRatingsArePublic] = useState<boolean>(
+    match.ratings_are_public ?? editionRatingsDefault,
+  );
+  const [savingVisibility, setSavingVisibility] = useState(false);
+
+  async function handleToggleVisibility(value: boolean) {
+    setRatingsArePublic(value);
+    setSavingVisibility(true);
+    const result = await salvarVisibilidadeNotas(match.id, value);
+    setSavingVisibility(false);
+    if ("error" in result) {
+      toast("error", result.error);
+      setRatingsArePublic(!value); // reverte em caso de erro
+    }
+  }
 
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
@@ -429,11 +449,11 @@ export default function PartidaClient({
     toast("success", "Resultado publicado. Stats atualizadas.");
   }
 
-  async function handleSaveLineups() {
+  async function handleSaveLineups(ratings: Record<string, number | null>) {
     setSavingLineups(true);
     const athleteEntries = Object.values(lineups);
     const staffEntries = Object.values(staffLineups);
-    const r = await salvarFormacoes(match.id, athleteEntries, staffEntries);
+    const r = await salvarFormacoes(match.id, athleteEntries, staffEntries, ratings);
     setSavingLineups(false);
     if ("error" in r) { toast("error", r.error); return; }
     toast("success", "Formações salvas.");
@@ -795,6 +815,10 @@ export default function PartidaClient({
             savingLineups={savingLineups}
             handleSaveLineups={handleSaveLineups}
             toggleLineup={toggleLineup}
+            ratingsArePublic={ratingsArePublic}
+            savingVisibility={savingVisibility}
+            onToggleVisibility={handleToggleVisibility}
+            initialRatings={initialRatings ?? []}
           />
         )}
 
@@ -1351,7 +1375,7 @@ function InfoTab({
 
 // ─── FormacoesTab ─────────────────────────────────────────────────────────────
 
-function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup }: {
+function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup, ratingsArePublic, savingVisibility, onToggleVisibility }: {
   match: any;
   lineups: Record<string, LineupEntry>;
   setLineups: React.Dispatch<React.SetStateAction<Record<string, LineupEntry>>>;
@@ -1360,13 +1384,61 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
   getAthletes: (teamId: string) => Athlete[];
   getStaffMembers: (teamId: string) => StaffMember[];
   savingLineups: boolean;
-  handleSaveLineups: () => void;
+  handleSaveLineups: (ratings: Record<string, number | null>) => void;
   toggleLineup: (athleteId: string, field: keyof Omit<LineupEntry, "athlete_id">) => void;
+  ratingsArePublic: boolean;
+  savingVisibility: boolean;
+  onToggleVisibility: (value: boolean) => void;
+  initialRatings: { athlete_id: string; rating: number }[];
 }) {
   const isMobile = useIsMobile();
   const teamA = match.teams_a;
   const teamB = match.teams_b;
   const border = "1px solid var(--color-border)";
+
+  // State das notas: inicializado com valores já salvos no banco
+  const [ratings, setRatings] = useState<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    initialRatings.forEach(r => {
+      map[r.athlete_id] = Number(r.rating).toFixed(1);
+    });
+    return map;
+  });
+
+  function handleRatingChange(athleteId: string, raw: string) {
+    // Permite vazio, dígitos e um ponto decimal
+    if (raw === "" || /^\d{0,2}([.,]\d?)?$/.test(raw)) {
+      setRatings(prev => ({ ...prev, [athleteId]: raw }));
+    }
+  }
+
+  function parseRating(raw: string): number | null {
+    if (!raw || raw.trim() === "") return null;
+    const n = parseFloat(raw.replace(",", "."));
+    if (isNaN(n)) return null;
+    if (n < 1.0 || n > 10.0) return null;
+    return Math.round(n * 10) / 10;
+  }
+
+  function buildRatingsPayload(): Record<string, number | null> {
+    const result: Record<string, number | null> = {};
+    Object.entries(ratings).forEach(([id, raw]) => {
+      result[id] = parseRating(raw);
+    });
+    return result;
+  }
+
+  // Nota média dos atletas presentes que têm nota preenchida (para exibir no header)
+  function avgRating(teamId: string): string | null {
+    const athletes = getAthletes(teamId);
+    const values = athletes
+      .filter(a => lineups[a.id]?.is_present)
+      .map(a => parseRating(ratings[a.id] ?? ""))
+      .filter((v): v is number => v !== null);
+    if (values.length === 0) return null;
+    const avg = values.reduce((s, v) => s + v, 0) / values.length;
+    return avg.toFixed(1);
+  }
 
   function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
     return (
@@ -1505,6 +1577,38 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               }}>GK</span>
             )}
           </div>
+
+          {/* Nota */}
+          {isPresent && (
+            <div style={{ position: "relative", flexShrink: 0 }}>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={ratings[athlete.id] ?? ""}
+                onChange={e => handleRatingChange(athlete.id, e.target.value)}
+                onBlur={e => {
+                  const parsed = parseRating(e.target.value);
+                  if (parsed !== null) {
+                    setRatings(prev => ({ ...prev, [athlete.id]: parsed.toFixed(1) }));
+                  } else if (e.target.value !== "") {
+                    setRatings(prev => ({ ...prev, [athlete.id]: "" }));
+                  }
+                }}
+                placeholder="—"
+                maxLength={4}
+                style={{
+                  width: 44, height: 28, borderRadius: 7,
+                  border: `1px solid ${ratings[athlete.id] ? "rgba(191,242,5,0.35)" : "rgba(255,255,255,0.1)"}`,
+                  backgroundColor: ratings[athlete.id] ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
+                  color: ratings[athlete.id] ? "var(--color-brand)" : "rgba(255,255,255,0.3)",
+                  fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
+                  textAlign: "center", outline: "none",
+                  transition: "all 0.15s",
+                }}
+              />
+            </div>
+          )}
+          {!isPresent && <div style={{ width: 44, flexShrink: 0 }} />}
 
           {/* Ações */}
           <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
@@ -1648,10 +1752,21 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               {team?.short_name ?? team?.full_name ?? "Equipe"}
             </p>
           </div>
-          {/* Contador atletas */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
+          {/* Contador atletas + média de notas */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {(() => {
+              const avg = avgRating(teamId);
+              return avg ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(191,242,5,0.5)", letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Média</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 900, color: "var(--color-brand)", lineHeight: 1 }}>{avg}</span>
+                </div>
+              ) : null;
+            })()}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
+            </div>
           </div>
         </div>
 
@@ -1666,6 +1781,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           <div style={{ width: 36, flexShrink: 0 }} />
           <div style={{ width: 20, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>#</div>
           <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>Atleta</span>
+          <span style={{ width: 44, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>Nota</span>
           <div style={{ display: "flex", gap: 5 }}>
             <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>GK</span>
             <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>C</span>
@@ -1745,6 +1861,46 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
     <div style={{ width: "100%", paddingBottom: 80 }}>
       <SectionHeader title="Formações" subtitle="Escalação e presenças da partida" />
 
+      {/* Toggle de visibilidade das notas */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 16px", marginBottom: 16,
+        borderRadius: 12, border: "1px solid var(--color-border)",
+        backgroundColor: "var(--color-surface)",
+      }}>
+        <div>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.04em" }}>
+            Notas dos atletas
+          </p>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 3, letterSpacing: "0.04em" }}>
+            {ratingsArePublic ? "Públicas — visíveis no 06.score" : "Privadas — visíveis apenas no 06.lab"}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={savingVisibility}
+          onClick={() => onToggleVisibility(!ratingsArePublic)}
+          style={{
+            position: "relative", display: "inline-flex",
+            width: 44, height: 24, borderRadius: 12, border: "none",
+            cursor: savingVisibility ? "not-allowed" : "pointer",
+            backgroundColor: ratingsArePublic ? "var(--color-brand)" : "rgba(255,255,255,0.12)",
+            transition: "background-color 0.2s ease",
+            opacity: savingVisibility ? 0.6 : 1, padding: 0, flexShrink: 0,
+          }}
+          aria-label="Alternar visibilidade das notas"
+        >
+          <span style={{
+            position: "absolute", top: 2,
+            left: ratingsArePublic ? 22 : 2,
+            width: 20, height: 20, borderRadius: "50%",
+            backgroundColor: "white",
+            transition: "left 0.2s ease",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+          }} />
+        </button>
+      </div>
+
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "flex-start" }}>
         <TeamPanel teamId={match.team_a_id} team={teamA} />
         <TeamPanel teamId={match.team_b_id} team={teamB} />
@@ -1773,7 +1929,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
         display: "flex", alignItems: "center", justifyContent: "flex-end",
         zIndex: 20,
       }}>
-        <button type="button" onClick={handleSaveLineups} disabled={savingLineups}
+        <button type="button" onClick={() => handleSaveLineups(buildRatingsPayload())} disabled={savingLineups}
           style={{
             padding: isMobile ? "11px 0" : "11px 36px",
             width: isMobile ? "100%" : "auto",

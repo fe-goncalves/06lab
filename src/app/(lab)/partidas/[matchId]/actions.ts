@@ -1,5 +1,3 @@
-// ACTIONS PARTIDAS
-
 "use server";
 
 import { createClient } from "@/lib/supabase-server";
@@ -134,12 +132,19 @@ export async function editarPartida(
 
 export async function salvarFormacoes(
   matchId: string,
-  lineups: { athlete_id: string; is_present: boolean; is_captain: boolean; played_as_goalkeeper?: boolean }[],
-  staffLineups: { staff_member_id: string; is_present: boolean }[] = [],
+  lineups: { athlete_id: string; is_present: boolean; is_captain: boolean; played_as_goalkeeper: boolean }[],
+  staffLineups: { staff_member_id: string; is_present: boolean }[],
+  ratings: Record<string, number | null>,
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
 
   const { data: match } = await supabase
     .from("matches")
@@ -165,7 +170,6 @@ export async function salvarFormacoes(
     teamToEditionTeam[et.team_id] = et.id;
   });
 
-  // ── Atletas ──────────────────────────────────────────────────────────────
   const athleteIds = lineups.map(l => l.athlete_id);
   const { data: rosterEntries } = await supabase
     .from("edition_roster_entries")
@@ -180,7 +184,8 @@ export async function salvarFormacoes(
     }
   });
 
-  const athleteRecords = lineups
+  // ── Salvar match_lineups ──
+  const records = lineups
     .map(l => {
       const editionTeamId = athleteToEditionTeam[l.athlete_id];
       if (!editionTeamId) return null;
@@ -189,54 +194,66 @@ export async function salvarFormacoes(
         athlete_id: l.athlete_id,
         edition_team_id: editionTeamId,
         is_present: l.is_present,
-        played_as_goalkeeper: false,
+        played_as_goalkeeper: l.played_as_goalkeeper ?? false,
         is_captain: l.is_captain,
       };
     })
     .filter(Boolean);
 
   await supabase.from("match_lineups").delete().eq("match_id", matchId);
-  if (athleteRecords.length > 0) {
-    const { error } = await supabase.from("match_lineups").insert(athleteRecords);
-    if (error) return { error: error.message };
+  if (records.length > 0) {
+    const { error: lineupsError } = await supabase.from("match_lineups").insert(records);
+    if (lineupsError) return { error: lineupsError.message };
   }
 
-  // ── Comissão técnica ─────────────────────────────────────────────────────
-  const editionTeamIds = Object.values(teamToEditionTeam);
-  const staffMemberIds = staffLineups.map(s => s.staff_member_id);
-
-  // Descobre edition_team_id de cada staff_member_id via edition_roster_entries
-  const staffToEditionTeam: Record<string, string> = {};
-  if (staffMemberIds.length > 0 && editionTeamIds.length > 0) {
-    const { data: staffRosterEntries } = await supabase
-      .from("edition_roster_entries")
-      .select("staff_member_id, edition_team_id")
-      .in("staff_member_id", staffMemberIds)
-      .in("edition_team_id", editionTeamIds)
-      .eq("member_type", "staff");
-
-    (staffRosterEntries ?? []).forEach((r: any) => {
-      staffToEditionTeam[r.staff_member_id] = r.edition_team_id;
-    });
-  }
-
+  // ── Salvar staff_match_lineups ──
+  await supabase.from("staff_match_lineups").delete().eq("match_id", matchId);
   const staffRecords = staffLineups
-    .map(s => {
-      const editionTeamId = staffToEditionTeam[s.staff_member_id];
+    .filter(s => s.is_present)
+    .map(s => ({ match_id: matchId, staff_member_id: s.staff_member_id, is_present: true }));
+  if (staffRecords.length > 0) {
+    await supabase.from("staff_match_lineups").insert(staffRecords);
+  }
+
+// ── Salvar match_athlete_ratings ──
+  // Atletas presentes que têm nota preenchida → upsert
+  const presentAthleteIds = new Set(
+    lineups.filter(l => l.is_present).map(l => l.athlete_id)
+  );
+
+  const toUpsert = Object.entries(ratings)
+    .filter(([athleteId, value]) => value !== null && presentAthleteIds.has(athleteId))
+    .map(([athleteId, value]) => {
+      const editionTeamId = athleteToEditionTeam[athleteId];
       if (!editionTeamId) return null;
       return {
         match_id: matchId,
-        staff_member_id: s.staff_member_id,
+        athlete_id: athleteId,
         edition_team_id: editionTeamId,
-        is_present: s.is_present,
+        rating: value as number,
+        created_by: profile?.id ?? null,
       };
     })
     .filter(Boolean);
 
-  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
-  if (staffRecords.length > 0) {
-    const { error } = await supabase.from("match_staff_lineups").insert(staffRecords);
-    if (error) return { error: error.message };
+  // Atletas que tiveram nota removida (valor null no payload mas podem ter registro salvo)
+  const toDelete = Object.entries(ratings)
+    .filter(([, value]) => value === null)
+    .map(([athleteId]) => athleteId);
+
+  if (toUpsert.length > 0) {
+    const { error: ratingsError } = await supabase
+      .from("match_athlete_ratings")
+      .upsert(toUpsert, { onConflict: "match_id,athlete_id" });
+    if (ratingsError) return { error: ratingsError.message };
+  }
+
+  if (toDelete.length > 0) {
+    await supabase
+      .from("match_athlete_ratings")
+      .delete()
+      .eq("match_id", matchId)
+      .in("athlete_id", toDelete);
   }
 
   return { success: true };
@@ -642,4 +659,21 @@ export async function editarAcao(
   }
 
   return { id: actionId };
+}
+
+export async function salvarVisibilidadeNotas(
+  matchId: string,
+  ratingsArePublic: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("matches")
+    .update({ ratings_are_public: ratingsArePublic })
+    .eq("id", matchId);
+
+  if (error) return { error: error.message };
+  return { success: true };
 }

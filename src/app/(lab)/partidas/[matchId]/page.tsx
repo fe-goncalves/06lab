@@ -18,7 +18,7 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
 
   const { data: match, error } = await supabase
     .from("matches")
-    .select("*, phases(id, phase_type, half_duration_minutes, penalty_tiebreaker_type, edition_id, competition_editions!phases_edition_id_fkey(competition_id, competitions(full_name, logo_url))), rounds(name, custom_label), teams_a:teams!matches_team_a_id_fkey(id, full_name, short_name, abbreviation, logo_url, primary_color), teams_b:teams!matches_team_b_id_fkey(id, full_name, short_name, abbreviation, logo_url, primary_color)")
+    .select("*, phases(id, phase_type, half_duration_minutes, penalty_tiebreaker_type, edition_id, competition_editions!phases_edition_id_fkey(competition_id, ratings_are_public, competitions(full_name))), rounds(name, custom_label), teams_a:teams!matches_team_a_id_fkey(id, full_name, abbreviation, logo_url), teams_b:teams!matches_team_b_id_fkey(id, full_name, abbreviation, logo_url)")
     .eq("id", matchId)
     .maybeSingle();
 
@@ -31,33 +31,25 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     { data: venues },
     { data: matchReferees },
     { data: allReferees },
-    { data: teamStats },
-    { data: shootoutData },
-    { data: staffLineups },
+    { data: matchRatings },
   ] = await Promise.all([
     supabase.from("match_actions")
-      .select("*, primary_athlete:athletes!match_actions_primary_athlete_id_fkey(id, full_name, surname, photo_url), secondary_athlete:athletes!match_actions_secondary_athlete_id_fkey(id, full_name, surname), primary_staff:staff_members!match_actions_primary_staff_id_fkey(id, full_name, surname)")
-      .eq("match_id", matchId).order("minute", { ascending: true }),
+      .select("*, primary_athlete:athletes!match_actions_primary_athlete_id_fkey(id, full_name, surname), secondary_athlete:athletes!match_actions_secondary_athlete_id_fkey(id, full_name, surname)")
+      .eq("match_id", matchId).order("created_at"),
     supabase.from("match_lineups")
-      .select("*, athletes(id, full_name, surname, photo_url, position_id, player_positions(abbreviation, full_name))")
+      .select("*, athletes(id, full_name, surname, position_id, player_positions(abbreviation))")
       .eq("match_id", matchId),
     supabase.from("venues")
       .select("id, full_name")
       .eq("organization_id", orgId).order("full_name"),
     supabase.from("match_referees")
-      .select("id, referee_id, referee_role_id, referees(id, full_name, surname, photo_url), referee_roles(id, full_name)")
+      .select("id, referee_id, referee_role_id, referees(id, full_name, surname), referee_roles(id, full_name)")
       .eq("match_id", matchId),
     supabase.from("referees")
-      .select("id, full_name, surname, photo_url, referee_role_id")
+      .select("id, full_name, surname, referee_role_id")
       .eq("organization_id", orgId).order("full_name"),
-    supabase.from("match_team_stats")
-      .select("*")
-      .eq("match_id", matchId),
-    supabase.from("match_penalty_shootout")
-      .select("*, athlete:athletes!match_penalty_shootout_athlete_id_fkey(id, full_name, surname, photo_url), goalkeeper:athletes!match_penalty_shootout_goalkeeper_id_fkey(id, full_name, surname)")
-      .eq("match_id", matchId).order("kick_order", { ascending: true }),
-    supabase.from("match_staff_lineups")
-      .select("*")
+    supabase.from("match_athlete_ratings")
+      .select("athlete_id, rating")
       .eq("match_id", matchId),
   ]);
 
@@ -149,7 +141,6 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       match={match}
       actions={actions ?? []}
       lineups={lineups ?? []}
-      staffLineups={staffLineups ?? []}
       editionTeamsWithAthletes={editionTeamsWithAthletes}
       venues={venues ?? []}
       competitionId={match.phases?.competition_editions?.competition_id ?? ""}
@@ -157,8 +148,6 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       faseId={match.phases?.id ?? ""}
       matchReferees={matchReferees ?? []}
       allReferees={allReferees ?? []}
-      initialTeamStats={teamStats ?? []}
-      initialShootout={shootoutData ?? []}
+      initialRatings={matchRatings ?? []}
     />
   );
-}
