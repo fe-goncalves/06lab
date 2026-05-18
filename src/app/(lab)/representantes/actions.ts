@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase-server";
 
 export async function criarRepresentante(
   formData: FormData,
-): Promise<{ success: true } | { error: string }> {
+): Promise<{ success: true; tempPassword: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
@@ -16,16 +16,22 @@ export async function criarRepresentante(
   if (profile?.role !== "main" && profile?.role !== "supporter") return { error: "Sem permissão." };
 
   const email = String(formData.get("email") ?? "").trim();
-  const password = String(formData.get("password") ?? "").trim();
   const full_name = String(formData.get("full_name") ?? "").trim();
   const team_ids = formData.getAll("team_ids").map(String).filter(Boolean);
 
-  if (!email || !password || !full_name) return { error: "Nome, email e senha são obrigatórios." };
+  if (!email || !full_name) return { error: "Nome e email são obrigatórios." };
   if (team_ids.length === 0) return { error: "Selecione pelo menos uma equipe." };
+
+  // Gera senha temporária aleatória: 3 palavras + número (ex: "fox-arena-42")
+  const words = ["atlas", "volta", "arena", "campo", "clube", "norte", "forte", "bola", "gol", "time"];
+  const w1 = words[Math.floor(Math.random() * words.length)];
+  const w2 = words[Math.floor(Math.random() * words.length)];
+  const num = Math.floor(Math.random() * 90) + 10;
+  const tempPassword = `${w1}-${w2}-${num}`;
 
   const { data: newUser, error: authError } = await supabase.auth.admin.createUser({
     email,
-    password,
+    password: tempPassword,
     email_confirm: true,
   });
 
@@ -37,19 +43,25 @@ export async function criarRepresentante(
       auth_user_id: newUser.user.id,
       organization_id: profile?.organization_id,
       full_name,
+      email,
       status: "active",
       created_by: profile?.id,
     })
     .select("id").single();
 
-  if (repError || !rep) return { error: repError?.message ?? "Erro ao criar representante." };
+  if (repError || !rep) {
+    // Rollback: remove o usuário do Auth se o INSERT falhou
+    await supabase.auth.admin.deleteUser(newUser.user.id);
+    return { error: repError?.message ?? "Erro ao criar representante." };
+  }
 
   const { error: accessError } = await supabase
     .from("representative_team_access")
     .insert(team_ids.map(team_id => ({ representative_id: rep.id, team_id })));
 
   if (accessError) return { error: accessError.message };
-  return { success: true };
+
+  return { success: true, tempPassword };
 }
 
 export async function alterarStatusRepresentante(
@@ -77,16 +89,18 @@ export async function atualizarEquipesRepresentante(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  await supabase
+  const { error: deleteError } = await supabase
     .from("representative_team_access")
     .delete()
     .eq("representative_id", representativeId);
 
+  if (deleteError) return { error: deleteError.message };
+
   if (teamIds.length > 0) {
-    const { error } = await supabase
+    const { error: insertError } = await supabase
       .from("representative_team_access")
       .insert(teamIds.map(team_id => ({ representative_id: representativeId, team_id })));
-    if (error) return { error: error.message };
+    if (insertError) return { error: insertError.message };
   }
 
   return { success: true };

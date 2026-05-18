@@ -17,7 +17,7 @@ export default async function RepresentantesPage() {
 
   const [{ data: representatives }, { data: teams }] = await Promise.all([
     supabase.from("representatives")
-      .select("id, full_name, status, representative_team_access(team_id, teams(full_name))")
+      .select("id, full_name, email, status, representative_team_access(team_id, teams(full_name))")
       .eq("organization_id", orgId)
       .order("full_name"),
     supabase.from("teams")

@@ -6,6 +6,7 @@ import { useState } from "react";
 type Representative = {
   id: string;
   full_name: string;
+  email: string;
   status: string;
   representative_team_access: { team_id: string; teams: { full_name: string } | null }[];
 };
@@ -23,11 +24,11 @@ export default function RepresentantesClient({
   const [reps, setReps] = useState(initialReps);
   const [showForm, setShowForm] = useState(false);
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [createdPassword, setCreatedPassword] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTeams, setEditTeams] = useState<string[]>([]);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -46,17 +47,23 @@ export default function RepresentantesClient({
 
   async function handleCreate() {
     setCreateError(null);
+    setCreatedPassword(null);
     setCreating(true);
     const fd = new FormData();
     fd.append("email", email);
-    fd.append("password", password);
     fd.append("full_name", fullName);
     selectedTeams.forEach(t => fd.append("team_ids", t));
     const result = await criarRepresentante(fd);
     setCreating(false);
     if ("error" in result) { setCreateError(result.error); return; }
+    // Exibe a senha temporária — não fecha o formulário ainda
+    setCreatedPassword(result.tempPassword);
+    setEmail(""); setFullName(""); setSelectedTeams([]);
+  }
+
+  function handleDismissSuccess() {
+    setCreatedPassword(null);
     setShowForm(false);
-    setEmail(""); setPassword(""); setFullName(""); setSelectedTeams([]);
     window.location.reload();
   }
 
@@ -88,53 +95,86 @@ export default function RepresentantesClient({
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <button type="button" onClick={() => setShowForm(v => !v)}
+        <button type="button" onClick={() => { setShowForm(v => !v); setCreatedPassword(null); setCreateError(null); }}
           className="rounded-lg px-4 py-2.5 text-sm font-medium"
           style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-          {showForm ? "Cancelar" : "Novo representante"}
+          {showForm ? "Cancelar" : "+ Novo representante"}
         </button>
       </div>
 
       {showForm && (
         <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-          <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Novo representante</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 sm:col-span-2">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo *</span>
-              <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={ic} style={is} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Email *</span>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={ic} style={is} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Senha *</span>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} className={ic} style={is} />
-            </label>
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipes vinculadas *</span>
-              <div className="flex flex-wrap gap-2">
-                {teams.map(t => (
-                  <button key={t.id} type="button"
-                    onClick={() => toggleTeam(t.id, selectedTeams, setSelectedTeams)}
-                    className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
-                    style={{
-                      borderColor: selectedTeams.includes(t.id) ? "var(--color-brand)" : "var(--color-border)",
-                      backgroundColor: selectedTeams.includes(t.id) ? "rgba(191,242,5,0.1)" : "transparent",
-                      color: selectedTeams.includes(t.id) ? "var(--color-brand)" : "var(--color-text-secondary)",
-                    }}>
-                    {t.full_name}
-                  </button>
-                ))}
+          <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+            Novo representante
+          </h2>
+
+          {createdPassword ? (
+            /* Estado pós-criação: exibe senha temporária */
+            <div className="space-y-4">
+              <div className="rounded-lg border p-4" style={{ borderColor: "var(--color-brand)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+                <p className="mb-1 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-brand)" }}>
+                  Representante criado com sucesso
+                </p>
+                <p className="mt-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                  Repasse estas credenciais ao representante. A senha não será exibida novamente.
+                </p>
+                <div className="mt-3 space-y-1">
+                  <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Senha temporária:</p>
+                  <p className="font-mono text-lg font-bold tracking-widest" style={{ color: "var(--color-text-primary)" }}>
+                    {createdPassword}
+                  </p>
+                </div>
               </div>
+              <button type="button" onClick={handleDismissSuccess}
+                className="rounded-lg px-4 py-2 text-sm font-medium"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                Fechar e atualizar lista
+              </button>
             </div>
-          </div>
-          {createError && <p className="mt-3 text-sm" style={{ color: "var(--color-danger)" }}>{createError}</p>}
-          <button type="button" onClick={handleCreate} disabled={creating}
-            className="mt-4 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            {creating ? "Criando…" : "Criar representante"}
-          </button>
+          ) : (
+            /* Estado de preenchimento */
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo</span>
+                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={ic} style={is} placeholder="Ex: João Silva" />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Email</span>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={ic} style={is} placeholder="email@exemplo.com" />
+                </label>
+              </div>
+
+              <div>
+                <p className="mb-2 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Equipes vinculadas</p>
+                <div className="flex flex-wrap gap-2">
+                  {teams.map(t => (
+                    <button key={t.id} type="button"
+                      onClick={() => toggleTeam(t.id, selectedTeams, setSelectedTeams)}
+                      className="rounded-lg border px-3 py-1.5 text-xs transition-colors"
+                      style={{
+                        borderColor: selectedTeams.includes(t.id) ? "var(--color-brand)" : "var(--color-border)",
+                        backgroundColor: selectedTeams.includes(t.id) ? "rgba(191,242,5,0.1)" : "transparent",
+                        color: selectedTeams.includes(t.id) ? "var(--color-brand)" : "var(--color-text-secondary)",
+                      }}>
+                      {t.full_name}
+                    </button>
+                  ))}
+                </div>
+                {teams.length === 0 && (
+                  <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe cadastrada na organização.</p>
+                )}
+              </div>
+
+              {createError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{createError}</p>}
+
+              <button type="button" onClick={handleCreate} disabled={creating}
+                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                {creating ? "Criando…" : "Criar representante"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -151,10 +191,14 @@ export default function RepresentantesClient({
                 style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{r.full_name}</p>
-                      {r.status === "inactive" && <span className="text-xs" style={{ color: "var(--color-danger)" }}>· Inativo</span>}
+                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{r.email}</p>
+                      {r.status === "inactive" && (
+                        <span className="text-xs" style={{ color: "var(--color-danger)" }}>· Inativo</span>
+                      )}
                     </div>
+
                     {editingId === r.id ? (
                       <div className="mt-3 space-y-3">
                         <div className="flex flex-wrap gap-2">
@@ -175,7 +219,7 @@ export default function RepresentantesClient({
                           <button type="button" onClick={() => handleSaveTeams(r.id)} disabled={savingEdit}
                             className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
                             style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                            {savingEdit ? "Salvando…" : "Salvar"}
+                            {savingEdit ? "Salvando…" : "Salvar equipes"}
                           </button>
                           <button type="button" onClick={() => setEditingId(null)}
                             className="rounded-lg border px-3 py-1.5 text-xs"
@@ -185,20 +229,23 @@ export default function RepresentantesClient({
                         </div>
                       </div>
                     ) : (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div className="mt-2 flex flex-wrap gap-1.5">
                         {r.representative_team_access.length === 0 ? (
-                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe vinculada</span>
-                        ) : r.representative_team_access.map(a => (
-                          <span key={a.team_id} className="rounded px-1.5 py-0.5 text-xs"
-                            style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                            {a.teams?.full_name ?? "—"}
-                          </span>
-                        ))}
+                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Sem equipes vinculadas</span>
+                        ) : (
+                          r.representative_team_access.map(a => (
+                            <span key={a.team_id} className="rounded px-2 py-0.5 font-mono text-xs"
+                              style={{ backgroundColor: "rgba(191,242,5,0.1)", color: "var(--color-brand)" }}>
+                              {a.teams?.full_name ?? a.team_id}
+                            </span>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
+
                   {editingId !== r.id && (
-                    <div className="flex gap-2 shrink-0">
+                    <div className="flex shrink-0 gap-2">
                       <button type="button"
                         onClick={() => { setEditingId(r.id); setEditTeams(r.representative_team_access.map(a => a.team_id)); }}
                         className="rounded-lg border px-3 py-1.5 text-xs"
@@ -209,8 +256,8 @@ export default function RepresentantesClient({
                         disabled={processing === r.id}
                         className="rounded-lg border px-3 py-1.5 text-xs disabled:opacity-50"
                         style={{
-                          borderColor: "var(--color-border)",
-                          color: r.status === "active" ? "var(--color-danger)" : "var(--color-success)",
+                          borderColor: r.status === "active" ? "var(--color-danger)" : "var(--color-brand)",
+                          color: r.status === "active" ? "var(--color-danger)" : "var(--color-brand)",
                         }}>
                         {processing === r.id ? "…" : r.status === "active" ? "Desativar" : "Ativar"}
                       </button>
