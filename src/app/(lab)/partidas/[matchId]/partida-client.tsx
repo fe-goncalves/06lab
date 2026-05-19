@@ -223,6 +223,59 @@ const FINISH_TYPE_LABELS: Record<string, string> = {
   postponed: "Adiada",
 };
 
+// ─── SumulaButtons ───────────────────────────────────────────────────────────
+
+function SumulaButtons({ matchId }: { matchId: string }) {
+  const [generating, setGenerating] = useState(false);
+
+  async function handleDownload() {
+    setGenerating(true);
+    try {
+      const { gerarSumulaPDF } = await import("@/lib/pdf/sumula");
+      const doc = await gerarSumulaPDF(matchId);
+      doc.save(`sumula-${matchId}.pdf`);
+    } catch (err) {
+      console.error(err);
+      toast("error", "Erro ao gerar a súmula. Tente novamente.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleView() {
+    setGenerating(true);
+    try {
+      const { gerarSumulaPDF } = await import("@/lib/pdf/sumula");
+      const doc = await gerarSumulaPDF(matchId);
+      const blob = doc.output("blob");
+      window.open(URL.createObjectURL(blob), "_blank");
+    } catch (err) {
+      console.error(err);
+      toast("error", "Erro ao gerar a súmula. Tente novamente.");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 8 }}>
+      {([
+        { label: generating ? "Gerando…" : "Baixar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v6M2.5 5l3 3 3-3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>, onClick: handleDownload },
+        { label: generating ? "Gerando…" : "Visualizar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5.5s2-3.5 4.5-3.5S10 5.5 10 5.5s-2 3.5-4.5 3.5S1 5.5 1 5.5z" stroke="currentColor" strokeWidth="1.3"/></svg>, onClick: handleView },
+      ]).map(({ label, icon, onClick }, i) => (
+        <button key={i} type="button" onClick={onClick} disabled={generating}
+          style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: generating ? "not-allowed" : "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const, opacity: generating ? 0.5 : 1,
+            borderColor: i === 1 ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)",
+            backgroundColor: i === 1 ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
+            color: i === 1 ? "#BFF205" : "rgba(255,255,255,0.4)",
+          }}>
+          {icon}{label}
+        </button>
+      ))}
+    </div>
+  );
+}
+  
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export default function PartidaClient({
@@ -1338,23 +1391,7 @@ function InfoTab({
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Súmula da partida</p>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 3 }}>PDF · máx. 5 MB</p>
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              {([
-                { label: "Baixar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1v6M2.5 5l3 3 3-3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>, variant: "neutral" },
-                { label: "Subir PDF", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 7V1M2.5 4l3-3 3 3M1 9.5h9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>, variant: "neutral" },
-                { label: "Visualizar", icon: <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="5.5" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.3"/><path d="M1 5.5s2-3.5 4.5-3.5S10 5.5 10 5.5s-2 3.5-4.5 3.5S1 5.5 1 5.5z" stroke="currentColor" strokeWidth="1.3"/></svg>, variant: "brand" },
-              ] as const).map(({ label, icon, variant }) => (
-                <button key={label} type="button"
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const,
-                    borderColor: variant === "brand" ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)",
-                    backgroundColor: variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
-                    color: variant === "brand" ? "#BFF205" : "rgba(255,255,255,0.4)",
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.07)"; e.currentTarget.style.color = variant === "brand" ? "#BFF205" : "var(--color-text-primary)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.45)" : "rgba(255,255,255,0.2)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = variant === "brand" ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)"; e.currentTarget.style.color = variant === "brand" ? "#BFF205" : "rgba(255,255,255,0.4)"; e.currentTarget.style.borderColor = variant === "brand" ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)"; }}
-                >{icon}{label}</button>
-              ))}
-            </div>
+            <SumulaButtons matchId={match.id} />
           </div>
         </div>
       </div>
