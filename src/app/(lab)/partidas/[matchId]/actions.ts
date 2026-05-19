@@ -224,7 +224,12 @@ export async function salvarFormacoes(
     });
   }
 
-  await supabase.from("staff_match_lineups").delete().eq("match_id", matchId);
+  console.log("staffLineups recebido:", JSON.stringify(staffLineups));
+  console.log("staffMemberIds:", JSON.stringify(staffMemberIds));
+  console.log("editionTeamIds:", JSON.stringify(editionTeamIds));
+  console.log("staffToEditionTeam:", JSON.stringify(staffToEditionTeam));
+
+  await supabase.from("match_staff_lineups").delete().eq("match_id", matchId);
 
   const staffRecords = staffLineups
     .map(s => {
@@ -239,9 +244,9 @@ export async function salvarFormacoes(
     })
     .filter(Boolean);
 
-  if (staffRecords.length > 0) {
-    await supabase.from("staff_match_lineups").insert(staffRecords);
-  }
+    if (staffRecords.length > 0) {
+      const { error: staffError } = await supabase.from("match_staff_lineups").insert(staffRecords);
+    }
 
 // ── Salvar match_athlete_ratings ──
   // Atletas presentes que têm nota preenchida → upsert

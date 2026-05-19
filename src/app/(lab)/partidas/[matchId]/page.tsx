@@ -28,6 +28,7 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
   const [
     { data: actions },
     { data: lineups },
+    { data: staffLineups },
     { data: venues },
     { data: matchReferees },
     { data: allReferees },
@@ -38,6 +39,9 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       .eq("match_id", matchId).order("created_at"),
     supabase.from("match_lineups")
       .select("*, athletes(id, full_name, surname, position_id, player_positions(abbreviation))")
+      .eq("match_id", matchId),
+    supabase.from("match_staff_lineups")
+      .select("staff_member_id, is_present")
       .eq("match_id", matchId),
     supabase.from("venues")
       .select("id, full_name")
@@ -141,6 +145,7 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       match={match}
       actions={actions ?? []}
       lineups={lineups ?? []}
+      staffLineups={staffLineups ?? []}
       editionTeamsWithAthletes={editionTeamsWithAthletes}
       venues={venues ?? []}
       competitionId={match.phases?.competition_editions?.competition_id ?? ""}
