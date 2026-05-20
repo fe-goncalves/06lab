@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Crown, Users, UserRound, LogOut } from "lucide-react";
+import { Crown, Users, UserRound, LogOut, Newspaper } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 
 type PinnedCompetition = {
@@ -129,6 +129,11 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
           href="/atletas"
           icon={<UserRound size={16} strokeWidth={2.5} />}
           label="ATLETAS"
+        />
+        <SidebarIconItem
+          href="/noticias"
+          icon={<Newspaper size={16} strokeWidth={2.5} />}
+          label="NOTÍCIAS"
         />
       </div>
 
