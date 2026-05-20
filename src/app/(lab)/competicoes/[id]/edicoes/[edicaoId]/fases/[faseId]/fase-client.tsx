@@ -8,14 +8,17 @@ import {
   criarGrupo, editarGrupo, deletarGrupo,
   adicionarEquipeGrupo, removerEquipeGrupo,
   salvarFaseComoTemplate,
+  atualizarPartidaLogistica,
+  atualizarArbitrosPartida,
 } from "../actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { Plus, Trash2, Pencil, Check, X, FileText } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { gerarSumulasPDF } from "@/lib/pdf/sumula";
 
 type Props = {
   phase: any;
@@ -46,6 +49,40 @@ const KNOCKOUT_ROUND_LABELS = [
   "Décimas de Final",
   "Fase de Grupos",
 ];
+
+const STATUS_LABEL: Record<string, { label: string; colors: { bg: string; text: string } }> = {
+  scheduled: { label: "Agendada",   colors: { bg: "rgba(166,166,166,0.12)", text: "#A6A6A6" } },
+  live:       { label: "Ao vivo",   colors: { bg: "rgba(255,80,80,0.12)",   text: "#FF5050" } },
+  finished:   { label: "Encerrada", colors: { bg: "rgba(191,242,5,0.12)",   text: "#BFF205" } },
+  postponed:  { label: "Adiada",    colors: { bg: "rgba(255,165,0,0.12)",   text: "#FFA500" } },
+  cancelled:  { label: "Cancelada", colors: { bg: "rgba(255,80,80,0.12)",   text: "#FF5050" } },
+};
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return "—";
+  const [y, m, d] = dateStr.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+function formatTime(timeStr: string | null): string {
+  if (!timeStr) return "—";
+  return timeStr.slice(0, 5);
+}
+
+interface RefereeEntry {
+  referee_id: string;
+  referee_role_id: string;
+}
+
+interface EditState {
+  match_date: string;
+  match_time: string;
+  venue_id: string;
+  refereesList: RefereeEntry[];
+  newRefereeId: string;
+  newRefereeRoleId: string;
+  showReferees: boolean;
+}
 
 export default function FaseClient({
   phase,
@@ -88,11 +125,16 @@ export default function FaseClient({
   const [referees, setReferees] = useState<any[]>([]);
   const [refereeRoles, setRefereeRoles] = useState<any[]>([]);
   const [loadingPartidas, setLoadingPartidas] = useState(false);
+  const [editingMatches, setEditingMatches] = useState<Record<string, EditState>>({});
+  const [savingMatches, setSavingMatches] = useState<Set<string>>(new Set());
+
+  // ── Seleção múltipla ────────────────────────────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   async function loadPartidas() {
     setLoadingPartidas(true);
     const supabase = createClient();
-
     const [
       { data: matchesRaw },
       { data: venuesRaw },
@@ -110,20 +152,10 @@ export default function FaseClient({
         `)
         .eq("phase_id", phase.id)
         .order("match_date", { ascending: true }),
-      supabase
-        .from("venues")
-        .select("id, full_name, short_name")
-        .order("full_name"),
-      supabase
-        .from("referees")
-        .select("id, full_name")
-        .order("full_name"),
-      supabase
-        .from("referee_roles")
-        .select("id, full_name")
-        .order("full_name"),
+      supabase.from("venues").select("id, full_name, short_name").order("full_name"),
+      supabase.from("referees").select("id, full_name").order("full_name"),
+      supabase.from("referee_roles").select("id, full_name").order("full_name"),
     ]);
-
     setPartidas(matchesRaw ?? []);
     setVenues(venuesRaw ?? []);
     setReferees(refereesRaw ?? []);
@@ -135,6 +167,137 @@ export default function FaseClient({
     loadPartidas();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase.id]);
+
+  // ── Helpers de seleção ──────────────────────────────────────────────────────
+  function toggleSelect(matchId: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(matchId)) next.delete(matchId);
+      else next.add(matchId);
+      return next;
+    });
+  }
+
+  function toggleSelectGroup(matchIds: string[], allSelected: boolean) {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (allSelected) matchIds.forEach(id => next.delete(id));
+      else matchIds.forEach(id => next.add(id));
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function handleExportarSumulas() {
+    if (selectedIds.size === 0) return;
+    setExportingPDF(true);
+    try {
+      const doc = await gerarSumulasPDF(Array.from(selectedIds));
+      doc.save(`sumulas-${phase.full_name ?? "fase"}.pdf`);
+      toast("success", `${selectedIds.size} súmula${selectedIds.size !== 1 ? "s" : ""} exportada${selectedIds.size !== 1 ? "s" : ""}.`);
+      clearSelection();
+    } catch (err) {
+      toast("error", "Erro ao gerar súmulas. Tente novamente.");
+    } finally {
+      setExportingPDF(false);
+    }
+  }
+
+  // ── Edição inline ───────────────────────────────────────────────────────────
+  function startEditing(m: any) {
+    const existing: RefereeEntry[] = (m.match_referees ?? []).map((mr: any) => ({
+      referee_id: mr.referee_id,
+      referee_role_id: mr.referee_role_id,
+    }));
+    setEditingMatches(prev => ({
+      ...prev,
+      [m.id]: {
+        match_date: m.match_date ?? "",
+        match_time: m.match_time ? m.match_time.slice(0, 5) : "",
+        venue_id: m.venue_id ?? "",
+        refereesList: existing,
+        newRefereeId: "",
+        newRefereeRoleId: "",
+        showReferees: false,
+      },
+    }));
+  }
+
+  function cancelEditing(matchId: string) {
+    setEditingMatches(prev => {
+      const next = { ...prev };
+      delete next[matchId];
+      return next;
+    });
+  }
+
+  function updateEditField(matchId: string, fields: Partial<EditState>) {
+    setEditingMatches(prev => ({
+      ...prev,
+      [matchId]: { ...prev[matchId], ...fields },
+    }));
+  }
+
+  function addRefereeToList(matchId: string) {
+    const state = editingMatches[matchId];
+    if (!state.newRefereeId || !state.newRefereeRoleId) return;
+    if (state.refereesList.some(r => r.referee_id === state.newRefereeId)) return;
+    updateEditField(matchId, {
+      refereesList: [
+        ...state.refereesList,
+        { referee_id: state.newRefereeId, referee_role_id: state.newRefereeRoleId },
+      ],
+      newRefereeId: "",
+      newRefereeRoleId: "",
+    });
+  }
+
+  function removeRefereeFromList(matchId: string, refereeId: string) {
+    const state = editingMatches[matchId];
+    updateEditField(matchId, {
+      refereesList: state.refereesList.filter(r => r.referee_id !== refereeId),
+    });
+  }
+
+  async function saveMatch(matchId: string) {
+    const editState = editingMatches[matchId];
+    if (!editState) return;
+    setSavingMatches(prev => new Set(prev).add(matchId));
+    const [logResult, refResult] = await Promise.all([
+      atualizarPartidaLogistica(matchId, {
+        match_date: editState.match_date || null,
+        match_time: editState.match_time || null,
+        venue_id: editState.venue_id || null,
+      }),
+      atualizarArbitrosPartida(matchId, editState.refereesList),
+    ]);
+    setSavingMatches(prev => {
+      const next = new Set(prev);
+      next.delete(matchId);
+      return next;
+    });
+    if ("error" in logResult) { toast("error", logResult.error); return; }
+    if ("error" in refResult) { toast("error", refResult.error); return; }
+    setPartidas(prev => prev.map(p =>
+      p.id === matchId
+        ? {
+            ...p,
+            match_date: editState.match_date || null,
+            match_time: editState.match_time || null,
+            venue_id: editState.venue_id || null,
+            match_referees: editState.refereesList.map(r => ({
+              referee_id: r.referee_id,
+              referee_role_id: r.referee_role_id,
+            })),
+          }
+        : p
+    ));
+    cancelEditing(matchId);
+    toast("success", "Partida atualizada.");
+  }
 
   // Informações
   const [fullName, setFullName] = useState(phase.full_name ?? "");
@@ -177,10 +340,45 @@ export default function FaseClient({
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
+  const inputSmClass = "rounded border px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-[var(--color-brand)]";
+  const inputSmStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
 
   const phaseTeamIds = new Set(phaseTeams.map((pt: any) => pt.edition_team_id));
   const teamsInPhase = editionTeams.filter((et: any) => phaseTeamIds.has(et.id));
   const teamsNotInPhase = editionTeams.filter((et: any) => !phaseTeamIds.has(et.id));
+
+  // ── Agrupamento ─────────────────────────────────────────────────────────────
+  const partidasAgrupadas: { roundId: string | null; roundLabel: string; displayOrder: number; matches: any[] }[] = [];
+  const roundMap = new Map(rounds.map((r: any) => [r.id, r]));
+  const grouped = new Map<string | null, any[]>();
+  for (const m of partidas) {
+    const key = m.round_id ?? null;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key)!.push(m);
+  }
+  for (const [roundId, matches] of grouped.entries()) {
+    if (roundId === null) continue;
+    const round = roundMap.get(roundId);
+    const label = round ? (round.custom_label ?? round.name) : "Rodada desconhecida";
+    const order = round ? round.display_order : 9999;
+    const sorted = [...matches].sort((a, b) => {
+      const da = a.match_date ?? "9999-99-99";
+      const db = b.match_date ?? "9999-99-99";
+      if (da !== db) return da.localeCompare(db);
+      return (a.match_time ?? "").localeCompare(b.match_time ?? "");
+    });
+    partidasAgrupadas.push({ roundId, roundLabel: label, displayOrder: order, matches: sorted });
+  }
+  partidasAgrupadas.sort((a, b) => a.displayOrder - b.displayOrder);
+  if (grouped.has(null)) {
+    const semRodada = [...(grouped.get(null) ?? [])].sort((a, b) => {
+      const da = a.match_date ?? "9999-99-99";
+      const db = b.match_date ?? "9999-99-99";
+      if (da !== db) return da.localeCompare(db);
+      return (a.match_time ?? "").localeCompare(b.match_time ?? "");
+    });
+    partidasAgrupadas.push({ roundId: null, roundLabel: "Sem rodada", displayOrder: 99999, matches: semRodada });
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -191,9 +389,7 @@ export default function FaseClient({
     fd.append("display_order", displayOrder);
     fd.append("half_duration_minutes", halfDuration);
     fd.append("is_current", String(isCurrent));
-    if (isKnockout || isConference) {
-      fd.append("penalty_tiebreaker_type", tiebreakerType);
-    }
+    if (isKnockout || isConference) fd.append("penalty_tiebreaker_type", tiebreakerType);
     if (isClassificatory) {
       fd.append("points_win", pointsWin);
       fd.append("points_draw", pointsDraw);
@@ -233,13 +429,10 @@ export default function FaseClient({
     setSavingRound(false);
     if ("error" in result) { setRoundError(result.error); return; }
     setRounds(prev => [...prev, {
-      id: result.id,
-      name: roundName.trim(),
+      id: result.id, name: roundName.trim(),
       custom_label: roundCustomLabel.trim() || null,
       display_order: Number(roundOrder || rounds.length + 1),
-      is_current: false,
-      legs: roundLegs,
-      aggregate_score: roundAggregate,
+      is_current: false, legs: roundLegs, aggregate_score: roundAggregate,
     }]);
     setShowRoundForm(false);
     setRoundName(""); setRoundCustomLabel(""); setRoundOrder("");
@@ -288,11 +481,9 @@ export default function FaseClient({
     if ("error" in result) { toast("error", result.error); return; }
     if ("deactivated" in result && result.deactivated) {
       toast("success", "Equipe desativada. Ela possui partidas nesta fase e não pôde ser removida completamente.");
-      setPhaseTeams(prev =>
-        prev.map((pt: any) =>
-          pt.edition_team_id === editionTeamId ? { ...pt, is_active: false } : pt
-        )
-      );
+      setPhaseTeams(prev => prev.map((pt: any) =>
+        pt.edition_team_id === editionTeamId ? { ...pt, is_active: false } : pt
+      ));
       return;
     }
     setPhaseTeams(prev => prev.filter((pt: any) => pt.edition_team_id !== editionTeamId));
@@ -354,7 +545,6 @@ export default function FaseClient({
             { label: seasonName, href: `/competicoes/${competitionId}?edicao=${edicaoId}&aba=competicao&comp=fases` },
             { label: fullName || "Fase" },
           ]} />
-
           <div className="mb-4 flex items-center justify-between gap-4">
             <div className="min-w-0">
               <h1 className="font-display text-2xl font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
@@ -383,7 +573,6 @@ export default function FaseClient({
               </button>
             </div>
           </div>
-
           <div className="flex gap-6">
             {tabs.map(tab => (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
@@ -427,14 +616,11 @@ export default function FaseClient({
                 </label>
               </div>
             </div>
-
             {(isKnockout || isConference) && (
               <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
                 <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Configurações do mata-mata</h2>
                 <div className="space-y-3">
-                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                    Configurações de ida/volta e placar agregado são definidas por rodada.
-                  </p>
+                  <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Configurações de ida/volta e placar agregado são definidas por rodada.</p>
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo de desempate final</span>
                     <select value={tiebreakerType} onChange={e => setTiebreakerType(e.target.value)} className={inputClass} style={inputStyle}>
@@ -445,7 +631,6 @@ export default function FaseClient({
                 </div>
               </div>
             )}
-
             {isClassificatory && (
               <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
                 <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Pontuação</h2>
@@ -473,27 +658,17 @@ export default function FaseClient({
           <div className="max-w-2xl space-y-6">
             {teamsInPhase.length > 0 && (
               <div>
-                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                  Na fase ({teamsInPhase.length})
-                </h2>
+                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Na fase ({teamsInPhase.length})</h2>
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                   {teamsInPhase.map((et: any, idx: number) => (
                     <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                      {et.teams?.logo_url && (
-                        <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />
-                      )}
-                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                        {et.teams?.full_name ?? "Equipe"}
-                      </span>
+                      {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />}
+                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name ?? "Equipe"}</span>
                       {phaseTeams.find((pt: any) => pt.edition_team_id === et.id)?.is_active === false && (
-                        <span className="font-mono text-xs rounded px-2 py-0.5"
-                          style={{ backgroundColor: "rgba(255,80,80,0.1)", color: "var(--color-danger)" }}>
-                          inativa
-                        </span>
+                        <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(255,80,80,0.1)", color: "var(--color-danger)" }}>inativa</span>
                       )}
-                      <button type="button" onClick={() => handleRemoveTeamFromPhase(et.id)}
-                        disabled={processing === et.id}
+                      <button type="button" onClick={() => handleRemoveTeamFromPhase(et.id)} disabled={processing === et.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-1.5 py-1 disabled:opacity-50"
                         style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
                         <X size={11} />
@@ -505,21 +680,14 @@ export default function FaseClient({
             )}
             {teamsNotInPhase.length > 0 && (
               <div>
-                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                  Disponíveis para adicionar
-                </h2>
+                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Disponíveis para adicionar</h2>
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                   {teamsNotInPhase.map((et: any, idx: number) => (
                     <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                      {et.teams?.logo_url && (
-                        <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />
-                      )}
-                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                        {et.teams?.full_name ?? "Equipe"}
-                      </span>
-                      <button type="button" onClick={() => handleAddTeamToPhase(et.id)}
-                        disabled={processing === et.id}
+                      {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />}
+                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name ?? "Equipe"}</span>
+                      <button type="button" onClick={() => handleAddTeamToPhase(et.id)} disabled={processing === et.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-50"
                         style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                         <Plus size={11} /> Adicionar
@@ -529,11 +697,7 @@ export default function FaseClient({
                 </div>
               </div>
             )}
-            {editionTeams.length === 0 && (
-              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                Nenhuma equipe inscrita nesta edição.
-              </p>
-            )}
+            {editionTeams.length === 0 && <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe inscrita nesta edição.</p>}
           </div>
         )}
 
@@ -547,7 +711,6 @@ export default function FaseClient({
                 <Plus size={14} /> {isConference ? "Nova conferência" : "Novo grupo"}
               </button>
             </div>
-
             {showGroupForm && (
               <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <label className="flex flex-col gap-1">
@@ -558,10 +721,7 @@ export default function FaseClient({
                 </label>
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => { setShowGroupForm(false); setGroupName(""); }}
-                    className="rounded-lg border px-3 py-1.5 text-sm"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                    Cancelar
-                  </button>
+                    className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                   <button type="button" onClick={handleCreateGroup} disabled={savingGroup || !groupName.trim()}
                     className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
@@ -570,49 +730,30 @@ export default function FaseClient({
                 </div>
               </div>
             )}
-
             {groups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>
-                  {isConference ? "Sem conferências" : "Sem grupos"}
-                </p>
+                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>{isConference ? "Sem conferências" : "Sem grupos"}</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {groups.sort((a, b) => a.display_order - b.display_order).map((g: any) => {
-                  const memberIds = new Set(
-                    groupTeams.filter((gt: any) => gt.group_id === g.id).map((gt: any) => gt.edition_team_id)
-                  );
+                  const memberIds = new Set(groupTeams.filter((gt: any) => gt.group_id === g.id).map((gt: any) => gt.edition_team_id));
                   const members = editionTeams.filter((et: any) => memberIds.has(et.id));
                   const available = editionTeams.filter((et: any) => !memberIds.has(et.id));
-
                   return (
                     <div key={g.id} className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                       <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
                         {editingGroupId === g.id ? (
                           <>
-                            <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)}
-                              className={inputClass + " flex-1"} style={inputStyle} autoFocus />
-                            <button type="button" onClick={() => handleUpdateGroup(g.id)}
-                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                              <Check size={12} />
-                            </button>
-                            <button type="button" onClick={() => setEditingGroupId(null)}
-                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                              <X size={12} />
-                            </button>
+                            <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)} className={inputClass + " flex-1"} style={inputStyle} autoFocus />
+                            <button type="button" onClick={() => handleUpdateGroup(g.id)} className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}><Check size={12} /></button>
+                            <button type="button" onClick={() => setEditingGroupId(null)} className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}><X size={12} /></button>
                           </>
                         ) : (
                           <>
                             <span className="flex-1 font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{g.name}</span>
-                            <button type="button" onClick={() => { setEditingGroupId(g.id); setEditGroupName(g.name); }}
-                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                              <Pencil size={11} />
-                            </button>
-                            <button type="button" onClick={() => handleDeleteGroup(g.id)}
-                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                              <Trash2 size={11} />
-                            </button>
+                            <button type="button" onClick={() => { setEditingGroupId(g.id); setEditGroupName(g.name); }} className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}><Pencil size={11} /></button>
+                            <button type="button" onClick={() => handleDeleteGroup(g.id)} className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}><Trash2 size={11} /></button>
                           </>
                         )}
                       </div>
@@ -621,12 +762,9 @@ export default function FaseClient({
                           style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                           {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-6 w-6 rounded object-contain" />}
                           <span className="flex-1 text-sm" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name}</span>
-                          <button type="button" onClick={() => handleRemoveTeamFromGroup(g.id, et.id)}
-                            disabled={processing === `${g.id}-${et.id}`}
+                          <button type="button" onClick={() => handleRemoveTeamFromGroup(g.id, et.id)} disabled={processing === `${g.id}-${et.id}`}
                             className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-1.5 py-1 disabled:opacity-50"
-                            style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                            <X size={11} />
-                          </button>
+                            style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}><X size={11} /></button>
                         </div>
                       ))}
                       {available.length > 0 && (
@@ -634,9 +772,7 @@ export default function FaseClient({
                           <select defaultValue="" onChange={e => { if (e.target.value) handleAddTeamToGroup(g.id, e.target.value); e.target.value = ""; }}
                             className={inputClass + " w-full"} style={inputStyle}>
                             <option value="" disabled>+ Adicionar equipe ao grupo</option>
-                            {available.map((et: any) => (
-                              <option key={et.id} value={et.id}>{et.teams?.full_name ?? et.id}</option>
-                            ))}
+                            {available.map((et: any) => <option key={et.id} value={et.id}>{et.teams?.full_name ?? et.id}</option>)}
                           </select>
                         </div>
                       )}
@@ -658,41 +794,32 @@ export default function FaseClient({
                 <Plus size={14} /> {hasMatchups ? "Novo estágio" : "Nova rodada"}
               </button>
             </div>
-
-            {roundError && (
-              <p className="text-sm" style={{ color: "var(--color-danger)" }}>{roundError}</p>
-            )}
-
+            {roundError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{roundError}</p>}
             {showRoundForm && (
               <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      {hasMatchups ? "Tipo" : "Nome"}
-                    </span>
+                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Tipo" : "Nome"}</span>
                     {hasMatchups ? (
                       <select value={roundName} onChange={e => setRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
                         <option value="">Selecione…</option>
                         {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
                     ) : (
-                      <input type="text" value={roundName} onChange={e => setRoundName(e.target.value)}
-                        placeholder="Ex: Rodada 1" className={inputClass} style={inputStyle} autoFocus />
+                      <input type="text" value={roundName} onChange={e => setRoundName(e.target.value)} placeholder="Ex: Rodada 1" className={inputClass} style={inputStyle} autoFocus />
                     )}
                   </label>
                   {hasMatchups && (
                     <label className="flex flex-col gap-1">
                       <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido</span>
-                      <input type="text" value={roundCustomLabel} onChange={e => setRoundCustomLabel(e.target.value)}
-                        placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
+                      <input type="text" value={roundCustomLabel} onChange={e => setRoundCustomLabel(e.target.value)} placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
                     </label>
                   )}
                 </div>
                 {hasMatchups && (
                   <label className="flex flex-col gap-1">
                     <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
-                    <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)}
-                      className={inputClass} style={inputStyle} />
+                    <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)} className={inputClass} style={inputStyle} />
                   </label>
                 )}
                 {hasMatchups && (
@@ -711,10 +838,7 @@ export default function FaseClient({
                 )}
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => { setShowRoundForm(false); setRoundName(""); setRoundCustomLabel(""); setRoundOrder(""); setRoundLegs(false); setRoundAggregate(false); }}
-                    className="rounded-lg border px-3 py-1.5 text-sm"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                    Cancelar
-                  </button>
+                    className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                   <button type="button" onClick={handleCreateRound} disabled={savingRound || !roundName.trim()}
                     className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
                     style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
@@ -723,14 +847,11 @@ export default function FaseClient({
                 </div>
               </div>
             )}
-
             {rounds.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem rodadas</p>
                 <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  {hasMatchups
-                    ? "Adicione os estágios: Final, Semifinal, Quartas de Final…"
-                    : "Crie a primeira rodada para começar."}
+                  {hasMatchups ? "Adicione os estágios: Final, Semifinal, Quartas de Final…" : "Crie a primeira rodada para começar."}
                 </p>
               </div>
             ) : (
@@ -741,31 +862,26 @@ export default function FaseClient({
                       <div className="p-4 space-y-3">
                         <div className="grid grid-cols-2 gap-3">
                           <label className="flex flex-col gap-1">
-                            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                              {hasMatchups ? "Tipo" : "Nome"}
-                            </span>
+                            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Tipo" : "Nome"}</span>
                             {hasMatchups ? (
                               <select value={editRoundName} onChange={e => setEditRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
                                 {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
                               </select>
                             ) : (
-                              <input type="text" value={editRoundName} onChange={e => setEditRoundName(e.target.value)}
-                                className={inputClass} style={inputStyle} autoFocus />
+                              <input type="text" value={editRoundName} onChange={e => setEditRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus />
                             )}
                           </label>
                           {hasMatchups && (
                             <label className="flex flex-col gap-1">
                               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido</span>
-                              <input type="text" value={editRoundCustomLabel} onChange={e => setEditRoundCustomLabel(e.target.value)}
-                                placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
+                              <input type="text" value={editRoundCustomLabel} onChange={e => setEditRoundCustomLabel(e.target.value)} placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
                             </label>
                           )}
                         </div>
                         {hasMatchups && (
                           <label className="flex flex-col gap-1">
                             <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
-                            <input type="number" value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)}
-                              className={inputClass} style={inputStyle} />
+                            <input type="number" value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)} className={inputClass} style={inputStyle} />
                           </label>
                         )}
                         {hasMatchups && (
@@ -788,26 +904,17 @@ export default function FaseClient({
                         </label>
                         <div className="flex gap-2 justify-end">
                           <button type="button" onClick={() => setEditingRoundId(null)}
-                            className="rounded-lg border px-3 py-1.5 text-sm"
-                            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                            Cancelar
-                          </button>
+                            className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                           <button type="button" onClick={() => handleUpdateRound(r.id)}
                             className="rounded-lg px-3 py-1.5 text-sm font-medium"
-                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-                            Salvar
-                          </button>
+                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>Salvar</button>
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-4 px-5 py-3 group hover:bg-[rgba(255,255,255,0.02)]">
-                        <span className="font-mono text-xs w-6 text-right shrink-0" style={{ color: "var(--color-text-secondary)" }}>
-                          {r.display_order}
-                        </span>
+                        <span className="font-mono text-xs w-6 text-right shrink-0" style={{ color: "var(--color-text-secondary)" }}>{r.display_order}</span>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>
-                            {r.custom_label ?? r.name}
-                          </p>
+                          <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{r.custom_label ?? r.name}</p>
                           {hasMatchups && (r.legs || r.aggregate_score) && (
                             <p className="font-mono text-xs mt-0.5" style={{ color: "var(--color-text-secondary)" }}>
                               {r.legs ? "Ida e volta" : ""}{r.legs && r.aggregate_score ? " · " : ""}{r.aggregate_score ? "Agregado" : ""}
@@ -815,10 +922,7 @@ export default function FaseClient({
                           )}
                         </div>
                         {r.is_current && (
-                          <span className="font-mono text-xs rounded px-2 py-0.5"
-                            style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-                            atual
-                          </span>
+                          <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>atual</span>
                         )}
                         <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                           {isClassificatory && (
@@ -829,15 +933,7 @@ export default function FaseClient({
                             </Link>
                           )}
                           <button type="button"
-                            onClick={() => {
-                              setEditingRoundId(r.id);
-                              setEditRoundName(r.name);
-                              setEditRoundCustomLabel(r.custom_label ?? "");
-                              setEditRoundOrder(String(r.display_order));
-                              setEditRoundCurrent(r.is_current ?? false);
-                              setEditRoundLegs(r.legs ?? false);
-                              setEditRoundAggregate(r.aggregate_score ?? false);
-                            }}
+                            onClick={() => { setEditingRoundId(r.id); setEditRoundName(r.name); setEditRoundCustomLabel(r.custom_label ?? ""); setEditRoundOrder(String(r.display_order)); setEditRoundCurrent(r.is_current ?? false); setEditRoundLegs(r.legs ?? false); setEditRoundAggregate(r.aggregate_score ?? false); }}
                             className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                             <Pencil size={11} />
                           </button>
@@ -857,7 +953,7 @@ export default function FaseClient({
 
         {/* PARTIDAS */}
         {activeTab === "partidas" && (
-          <div className="max-w-5xl">
+          <div className="max-w-5xl pb-24">
             {loadingPartidas ? (
               <div className="flex items-center justify-center py-24">
                 <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando partidas…</p>
@@ -865,19 +961,279 @@ export default function FaseClient({
             ) : partidas.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Nenhuma partida cadastrada nesta fase ainda.
-                </p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>Nenhuma partida cadastrada nesta fase ainda.</p>
               </div>
             ) : (
-              <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                {partidas.length} partida{partidas.length !== 1 ? "s" : ""} carregada{partidas.length !== 1 ? "s" : ""}. (estrutura da aba em construção)
-              </p>
+              <div className="space-y-8">
+                {partidasAgrupadas.map(grupo => {
+                  const groupIds = grupo.matches.map((m: any) => m.id);
+                  const allGroupSelected = groupIds.every(id => selectedIds.has(id));
+                  const someGroupSelected = groupIds.some(id => selectedIds.has(id));
+
+                  return (
+                    <div key={grupo.roundId ?? "__sem_rodada__"}>
+                      {/* Cabeçalho da rodada */}
+                      <div className="mb-3 flex items-center gap-3">
+                        {/* Checkbox "Selecionar tudo" da rodada */}
+                        <input
+                          type="checkbox"
+                          checked={allGroupSelected}
+                          ref={el => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected; }}
+                          onChange={() => toggleSelectGroup(groupIds, allGroupSelected)}
+                          className="h-3.5 w-3.5 rounded shrink-0"
+                          style={{ accentColor: "var(--color-brand)" }}
+                        />
+                        <h3 className="font-mono text-xs uppercase tracking-widest font-semibold" style={{ color: "var(--color-text-secondary)" }}>
+                          {grupo.roundLabel}
+                        </h3>
+                        <div className="flex-1 h-px" style={{ backgroundColor: "var(--color-border)" }} />
+                        <span className="font-mono text-xs" style={{ color: "#A6A6A6" }}>
+                          {grupo.matches.length} jogo{grupo.matches.length !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+
+                      {/* Tabela */}
+                      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                        {grupo.matches.map((m: any, idx: number) => {
+                          const isEditing = !!editingMatches[m.id];
+                          const isSaving = savingMatches.has(m.id);
+                          const editState = editingMatches[m.id];
+                          const isSelected = selectedIds.has(m.id);
+                          const statusInfo = STATUS_LABEL[m.status] ?? STATUS_LABEL["scheduled"];
+                          const venueName = venues.find((v: any) => v.id === m.venue_id)?.short_name
+                            ?? venues.find((v: any) => v.id === m.venue_id)?.full_name
+                            ?? null;
+
+                          return (
+                            <div key={m.id} style={{
+                              borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
+                              backgroundColor: isSelected ? "rgba(191,242,5,0.04)" : undefined,
+                            }}>
+                              {/* Linha principal */}
+                              <div className="group grid items-center px-4 py-3"
+                                style={{
+                                  gridTemplateColumns: "2rem 1fr 5rem",
+                                  backgroundColor: isEditing ? "rgba(255,255,255,0.03)" : undefined,
+                                }}>
+                                {/* Checkbox individual */}
+                                <div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleSelect(m.id)}
+                                    className="h-3.5 w-3.5 rounded"
+                                    style={{ accentColor: "var(--color-brand)" }}
+                                  />
+                                </div>
+
+                                {/* Info */}
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <div className="flex items-center gap-1.5">
+                                      {m.team_a?.logo_url && <img src={m.team_a.logo_url} alt="" className="h-5 w-5 shrink-0 rounded object-contain" />}
+                                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                                        {m.team_a?.abbreviation ?? m.team_a?.short_name ?? m.team_a?.full_name ?? "—"}
+                                      </span>
+                                    </div>
+                                    {m.status === "finished" ? (
+                                      <span className="font-mono text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>{m.score_a} – {m.score_b}</span>
+                                    ) : (
+                                      <span className="font-mono text-xs" style={{ color: "#A6A6A6" }}>×</span>
+                                    )}
+                                    <div className="flex items-center gap-1.5">
+                                      {m.team_b?.logo_url && <img src={m.team_b.logo_url} alt="" className="h-5 w-5 shrink-0 rounded object-contain" />}
+                                      <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                                        {m.team_b?.abbreviation ?? m.team_b?.short_name ?? m.team_b?.full_name ?? "—"}
+                                      </span>
+                                    </div>
+                                    <span className="inline-block font-mono text-xs rounded px-2 py-0.5 ml-1"
+                                      style={{ backgroundColor: statusInfo.colors.bg, color: statusInfo.colors.text }}>
+                                      {statusInfo.label}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{formatDate(m.match_date)}</span>
+                                    <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{formatTime(m.match_time)}</span>
+                                    {venueName && <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{venueName}</span>}
+                                    {(m.match_referees ?? []).length > 0 && (
+                                      <span className="text-xs" style={{ color: "#A6A6A6" }}>
+                                        {(m.match_referees as any[]).map((mr: any) => {
+                                          const ref = referees.find((r: any) => r.id === mr.referee_id);
+                                          return ref?.full_name ?? "";
+                                        }).filter(Boolean).join(", ")}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Botão editar */}
+                                <div className="flex justify-end">
+                                  {isEditing ? (
+                                    <button type="button" onClick={() => cancelEditing(m.id)}
+                                      className="rounded border px-2 py-1 font-mono text-xs"
+                                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                                      Cancelar
+                                    </button>
+                                  ) : (
+                                    <button type="button" onClick={() => startEditing(m)}
+                                      className="rounded border px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                                      <Pencil size={11} />
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Painel de edição */}
+                              {isEditing && editState && (
+                                <div className="px-4 pb-4 border-t space-y-4"
+                                  style={{ borderColor: "var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+                                  <div className="pt-3 grid grid-cols-3 gap-3">
+                                    <label className="flex flex-col gap-1">
+                                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Data</span>
+                                      <input type="date" value={editState.match_date}
+                                        onChange={e => updateEditField(m.id, { match_date: e.target.value })}
+                                        className={inputSmClass} style={inputSmStyle} />
+                                    </label>
+                                    <label className="flex flex-col gap-1">
+                                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Hora</span>
+                                      <input type="time" value={editState.match_time}
+                                        onChange={e => updateEditField(m.id, { match_time: e.target.value })}
+                                        className={inputSmClass} style={inputSmStyle} />
+                                    </label>
+                                    <label className="flex flex-col gap-1">
+                                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Local</span>
+                                      <select value={editState.venue_id}
+                                        onChange={e => updateEditField(m.id, { venue_id: e.target.value })}
+                                        className={inputSmClass} style={inputSmStyle}>
+                                        <option value="">Sem local</option>
+                                        {venues.map((v: any) => (
+                                          <option key={v.id} value={v.id}>{v.short_name ?? v.full_name}</option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                  </div>
+
+                                  {/* Árbitros */}
+                                  <div>
+                                    <button type="button"
+                                      onClick={() => updateEditField(m.id, { showReferees: !editState.showReferees })}
+                                      className="flex items-center gap-1.5 font-mono text-xs"
+                                      style={{ color: "var(--color-text-secondary)" }}>
+                                      <span>{editState.showReferees ? "▾" : "▸"}</span>
+                                      Árbitros
+                                      {editState.refereesList.length > 0 && (
+                                        <span className="rounded px-1.5 py-0.5 font-mono text-xs"
+                                          style={{ backgroundColor: "rgba(191,242,5,0.12)", color: "var(--color-brand)" }}>
+                                          {editState.refereesList.length}
+                                        </span>
+                                      )}
+                                    </button>
+                                    {editState.showReferees && (
+                                      <div className="mt-2 space-y-2">
+                                        {editState.refereesList.length > 0 && (
+                                          <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--color-border)" }}>
+                                            {editState.refereesList.map((entry, i) => {
+                                              const ref = referees.find((r: any) => r.id === entry.referee_id);
+                                              const role = refereeRoles.find((r: any) => r.id === entry.referee_role_id);
+                                              return (
+                                                <div key={entry.referee_id} className="flex items-center gap-3 px-3 py-2"
+                                                  style={{ borderTop: i > 0 ? "1px solid var(--color-border)" : "none" }}>
+                                                  <span className="flex-1 text-xs" style={{ color: "var(--color-text-primary)" }}>{ref?.full_name ?? entry.referee_id}</span>
+                                                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{role?.full_name ?? entry.referee_role_id}</span>
+                                                  <button type="button" onClick={() => removeRefereeFromList(m.id, entry.referee_id)}
+                                                    className="rounded px-1 py-0.5" style={{ color: "var(--color-danger)" }}>
+                                                    <X size={11} />
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        )}
+                                        <div className="flex items-end gap-2">
+                                          <label className="flex flex-col gap-1 flex-1">
+                                            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Árbitro</span>
+                                            <select value={editState.newRefereeId}
+                                              onChange={e => updateEditField(m.id, { newRefereeId: e.target.value })}
+                                              className={inputSmClass} style={inputSmStyle}>
+                                              <option value="">Selecione…</option>
+                                              {referees
+                                                .filter((r: any) => !editState.refereesList.some(e => e.referee_id === r.id))
+                                                .map((r: any) => <option key={r.id} value={r.id}>{r.full_name}</option>)
+                                              }
+                                            </select>
+                                          </label>
+                                          <label className="flex flex-col gap-1 flex-1">
+                                            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Função</span>
+                                            <select value={editState.newRefereeRoleId}
+                                              onChange={e => updateEditField(m.id, { newRefereeRoleId: e.target.value })}
+                                              className={inputSmClass} style={inputSmStyle}>
+                                              <option value="">Selecione…</option>
+                                              {refereeRoles.map((r: any) => <option key={r.id} value={r.id}>{r.full_name}</option>)}
+                                            </select>
+                                          </label>
+                                          <button type="button" onClick={() => addRefereeToList(m.id)}
+                                            disabled={!editState.newRefereeId || !editState.newRefereeRoleId}
+                                            className="flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-40"
+                                            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                                            <Plus size={11} /> Adicionar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex justify-end gap-2 pt-1">
+                                    <button type="button" onClick={() => cancelEditing(m.id)}
+                                      className="rounded-lg border px-3 py-1.5 text-xs"
+                                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
+                                    <button type="button" onClick={() => saveMatch(m.id)} disabled={isSaving}
+                                      className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+                                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                                      {isSaving ? "Salvando…" : "Salvar"}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
 
       </div>
+
+      {/* ── Barra de seleção múltipla (rodapé fixo) ── */}
+      {activeTab === "partidas" && selectedIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 flex items-center justify-between px-8 py-4 border-t"
+          style={{
+            backgroundColor: "var(--color-surface)",
+            borderColor: "var(--color-border)",
+          }}>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+              {selectedIds.size} partida{selectedIds.size !== 1 ? "s" : ""} selecionada{selectedIds.size !== 1 ? "s" : ""}
+            </span>
+            <button type="button" onClick={clearSelection}
+              className="font-mono text-xs"
+              style={{ color: "var(--color-text-secondary)" }}>
+              Limpar
+            </button>
+          </div>
+          <button type="button" onClick={handleExportarSumulas} disabled={exportingPDF}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+            <FileText size={14} />
+            {exportingPDF ? "Gerando PDF…" : "Exportar Súmulas"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
