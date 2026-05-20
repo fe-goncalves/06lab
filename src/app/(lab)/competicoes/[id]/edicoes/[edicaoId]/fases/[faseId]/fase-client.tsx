@@ -13,8 +13,9 @@ import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Pencil, Check, X } from "lucide-react";
+import { createClient } from "@/lib/supabase";
 
 type Props = {
   phase: any;
@@ -72,6 +73,7 @@ export default function FaseClient({
     { key: "equipes", label: "EQUIPES" },
     ...(hasGroups ? [{ key: "grupos", label: isConference ? "CONFERÊNCIAS" : "GRUPOS" }] : []),
     { key: "rodadas", label: "RODADAS" },
+    { key: "partidas", label: "PARTIDAS" },
   ];
 
   const [activeTab, setActiveTab] = useState<string>("informacoes");
@@ -79,6 +81,60 @@ export default function FaseClient({
   const [phaseTeams, setPhaseTeams] = useState(initialPhaseTeams);
   const [groups, setGroups] = useState(initialGroups);
   const [groupTeams, setGroupTeams] = useState(initialGroupTeams);
+
+  // ── Partidas ────────────────────────────────────────────────────────────────
+  const [partidas, setPartidas] = useState<any[]>([]);
+  const [venues, setVenues] = useState<any[]>([]);
+  const [referees, setReferees] = useState<any[]>([]);
+  const [refereeRoles, setRefereeRoles] = useState<any[]>([]);
+  const [loadingPartidas, setLoadingPartidas] = useState(false);
+
+  async function loadPartidas() {
+    setLoadingPartidas(true);
+    const supabase = createClient();
+
+    const [
+      { data: matchesRaw },
+      { data: venuesRaw },
+      { data: refereesRaw },
+      { data: rolesRaw },
+    ] = await Promise.all([
+      supabase
+        .from("matches")
+        .select(`
+          id, phase_id, round_id, match_date, match_time, venue_id,
+          status, score_a, score_b,
+          team_a:teams!matches_team_a_id_fkey(id, full_name, short_name, abbreviation, logo_url),
+          team_b:teams!matches_team_b_id_fkey(id, full_name, short_name, abbreviation, logo_url),
+          match_referees(id, referee_id, referee_role_id)
+        `)
+        .eq("phase_id", phase.id)
+        .order("match_date", { ascending: true }),
+      supabase
+        .from("venues")
+        .select("id, full_name, short_name")
+        .order("full_name"),
+      supabase
+        .from("referees")
+        .select("id, full_name")
+        .order("full_name"),
+      supabase
+        .from("referee_roles")
+        .select("id, full_name")
+        .order("full_name"),
+    ]);
+
+    setPartidas(matchesRaw ?? []);
+    setVenues(venuesRaw ?? []);
+    setReferees(refereesRaw ?? []);
+    setRefereeRoles(rolesRaw ?? []);
+    setLoadingPartidas(false);
+  }
+
+  useEffect(() => {
+    loadPartidas();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase.id]);
 
   // Informações
   const [fullName, setFullName] = useState(phase.full_name ?? "");
@@ -414,98 +470,91 @@ export default function FaseClient({
 
         {/* EQUIPES */}
         {activeTab === "equipes" && (
-          <div className="max-w-2xl space-y-4">
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-              <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-                <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                  Participantes da fase ({teamsInPhase.length})
+          <div className="max-w-2xl space-y-6">
+            {teamsInPhase.length > 0 && (
+              <div>
+                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                  Na fase ({teamsInPhase.length})
                 </h2>
-              </div>
-              {teamsInPhase.length === 0 ? (
-                <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe adicionada.</p>
-              ) : (
-                teamsInPhase.map((et: any, idx: number) => (
-                  <div key={et.id} className="flex items-center gap-3 px-5 py-3 group"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                    {et.teams?.logo_url ? (
-                      <img src={et.teams.logo_url} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
-                    ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-xs font-bold"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
-                      </div>
-                    )}
-                    <p className="flex-1 font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {et.teams?.full_name ?? "—"}
-                    </p>
-                    <button type="button" onClick={() => handleRemoveTeamFromPhase(et.id)}
-                      disabled={processing === et.id}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                      style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                      Remover
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            {teamsNotInPhase.length > 0 && (
-              <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-                  <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
-                    Disponíveis ({teamsNotInPhase.length})
-                  </h2>
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                  {teamsInPhase.map((et: any, idx: number) => (
+                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
+                      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                      {et.teams?.logo_url && (
+                        <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />
+                      )}
+                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                        {et.teams?.full_name ?? "Equipe"}
+                      </span>
+                      {phaseTeams.find((pt: any) => pt.edition_team_id === et.id)?.is_active === false && (
+                        <span className="font-mono text-xs rounded px-2 py-0.5"
+                          style={{ backgroundColor: "rgba(255,80,80,0.1)", color: "var(--color-danger)" }}>
+                          inativa
+                        </span>
+                      )}
+                      <button type="button" onClick={() => handleRemoveTeamFromPhase(et.id)}
+                        disabled={processing === et.id}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-1.5 py-1 disabled:opacity-50"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                {teamsNotInPhase.map((et: any, idx: number) => (
-                  <div key={et.id} className="flex items-center gap-3 px-5 py-3 group"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: 0.55, transition: "opacity 0.15s" }}
-                    onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                    onMouseLeave={e => (e.currentTarget.style.opacity = "0.55")}>
-                    {et.teams?.logo_url ? (
-                      <img src={et.teams.logo_url} alt="" className="h-8 w-8 rounded object-contain shrink-0" />
-                    ) : (
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border text-xs font-bold"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
-                      </div>
-                    )}
-                    <p className="flex-1 font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {et.teams?.full_name ?? "—"}
-                    </p>
-                    <button type="button" onClick={() => handleAddTeamToPhase(et.id)}
-                      disabled={processing === et.id}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded border px-2 py-1 font-mono text-xs disabled:opacity-50"
-                      style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-                      <Plus size={11} /> Adicionar
-                    </button>
-                  </div>
-                ))}
               </div>
+            )}
+            {teamsNotInPhase.length > 0 && (
+              <div>
+                <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>
+                  Disponíveis para adicionar
+                </h2>
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                  {teamsNotInPhase.map((et: any, idx: number) => (
+                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
+                      style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                      {et.teams?.logo_url && (
+                        <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />
+                      )}
+                      <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                        {et.teams?.full_name ?? "Equipe"}
+                      </span>
+                      <button type="button" onClick={() => handleAddTeamToPhase(et.id)}
+                        disabled={processing === et.id}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-50"
+                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        <Plus size={11} /> Adicionar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {editionTeams.length === 0 && (
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                Nenhuma equipe inscrita nesta edição.
+              </p>
             )}
           </div>
         )}
 
         {/* GRUPOS / CONFERÊNCIAS */}
-        {activeTab === "grupos" && (
-          <div className="max-w-3xl space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                {groups.length} {isConference ? "conferência" : "grupo"}{groups.length !== 1 ? "s" : ""}
-              </p>
-              <button type="button" onClick={() => setShowGroupForm(v => !v)}
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                <Plus size={12} /> {isConference ? "Nova conferência" : "Novo grupo"}
+        {activeTab === "grupos" && hasGroups && (
+          <div className="max-w-2xl space-y-6">
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setShowGroupForm(true)}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                <Plus size={14} /> {isConference ? "Nova conferência" : "Novo grupo"}
               </button>
             </div>
 
             {showGroupForm && (
               <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nome *</span>
+                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Nome</span>
                   <input type="text" value={groupName} onChange={e => setGroupName(e.target.value)}
                     placeholder={isConference ? "Ex: Conferência Leste" : "Ex: Grupo A"}
-                    className={inputClass} style={inputStyle} />
+                    className={inputClass} style={inputStyle} autoFocus />
                 </label>
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => { setShowGroupForm(false); setGroupName(""); }}
@@ -525,91 +574,68 @@ export default function FaseClient({
             {groups.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>
-                  Sem {isConference ? "conferências" : "grupos"}
-                </p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Crie e distribua as equipes nos {isConference ? "conferências" : "grupos"}.
+                  {isConference ? "Sem conferências" : "Sem grupos"}
                 </p>
               </div>
             ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                {groups.sort((a, b) => a.display_order - b.display_order).map(group => {
-                  const teamsInGroup = groupTeams.filter((gt: any) => gt.group_id === group.id);
-                  const teamIdsInGroup = new Set(teamsInGroup.map((gt: any) => gt.edition_team_id));
-                  const teamsAvailable = teamsInPhase.filter((et: any) => !teamIdsInGroup.has(et.id));
+              <div className="space-y-4">
+                {groups.sort((a, b) => a.display_order - b.display_order).map((g: any) => {
+                  const memberIds = new Set(
+                    groupTeams.filter((gt: any) => gt.group_id === g.id).map((gt: any) => gt.edition_team_id)
+                  );
+                  const members = editionTeams.filter((et: any) => memberIds.has(et.id));
+                  const available = editionTeams.filter((et: any) => !memberIds.has(et.id));
 
                   return (
-                    <div key={group.id} className="rounded-xl border overflow-hidden"
-                      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                      <div className="flex items-center gap-3 px-5 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
-                        {editingGroupId === group.id ? (
+                    <div key={g.id} className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                      <div className="flex items-center gap-3 px-4 py-3 border-b" style={{ borderColor: "var(--color-border)" }}>
+                        {editingGroupId === g.id ? (
                           <>
                             <input type="text" value={editGroupName} onChange={e => setEditGroupName(e.target.value)}
-                              className="flex-1 rounded-lg border px-2 py-1 text-sm outline-none" style={inputStyle} autoFocus />
-                            <button type="button" onClick={() => handleUpdateGroup(group.id)}
-                              className="rounded border px-2 py-1" style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                              className={inputClass + " flex-1"} style={inputStyle} autoFocus />
+                            <button type="button" onClick={() => handleUpdateGroup(g.id)}
+                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
                               <Check size={12} />
                             </button>
-                            <button type="button" onClick={() => setEditingGroupId(null)} style={{ color: "var(--color-text-secondary)" }}>
-                              <X size={14} />
+                            <button type="button" onClick={() => setEditingGroupId(null)}
+                              className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                              <X size={12} />
                             </button>
                           </>
                         ) : (
                           <>
-                            <p className="flex-1 font-mono text-xs uppercase tracking-widest font-bold" style={{ color: "var(--color-brand)" }}>
-                              {group.custom_label ?? group.name}
-                            </p>
-                            <button type="button" onClick={() => { setEditingGroupId(group.id); setEditGroupName(group.name); }}
+                            <span className="flex-1 font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{g.name}</span>
+                            <button type="button" onClick={() => { setEditingGroupId(g.id); setEditGroupName(g.name); }}
                               className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                               <Pencil size={11} />
                             </button>
-                            <button type="button" onClick={() => handleDeleteGroup(group.id)}
+                            <button type="button" onClick={() => handleDeleteGroup(g.id)}
                               className="rounded border px-1.5 py-1" style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
                               <Trash2 size={11} />
                             </button>
                           </>
                         )}
                       </div>
-
-                      {teamsInGroup.length === 0 ? (
-                        <p className="px-5 py-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma equipe.</p>
-                      ) : (
-                        teamsInGroup.map((gt: any, idx: number) => {
-                          const et = teamsInPhase.find((e: any) => e.id === gt.edition_team_id);
-                          if (!et) return null;
-                          return (
-                            <div key={gt.edition_team_id} className="flex items-center gap-3 px-5 py-2.5 group"
-                              style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                              {et.teams?.logo_url ? (
-                                <img src={et.teams.logo_url} alt="" className="h-6 w-6 rounded object-contain shrink-0" />
-                              ) : (
-                                <div className="h-6 w-6 shrink-0 rounded border text-xs flex items-center justify-center"
-                                  style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                                  {et.teams?.abbreviation?.slice(0, 2) ?? "?"}
-                                </div>
-                              )}
-                              <p className="flex-1 text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
-                                {et.teams?.full_name ?? "—"}
-                              </p>
-                              <button type="button" onClick={() => handleRemoveTeamFromGroup(group.id, gt.edition_team_id)}
-                                disabled={processing === `${group.id}-${gt.edition_team_id}`}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-1.5 py-0.5 font-mono text-xs"
-                                style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                                <X size={10} />
-                              </button>
-                            </div>
-                          );
-                        })
-                      )}
-
-                      {teamsAvailable.length > 0 && (
-                        <div className="px-5 py-3 border-t" style={{ borderColor: "var(--color-border)" }}>
-                          <select defaultValue=""
-                            onChange={e => { if (e.target.value) handleAddTeamToGroup(group.id, e.target.value); e.target.value = ""; }}
-                            className="w-full rounded-lg border px-2 py-1.5 text-xs outline-none" style={inputStyle}>
-                            <option value="">+ Adicionar equipe…</option>
-                            {teamsAvailable.map((et: any) => (
-                              <option key={et.id} value={et.id}>{et.teams?.full_name ?? "—"}</option>
+                      {members.map((et: any, idx: number) => (
+                        <div key={et.id} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-[rgba(255,255,255,0.02)]"
+                          style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+                          {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-6 w-6 rounded object-contain" />}
+                          <span className="flex-1 text-sm" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name}</span>
+                          <button type="button" onClick={() => handleRemoveTeamFromGroup(g.id, et.id)}
+                            disabled={processing === `${g.id}-${et.id}`}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity rounded border px-1.5 py-1 disabled:opacity-50"
+                            style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ))}
+                      {available.length > 0 && (
+                        <div className="px-4 py-2 border-t" style={{ borderColor: "var(--color-border)" }}>
+                          <select defaultValue="" onChange={e => { if (e.target.value) handleAddTeamToGroup(g.id, e.target.value); e.target.value = ""; }}
+                            className={inputClass + " w-full"} style={inputStyle}>
+                            <option value="" disabled>+ Adicionar equipe ao grupo</option>
+                            {available.map((et: any) => (
+                              <option key={et.id} value={et.id}>{et.teams?.full_name ?? et.id}</option>
                             ))}
                           </select>
                         </div>
@@ -624,39 +650,39 @@ export default function FaseClient({
 
         {/* RODADAS */}
         {activeTab === "rodadas" && (
-          <div className="max-w-2xl">
-            <div className="mb-4 flex items-center justify-between">
-              <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                {rounds.length} rodada{rounds.length !== 1 ? "s" : ""}
-              </p>
-              <button type="button" onClick={() => setShowRoundForm(v => !v)}
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                <Plus size={12} /> Nova rodada
+          <div className="max-w-2xl space-y-4">
+            <div className="flex justify-end">
+              <button type="button" onClick={() => setShowRoundForm(true)}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                <Plus size={14} /> {hasMatchups ? "Novo estágio" : "Nova rodada"}
               </button>
             </div>
 
+            {roundError && (
+              <p className="text-sm" style={{ color: "var(--color-danger)" }}>{roundError}</p>
+            )}
+
             {showRoundForm && (
-              <div className="mb-4 rounded-xl border p-4 space-y-3"
-                style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+              <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="flex flex-col gap-1">
                     <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                      {hasMatchups ? "Tipo *" : "Nome *"}
+                      {hasMatchups ? "Tipo" : "Nome"}
                     </span>
                     {hasMatchups ? (
-                      <select value={roundName} onChange={e => setRoundName(e.target.value)} className={inputClass} style={inputStyle}>
+                      <select value={roundName} onChange={e => setRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
                         <option value="">Selecione…</option>
                         {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
                     ) : (
                       <input type="text" value={roundName} onChange={e => setRoundName(e.target.value)}
-                        placeholder={`Rodada ${rounds.length + 1}`} className={inputClass} style={inputStyle} />
+                        placeholder="Ex: Rodada 1" className={inputClass} style={inputStyle} autoFocus />
                     )}
                   </label>
                   {hasMatchups && (
                     <label className="flex flex-col gap-1">
-                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido (opcional)</span>
+                      <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Apelido</span>
                       <input type="text" value={roundCustomLabel} onChange={e => setRoundCustomLabel(e.target.value)}
                         placeholder="Ex: ROUND OF 16" className={inputClass} style={inputStyle} />
                     </label>
@@ -666,24 +692,23 @@ export default function FaseClient({
                   <label className="flex flex-col gap-1">
                     <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
                     <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)}
-                      placeholder={String(rounds.length + 1)} className={inputClass} style={inputStyle} />
+                      className={inputClass} style={inputStyle} />
                   </label>
                 )}
                 {hasMatchups && (
                   <div className="flex items-center gap-6">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={roundLegs} onChange={e => { setRoundLegs(e.target.checked); if (!e.target.checked) setRoundAggregate(false); }} className="h-4 w-4" />
+                      <input type="checkbox" checked={roundLegs} onChange={e => { setRoundLegs(e.target.checked); if (!e.target.checked) setRoundAggregate(false); }} className="h-3 w-3" />
                       <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Ida e volta</span>
                     </label>
                     {roundLegs && (
                       <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={roundAggregate} onChange={e => setRoundAggregate(e.target.checked)} className="h-4 w-4" />
+                        <input type="checkbox" checked={roundAggregate} onChange={e => setRoundAggregate(e.target.checked)} className="h-3 w-3" />
                         <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Placar agregado</span>
                       </label>
                     )}
                   </div>
                 )}
-                {roundError && <p className="text-sm" style={{ color: "var(--color-danger)" }}>{roundError}</p>}
                 <div className="flex gap-2 justify-end">
                   <button type="button" onClick={() => { setShowRoundForm(false); setRoundName(""); setRoundCustomLabel(""); setRoundOrder(""); setRoundLegs(false); setRoundAggregate(false); }}
                     className="rounded-lg border px-3 py-1.5 text-sm"
@@ -829,6 +854,29 @@ export default function FaseClient({
             )}
           </div>
         )}
+
+        {/* PARTIDAS */}
+        {activeTab === "partidas" && (
+          <div className="max-w-5xl">
+            {loadingPartidas ? (
+              <div className="flex items-center justify-center py-24">
+                <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando partidas…</p>
+              </div>
+            ) : partidas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
+                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
+                  Nenhuma partida cadastrada nesta fase ainda.
+                </p>
+              </div>
+            ) : (
+              <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>
+                {partidas.length} partida{partidas.length !== 1 ? "s" : ""} carregada{partidas.length !== 1 ? "s" : ""}. (estrutura da aba em construção)
+              </p>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );

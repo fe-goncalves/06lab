@@ -560,3 +560,54 @@ export async function deletarConfronto(
   if (error) return { error: error.message };
   return { success: true };
 }
+
+export async function atualizarPartidaLogistica(
+  matchId: string,
+  data: { match_date: string | null; match_time: string | null; venue_id: string | null },
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error } = await supabase
+    .from("matches")
+    .update({
+      match_date: data.match_date || null,
+      match_time: data.match_time || null,
+      venue_id: data.venue_id || null,
+    })
+    .eq("id", matchId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function atualizarArbitrosPartida(
+  matchId: string,
+  referees: { referee_id: string; referee_role_id: string }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { error: deleteError } = await supabase
+    .from("match_referees")
+    .delete()
+    .eq("match_id", matchId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  if (referees.length > 0) {
+    const rows = referees.map(r => ({
+      match_id: matchId,
+      referee_id: r.referee_id,
+      referee_role_id: r.referee_role_id,
+    }));
+    const { error: insertError } = await supabase
+      .from("match_referees")
+      .insert(rows);
+    if (insertError) return { error: insertError.message };
+  }
+
+  return { success: true };
+}
