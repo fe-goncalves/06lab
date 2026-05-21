@@ -321,6 +321,50 @@ export default function RelatoriosPage() {
     exportarCSV(res, `arbitros-partidas-${Date.now()}`);
   }
 
+  async function exportR2Pdf() {
+    const s = r2;
+    if (!s.competitionId) { setMsg("r2", "Selecione a competição."); return; }
+    setS("r2", { loading: true }); setMsg("r2", "");
+    const res = await relatorioEstatisticasAtletas({ competition_id: s.competitionId, edition_id: s.editionId || undefined });
+    setS("r2", { loading: false });
+    if ("error" in res) { setMsg("r2", res.error); return; }
+    if (!res.length) { setMsg("r2", "Nenhum dado encontrado."); return; }
+    await exportarPDF(Object.keys(res[0]), res.map((r) => Object.values(r).map(String)), "Estatísticas de Atletas", `estatisticas-atletas-${Date.now()}`);
+  }
+
+  async function exportR3Pdf() {
+    const s = r3;
+    if (!s.competitionId) { setMsg("r3", "Selecione a competição."); return; }
+    setS("r3", { loading: true }); setMsg("r3", "");
+    const res = await relatorioResultadosPartidas({ competition_id: s.competitionId, edition_id: s.editionId || undefined, phase_id: s.phaseId || undefined });
+    setS("r3", { loading: false });
+    if ("error" in res) { setMsg("r3", res.error); return; }
+    if (!res.length) { setMsg("r3", "Nenhum dado encontrado."); return; }
+    await exportarPDF(Object.keys(res[0]), res.map((r) => Object.values(r).map(String)), "Resultados de Partidas", `resultados-partidas-${Date.now()}`);
+  }
+
+  async function exportR4Pdf() {
+    const s = r4;
+    if (!s.competitionId) { setMsg("r4", "Selecione a competição."); return; }
+    setS("r4", { loading: true }); setMsg("r4", "");
+    const res = await relatorioSuspensoes({ competition_id: s.competitionId, edition_id: s.editionId || undefined });
+    setS("r4", { loading: false });
+    if ("error" in res) { setMsg("r4", res.error); return; }
+    if (!res.length) { setMsg("r4", "Nenhum dado encontrado."); return; }
+    await exportarPDF(Object.keys(res[0]), res.map((r) => Object.values(r).map(String)), "Histórico de Suspensões", `suspensoes-${Date.now()}`);
+  }
+
+  async function exportR5Pdf() {
+    const s = r5;
+    if (!s.competitionId) { setMsg("r5", "Selecione a competição."); return; }
+    setS("r5", { loading: true }); setMsg("r5", "");
+    const res = await relatorioArbitrosPorPartida({ competition_id: s.competitionId, edition_id: s.editionId || undefined, phase_id: s.phaseId || undefined });
+    setS("r5", { loading: false });
+    if ("error" in res) { setMsg("r5", res.error); return; }
+    if (!res.length) { setMsg("r5", "Nenhum dado encontrado."); return; }
+    await exportarPDF(Object.keys(res[0]), res.map((r) => Object.values(r).map(String)), "Árbitros por Partida", `arbitros-partidas-${Date.now()}`);
+  }
+
   async function exportR6() {
     const s = r6;
     if (!s.competitionId) { setMsg("r6", "Selecione a competição."); return; }
@@ -394,28 +438,28 @@ export default function RelatoriosPage() {
         <Card icon={<BarChart2 size={17} strokeWidth={2} />} title="Estatísticas de Atletas" description="Partidas jogadas, gols, assistências e cartões por edição">
           <Filters state={r2} competitions={competitions} onChange={makeOnChange("r2", false, false)} />
           <Msg id="r2" />
-          <BtnRow id="r2" onCsv={exportR2} />
+          <BtnRow id="r2" onCsv={exportR2} onPdf={exportR2Pdf} />
         </Card>
 
         {/* R3 */}
         <Card icon={<FileText size={17} strokeWidth={2} />} title="Resultados de Partidas" description="Data, local, equipes, placar, fase, rodada e status">
           <Filters state={r3} competitions={competitions} showPhase onChange={makeOnChange("r3", true, false)} />
           <Msg id="r3" />
-          <BtnRow id="r3" onCsv={exportR3} />
+          <BtnRow id="r3" onCsv={exportR3} onPdf={exportR3Pdf} />
         </Card>
 
         {/* R4 */}
         <Card icon={<ShieldAlert size={17} strokeWidth={2} />} title="Histórico de Suspensões" description="Atleta, motivo, partidas totais e restantes, status">
           <Filters state={r4} competitions={competitions} onChange={makeOnChange("r4", false, false)} />
           <Msg id="r4" />
-          <BtnRow id="r4" onCsv={exportR4} />
+          <BtnRow id="r4" onCsv={exportR4} onPdf={exportR4Pdf} />
         </Card>
 
         {/* R5 */}
         <Card icon={<UserCheck size={17} strokeWidth={2} />} title="Árbitros por Partida" description="Data, equipes, nome do árbitro e função em cada partida">
           <Filters state={r5} competitions={competitions} showPhase onChange={makeOnChange("r5", true, false)} />
           <Msg id="r5" />
-          <BtnRow id="r5" onCsv={exportR5} />
+          <BtnRow id="r5" onCsv={exportR5} onPdf={exportR5Pdf} />
         </Card>
 
         {/* R6 */}
