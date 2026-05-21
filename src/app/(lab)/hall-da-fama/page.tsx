@@ -1,18 +1,45 @@
-export default function HallDaFamaPage() {
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase-server";
+import HallDaFamaClient from "./hall-da-fama-client";
+import { buscarHallDaFama, buscarOpcoesFiltro } from "./actions";
+
+export const metadata = {
+  title: "Hall da Fama",
+};
+
+export default async function HallDaFamaPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const [initialDataResult, opcoesFiltroResult] = await Promise.all([
+    buscarHallDaFama({}),
+    buscarOpcoesFiltro(),
+  ]);
+
+  if ("error" in initialDataResult || "error" in opcoesFiltroResult) {
     return (
-      <div className="flex h-full min-h-[60vh] flex-col items-center justify-center p-8 text-center">
+      <div style={{ padding: 32 }}>
         <p
-          className="font-display text-2xl font-bold"
-          style={{ color: "var(--color-text-primary)" }}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            color: "var(--color-danger)",
+          }}
         >
-          HALL DA FAMA
-        </p>
-        <p
-          className="mt-2 font-mono text-sm"
-          style={{ color: "var(--color-text-secondary)" }}
-        >
-          Esta seção está em desenvolvimento.
+          Erro ao carregar Hall da Fama.{" "}
+          {"error" in initialDataResult ? initialDataResult.error : ""}
         </p>
       </div>
     );
   }
+
+  return (
+    <HallDaFamaClient
+      initialData={initialDataResult}
+      opcoesFiltro={opcoesFiltroResult}
+    />
+  );
+}
