@@ -38,7 +38,7 @@ export default async function NoticiaPage({ params }: Props) {
   if (!isNew) {
     const { data } = await supabase
       .from("news_articles")
-      .select("id, title, subtitle, cover_url, body, is_published")
+      .select("id, title, subtitle, cover_url, body, is_published, published_at")
       .eq("id", id)
       .eq("organization_id", orgId)
       .maybeSingle();

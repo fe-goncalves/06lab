@@ -13,13 +13,14 @@ type Team = { id: string; full_name: string; abbreviation: string | null; logo_u
 type Competition = { id: string; full_name: string; short_name: string | null; logo_url: string | null };
 
 type Article = {
-  id: string;
-  title: string;
-  subtitle: string | null;
-  cover_url: string | null;
-  body: object;
-  is_published: boolean;
-} | null;
+    id: string;
+    title: string;
+    subtitle: string | null;
+    cover_url: string | null;
+    body: object;
+    is_published: boolean;
+    published_at: string | null;
+  } | null;
 
 type Props = {
   article: Article;
@@ -42,6 +43,11 @@ export default function NoticiaFormClient({
   const [title, setTitle] = useState(article?.title ?? "");
   const [subtitle, setSubtitle] = useState(article?.subtitle ?? "");
   const [isPublished, setIsPublished] = useState(article?.is_published ?? false);
+  const [publishedAt, setPublishedAt] = useState<string>(
+    article && "published_at" in article && article.published_at
+      ? new Date(article.published_at as string).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16)
+  );
   const [bodyJson, setBodyJson] = useState<object>(article?.body ?? {});
   const [selectedTeams, setSelectedTeams] = useState<string[]>(initialTeamIds);
   const [selectedComps, setSelectedComps] = useState<string[]>(initialCompetitionIds);
@@ -83,6 +89,7 @@ export default function NoticiaFormClient({
     fd.append("subtitle", subtitle);
     fd.append("body", JSON.stringify(bodyJson));
     fd.append("is_published", String(isPublished));
+    fd.append("published_at", publishedAt);
     if (coverFile) fd.append("cover", coverFile);
     if (!coverFile && coverPreview) fd.append("cover_url_existing", coverPreview);
     selectedTeams.forEach((id) => fd.append("team_ids", id));
@@ -267,6 +274,19 @@ export default function NoticiaFormClient({
                 />
               </div>
             </button>
+            <div className="mt-3">
+              <label style={labelStyle}>Data de publicação</label>
+              <input
+                type="datetime-local"
+                value={publishedAt}
+                onChange={(e) => setPublishedAt(e.target.value)}
+                style={{
+                  ...inputStyle,
+                  fontSize: "13px",
+                  colorScheme: "dark",
+                }}
+              />
+            </div>
           </div>
 
           {/* Capa */}

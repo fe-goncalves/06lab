@@ -43,7 +43,7 @@ const sections: Section[] = [
   {
     group: "RELATÓRIOS & HISTÓRICO",
     items: [
-      { href: "/relatorios",    icon: BarChart2, label: "Relatórios",   description: "Relatórios e estatísticas gerais",  placeholder: true },
+      { href: "/relatorios",    icon: BarChart2, label: "Relatórios",   description: "Exportar dados em CSV e PDF" },
       { href: "/rankings",      icon: Trophy,    label: "Ranking",      description: "Classificações históricas",         placeholder: true },
       { href: "/hall-da-fama",  icon: Star,      label: "Hall da Fama", description: "Maiores destaques da organização",  placeholder: true },
     ],

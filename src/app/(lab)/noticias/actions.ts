@@ -47,21 +47,9 @@ export async function salvarNoticia(formData: FormData): Promise<{ id: string } 
     cover_url = pub.publicUrl;
   }
 
-  // published_at: só define na primeira publicação
-  let published_at: string | null = null;
-  if (id) {
-    const { data: existing } = await supabase
-      .from("news_articles")
-      .select("published_at, is_published")
-      .eq("id", id)
-      .maybeSingle();
-    published_at = existing?.published_at ?? null;
-    if (is_published && !published_at) {
-      published_at = new Date().toISOString();
-    }
-  } else {
-    if (is_published) published_at = new Date().toISOString();
-  }
+  // published_at: usa o valor enviado pelo admin
+  const publishedAtRaw = formData.get("published_at") as string | null;
+  const published_at: string | null = publishedAtRaw ? new Date(publishedAtRaw).toISOString() : null;
 
   // Upsert do artigo
   const payload = {
