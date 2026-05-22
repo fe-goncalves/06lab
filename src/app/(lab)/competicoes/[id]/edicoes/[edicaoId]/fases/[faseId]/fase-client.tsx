@@ -337,6 +337,7 @@ export default function FaseClient({
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editGroupName, setEditGroupName] = useState("");
   const [processing, setProcessing] = useState<string | null>(null);
+  const [confirmAddTeam, setConfirmAddTeam] = useState<{ id: string; name: string } | null>(null);
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
   const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
@@ -687,7 +688,9 @@ export default function FaseClient({
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                       {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />}
                       <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name ?? "Equipe"}</span>
-                      <button type="button" onClick={() => handleAddTeamToPhase(et.id)} disabled={processing === et.id}
+                      <button type="button"
+                        onClick={() => setConfirmAddTeam({ id: et.id, name: et.teams?.full_name ?? "Equipe" })}
+                        disabled={processing === et.id}
                         className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 rounded border px-2 py-1 text-xs disabled:opacity-50"
                         style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
                         <Plus size={11} /> Adicionar
@@ -1232,6 +1235,40 @@ export default function FaseClient({
             <FileText size={14} />
             {exportingPDF ? "Gerando PDF…" : "Exportar Súmulas"}
           </button>
+        </div>
+      )}
+
+      {/* Modal de confirmação — adicionar equipe à fase */}
+      {confirmAddTeam && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
+          onClick={e => { if (e.target === e.currentTarget) setConfirmAddTeam(null); }}>
+          <div className="w-full max-w-sm rounded-xl border shadow-xl"
+            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+            <div className="px-5 py-5">
+              <p className="text-sm font-medium mb-1" style={{ color: "var(--color-text-primary)" }}>Confirmar adição</p>
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                Adicionar <strong style={{ color: "var(--color-text-primary)" }}>{confirmAddTeam.name}</strong> a esta fase?
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
+              <button type="button" onClick={() => setConfirmAddTeam(null)}
+                className="rounded-lg border px-4 py-2 text-sm"
+                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                Cancelar
+              </button>
+              <button type="button"
+                onClick={async () => {
+                  const t = confirmAddTeam;
+                  setConfirmAddTeam(null);
+                  await handleAddTeamToPhase(t.id);
+                }}
+                className="rounded-lg px-4 py-2 text-sm font-medium"
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                Confirmar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

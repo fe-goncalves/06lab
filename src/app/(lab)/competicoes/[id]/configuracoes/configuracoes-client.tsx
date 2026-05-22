@@ -312,8 +312,8 @@ export default function ConfiguracoesCompeticaoClient({
     if (colors.length > 0 && !primaryColor) setPrimaryColor(colors[0]);
   }
 
-  function toggleDiv(list: string[], setList: (v: string[]) => void, id: string) {
-    setList(list.includes(id) ? list.filter(x => x !== id) : [...list, id]);
+  function toggleDiv(_list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>, id: string) {
+    setList(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
   async function handleSave() {
@@ -549,7 +549,8 @@ export default function ConfiguracoesCompeticaoClient({
             </p>
             {allCompetitions.length === 0 ? (
               <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhuma outra competição cadastrada nesta organização.</p>
+                <p className="text-sm font-medium mb-1" style={{ color: "var(--color-text-primary)" }}>Nenhuma outra competição disponível</p>
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Para vincular divisões, cadastre pelo menos uma outra competição nesta organização.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-4">
