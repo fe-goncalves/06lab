@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarURL, DOMINIOS_VIDEO } from "@/lib/security/urls";
 
 export async function criarPartida(
   faseId: string,
@@ -28,14 +29,11 @@ export async function criarPartida(
   let matchup_id: string | null = null;
 
   if (isKnockout && round_id && team_a_id && team_b_id) {
-    // Busca a rodada para obter o label estável
     const { data: round } = await supabase
       .from("rounds").select("name, custom_label, display_order").eq("id", round_id).maybeSingle();
 
     const roundLabel = round?.name ?? "";
 
-    // Busca matchup existente por phase_id + round_label + par de times
-    // Usa round_label (string) em vez de round_id (pode ser null em dados antigos)
     const { data: existingMatchup } = await supabase
       .from("matchups")
       .select("id")
@@ -49,7 +47,6 @@ export async function criarPartida(
     if (existingMatchup) {
       matchup_id = existingMatchup.id;
     } else {
-      // Cria novo matchup para este confronto
       const { data: insertedMatchup, error: matchupError } = await supabase
         .from("matchups")
         .insert({
@@ -111,6 +108,14 @@ export async function editarPartida(
   const motm_team_id = String(formData.get("motm_team_id") ?? "").trim() || null;
   const highlights_url = String(formData.get("highlights_url") ?? "").trim() || null;
   const photos_url = String(formData.get("photos_url") ?? "").trim() || null;
+
+  // Valida URLs antes de salvar
+  if (highlights_url && !validarURL(highlights_url, DOMINIOS_VIDEO)) {
+    return { error: "URL de highlights inválida. Use HTTPS e domínios permitidos (YouTube, Vimeo, Instagram)." };
+  }
+  if (photos_url && !validarURL(photos_url)) {
+    return { error: "URL de fotos inválida. Use uma URL HTTPS válida." };
+  }
 
   const updateData: Record<string, any> = {
     status, finish_type, score_a, score_b,
@@ -244,12 +249,11 @@ export async function salvarFormacoes(
     })
     .filter(Boolean);
 
-    if (staffRecords.length > 0) {
-      const { error: staffError } = await supabase.from("match_staff_lineups").insert(staffRecords);
-    }
+  if (staffRecords.length > 0) {
+    const { error: staffError } = await supabase.from("match_staff_lineups").insert(staffRecords);
+  }
 
-// ── Salvar match_athlete_ratings ──
-  // Atletas presentes que têm nota preenchida → upsert
+  // ── Salvar match_athlete_ratings ──
   const presentAthleteIds = new Set(
     lineups.filter(l => l.is_present).map(l => l.athlete_id)
   );
@@ -269,7 +273,6 @@ export async function salvarFormacoes(
     })
     .filter(Boolean);
 
-  // Atletas que tiveram nota removida (valor null no payload mas podem ter registro salvo)
   const toDelete = Object.entries(ratings)
     .filter(([, value]) => value === null)
     .map(([athleteId]) => athleteId);
@@ -407,7 +410,6 @@ export async function deletarPartida(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Descobre o matchup_id antes de deletar
   const { data: match } = await supabase
     .from("matches")
     .select("matchup_id")
@@ -421,7 +423,6 @@ export async function deletarPartida(
 
   if (error) return { error: error.message };
 
-  // Se tinha matchup, verifica se ficou órfão (zero partidas restantes)
   if (match?.matchup_id) {
     const { count } = await supabase
       .from("matches")
@@ -646,7 +647,6 @@ export async function editarAcao(
   const action_type = String(formData.get("action_type") ?? "").trim();
   const match_id = String(formData.get("match_id") ?? "").trim() || null;
 
-  // Busca ação anterior para reverter placar se era gol
   const { data: oldAction } = await supabase
     .from("match_actions")
     .select("action_type, team_id, match_id")
@@ -660,7 +660,6 @@ export async function editarAcao(
 
   if (error) return { error: error.message };
 
-  // Recalcula placar no banco se a ação envolve gol (antes ou depois)
   const effectiveMatchId = oldAction?.match_id ?? match_id;
   if (effectiveMatchId && (oldAction?.action_type === "goal" || action_type === "goal")) {
     const { data: match } = await supabase
@@ -670,7 +669,6 @@ export async function editarAcao(
       .maybeSingle();
 
     if (match) {
-      // Reverte gol antigo
       let newScoreA = match.score_a;
       let newScoreB = match.score_b;
 
@@ -680,7 +678,6 @@ export async function editarAcao(
         newScoreB = wasTeamA ? newScoreB : Math.max(0, newScoreB - 1);
       }
 
-      // Aplica gol novo
       if (action_type === "goal") {
         const isTeamA = match.team_a_id === team_id;
         newScoreA = isTeamA ? newScoreA + 1 : newScoreA;

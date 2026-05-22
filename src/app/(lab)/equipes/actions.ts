@@ -4,6 +4,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 
 function normalizeHex(value: FormDataEntryValue | null): string | null {
   if (value === null || value === "") return null;
@@ -48,8 +49,15 @@ export async function criarEquipe(formData: FormData) {
   let logo_url: string | null = null;
 
   if (file && file.size > 0) {
-    const safeFilename = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `teams/${Date.now()}-${safeFilename}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `teams/${gerarNomeSeguro(ext)}`;
 
     const { error: uploadError } = await supabase.storage
       .from("logo")
@@ -200,8 +208,15 @@ export async function editarEquipe(
 
   const file = formData.get("logo");
   if (file instanceof File && file.size > 0) {
-    const safeFilename = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `teams/${Date.now()}-${safeFilename}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `teams/${gerarNomeSeguro(ext)}`;
 
     const { error: uploadError } = await supabase.storage
       .from("logo")

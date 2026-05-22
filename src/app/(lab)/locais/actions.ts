@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 
 export async function criarLocal(
   formData: FormData,
@@ -27,8 +28,15 @@ export async function criarLocal(
   let logo_url: string | null = null;
 
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `venues/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `venues/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("logo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -76,8 +84,15 @@ export async function editarLocal(
   const file = formData.get("logo") as File | null;
 
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `venues/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `venues/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("logo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };

@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 
 function parseDate(ddmmaaaa: string): string | null {
   const cleaned = ddmmaaaa.replace(/\D/g, "");
@@ -49,8 +50,15 @@ export async function criarAtleta(formData: FormData) {
   let photo_url: string | null = null;
   const file = formData.get("photo") as File | null;
   if (file && file.size > 0) {
-    const safeName = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `athletes/${Date.now()}-${safeName}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `athletes/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo")
       .upload(path, file, { contentType: file.type, cacheControl: "3600" });
@@ -99,8 +107,15 @@ export async function editarAtleta(id: string, formData: FormData) {
   let photo_url: string | null = existing.photo_url;
   const file = formData.get("photo") as File | null;
   if (file && file.size > 0) {
-    const safeName = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `athletes/${Date.now()}-${safeName}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `athletes/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo")
       .upload(path, file, { contentType: file.type, cacheControl: "3600" });
@@ -194,14 +209,13 @@ export async function removerStint(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  // Nunca remove o stint is_current — protege o vínculo atual
   const { data: stint } = await supabase
     .from("athlete_team_stints")
     .select("ended_at")
     .eq("id", stintId)
     .maybeSingle();
 
-    if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o atleta." };
+  if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o atleta." };
 
   const { error } = await supabase
     .from("athlete_team_stints")

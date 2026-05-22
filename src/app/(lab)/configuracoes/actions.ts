@@ -2,6 +2,8 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
+import { validarURL, DOMINIOS_REDES_SOCIAIS } from "@/lib/security/urls";
 
 // ─── Salvar organização (campos gerais + redes sociais + site) ────────────────
 
@@ -29,24 +31,63 @@ export async function salvarOrganizacao(
   if (!slug || !/^[a-z0-9-]+$/.test(slug)) return { error: "Slug inválido." };
 
   // Campos de site
-  const custom_domain = String(formData.get("custom_domain") ?? "").trim() || null;
+  const custom_domain_raw = String(formData.get("custom_domain") ?? "").trim() || null;
   const primary_color = String(formData.get("primary_color") ?? "").trim() || null;
   const secondary_color = String(formData.get("secondary_color") ?? "").trim() || null;
   const description = String(formData.get("description") ?? "").trim() || null;
 
-  // Redes sociais
-  const instagram_url = String(formData.get("instagram_url") ?? "").trim() || null;
-  const youtube_url = String(formData.get("youtube_url") ?? "").trim() || null;
-  const tiktok_url = String(formData.get("tiktok_url") ?? "").trim() || null;
-  const twitter_url = String(formData.get("twitter_url") ?? "").trim() || null;
+  // Validação de custom_domain (se preenchido, deve ser HTTPS ou um hostname sem protocolo)
+  // Aceita formato de hostname puro (ex: "scores.org.com.br") ou URL HTTPS completa
+  let custom_domain: string | null = null;
+  if (custom_domain_raw) {
+    // Normaliza: se não tem protocolo, tenta com https://
+    const domainToTest = custom_domain_raw.startsWith("http")
+      ? custom_domain_raw
+      : `https://${custom_domain_raw}`;
+    if (!validarURL(domainToTest)) {
+      return { error: "Domínio personalizado inválido. Use apenas domínios válidos (ex: scores.suaorg.com.br)." };
+    }
+    // Salva apenas o hostname limpo (sem protocolo ou trailing slash)
+    try {
+      custom_domain = new URL(domainToTest).hostname;
+    } catch {
+      return { error: "Domínio personalizado inválido." };
+    }
+  }
+
+  // Redes sociais — validadas com lista de domínios permitidos
+  const instagram_url_raw = String(formData.get("instagram_url") ?? "").trim() || null;
+  const youtube_url_raw = String(formData.get("youtube_url") ?? "").trim() || null;
+  const tiktok_url_raw = String(formData.get("tiktok_url") ?? "").trim() || null;
+  const twitter_url_raw = String(formData.get("twitter_url") ?? "").trim() || null;
+
+  if (instagram_url_raw && !validarURL(instagram_url_raw, DOMINIOS_REDES_SOCIAIS)) {
+    return { error: "URL do Instagram inválida. Use uma URL HTTPS do Instagram." };
+  }
+  if (youtube_url_raw && !validarURL(youtube_url_raw, DOMINIOS_REDES_SOCIAIS)) {
+    return { error: "URL do YouTube inválida. Use uma URL HTTPS do YouTube." };
+  }
+  if (tiktok_url_raw && !validarURL(tiktok_url_raw, DOMINIOS_REDES_SOCIAIS)) {
+    return { error: "URL do TikTok inválida. Use uma URL HTTPS do TikTok." };
+  }
+  if (twitter_url_raw && !validarURL(twitter_url_raw, DOMINIOS_REDES_SOCIAIS)) {
+    return { error: "URL do Twitter/X inválida. Use uma URL HTTPS do Twitter ou X." };
+  }
 
   // Upload de logo (opcional)
   const file = formData.get("logo") as File | null;
   let logo_url: string | undefined = undefined;
 
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "logo";
-    const path = `orgs/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `orgs/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("logo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -63,10 +104,10 @@ export async function salvarOrganizacao(
       primary_color,
       secondary_color,
       description,
-      instagram_url,
-      youtube_url,
-      tiktok_url,
-      twitter_url,
+      instagram_url: instagram_url_raw,
+      youtube_url: youtube_url_raw,
+      tiktok_url: tiktok_url_raw,
+      twitter_url: twitter_url_raw,
       ...(logo_url ? { logo_url } : {}),
     })
     .eq("id", orgId);
@@ -106,7 +147,6 @@ export async function listarUsuarios(
     .eq("auth_user_id", user.id).maybeSingle();
   if (profile?.role !== "main") return { error: "Sem permissão." };
 
-  // Busca perfis da organização
   const { data: profiles, error: profilesError } = await supabase
     .from("user_profiles")
     .select("id, auth_user_id, full_name, role, created_at")
@@ -116,12 +156,10 @@ export async function listarUsuarios(
   if (profilesError) return { error: profilesError.message };
   if (!profiles || profiles.length === 0) return { users: [] };
 
-  // Busca emails via admin client
   const adminClient = createAdminClient();
   const authUserIds = profiles.map(p => p.auth_user_id);
 
   const emailMap: Record<string, string> = {};
-  // Busca em lotes de 50 (limite da API do Supabase Admin)
   for (const uid of authUserIds) {
     const { data: authUser } = await adminClient.auth.admin.getUserById(uid);
     if (authUser?.user?.email) {
@@ -160,7 +198,6 @@ export async function convidarUsuario(
 
   const adminClient = createAdminClient();
 
-  // Convida via Supabase Auth (envia e-mail de convite)
   const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { organization_id: orgId, role },
   });
@@ -168,7 +205,6 @@ export async function convidarUsuario(
   if (inviteError) return { error: inviteError.message };
   if (!invited?.user) return { error: "Falha ao criar convite." };
 
-  // Cria o user_profile correspondente
   const { error: profileError } = await supabase
     .from("user_profiles")
     .insert({

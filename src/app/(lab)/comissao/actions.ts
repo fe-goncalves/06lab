@@ -4,6 +4,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 
 function parseDateToISO(br: string): string | null {
   const clean = br.replace(/\D/g, "");
@@ -37,8 +38,15 @@ export async function criarMembro(
   let photo_url: string | null = null;
 
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `staff/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `staff/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -89,8 +97,15 @@ export async function editarMembro(
   const file = formData.get("photo") as File | null;
 
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `staff/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `staff/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -173,7 +188,7 @@ export async function removerStintMembro(
     .eq("id", stintId)
     .maybeSingle();
 
-    if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
+  if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
 
   const { error } = await supabase
     .from("staff_team_stints")

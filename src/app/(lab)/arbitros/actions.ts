@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 
 export async function criarArbitro(
   formData: FormData,
@@ -26,8 +27,15 @@ export async function criarArbitro(
 
   let photo_url: string | null = null;
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `referees/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `referees/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
@@ -74,8 +82,15 @@ export async function editarArbitro(
   let photo_url: string | null = existing.photo_url;
   const file = formData.get("photo") as File | null;
   if (file && file.size > 0) {
-    const safe = file.name.replace(/[^\w.\-]/g, "_") || "photo";
-    const path = `referees/${Date.now()}-${safe}`;
+    if (file.size > MAX_IMAGE_SIZE) {
+      return { error: "A imagem deve ter no máximo 5 MB." };
+    }
+    const tipoValido = await validarTipoImagem(file);
+    if (!tipoValido) {
+      return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+    }
+    const ext = await extensaoSegura(file);
+    const path = `referees/${gerarNomeSeguro(ext)}`;
     const { error: uploadError } = await supabase.storage
       .from("photo").upload(path, file, { contentType: file.type, cacheControl: "3600" });
     if (uploadError) return { error: uploadError.message };
