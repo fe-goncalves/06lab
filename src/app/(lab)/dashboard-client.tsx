@@ -573,7 +573,7 @@ export default function DashboardClient({
                   Sem partidas
                 </p>
                 <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Nenhuma partida agendada para {day => day}{selectedDate.getDate()} de {MONTHS[selectedDate.getMonth()].toLowerCase()}.
+                  Nenhuma partida agendada para {selectedDate.getDate()} de {MONTHS[selectedDate.getMonth()].toLowerCase()}.
                 </p>
               </div>
             ) : (
