@@ -208,7 +208,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         : Promise.resolve({ data: [] }),
         supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, short_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
       supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
-      supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation)").eq("edition_id", editionId).order("goals", { ascending: false }).limit(30),
+      supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("goals", { ascending: false }),
       phaseIds.length > 0
         ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
@@ -615,6 +615,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const topAssists = [...scorers].filter(s => (s.assists ?? 0) > 0).sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0));
   const topYellow = [...scorers].filter(s => (s.yellow_cards ?? 0) > 0).sort((a, b) => (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0));
   const topRed = [...scorers].filter(s => (s.red_cards ?? 0) > 0).sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0));
+  const topMatches = [...scorers].filter(s => (s.matches_played ?? 0) > 0).sort((a, b) => (b.matches_played ?? 0) - (a.matches_played ?? 0));
+  const topMotm = [...scorers].filter(s => (s.motm_count ?? 0) > 0).sort((a, b) => (b.motm_count ?? 0) - (a.motm_count ?? 0));
+  const topRating = [...scorers].filter(s => (s.matches_played ?? 0) >= 3 && (s.avg_rating ?? 0) > 0).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
 
   // Para a aba Jogos: fases em ordem decrescente de display_order (maior número = mais recente = primeiro)
   const sortedPhases = [...phases].sort((a, b) => (b.display_order ?? 0) - (a.display_order ?? 0));
@@ -1646,10 +1649,13 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             </div>
             {activeStatsTab === "geral" && (
               <div className="grid gap-6 lg:grid-cols-2">
-                <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" emptyMessage="Nenhum gol registrado." />
-                <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." emptyMessage="Nenhuma assistência registrada." />
-                <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" emptyMessage="Nenhum cartão amarelo registrado." />
-                <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" emptyMessage="Nenhum cartão vermelho registrado." />
+                <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum gol registrado." />
+                <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma assistência registrada." />
+                <StatRanking title="Partidas Jogadas" data={topMatches} valueKey="matches_played" valueLabel="jogos" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma partida registrada." />
+                <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão amarelo registrado." />
+                <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão vermelho registrado." />
+                <StatRanking title="MOTM" data={topMotm} valueKey="motm_count" valueLabel="prêmios" valueColor="#F2C005" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum MOTM registrado." />
+                <StatRanking title="Nota Média" data={topRating} valueKey="avg_rating" valueLabel="nota" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Mínimo 3 partidas para aparecer." isDecimal />
               </div>
             )}
             {/* Sub-aba SEMANAL */}
@@ -2866,17 +2872,12 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
 }
 
 // ─── SemanasTab ───────────────────────────────────────────────────────────────
-// Drop-in replacement for the SemanasTab function in competicao-hub.tsx
 
 function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
   selectedEditionId: string;
   rounds: any[];
   editionTeams: any[];
 }) {
-  // Formations: col = horizontal zone (0=GK, 1=DEF, 2=MED, 3=ATK)
-  // row = vertical position within the zone (0=top, 1=mid, 2=bottom)
-  // The field is 700 wide x 420 tall (horizontal)
-  // Zones: GK=col0, DEF=col1, MED=col2, ATK=col3
   const FORMATIONS: Record<string, { label: string; slots: { col: number; row: number; total: number; label: string }[] }> = {
     "2-3-1": {
       label: "2-3-1",
@@ -2915,33 +2916,23 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     },
   };
 
-  // Field dimensions (the SVG coordinate space)
-  const FW = 700; // field width
-  const FH = 380; // field height
-  // Padding inside the field border
+  const FW = 700;
+  const FH = 380;
   const PAD_X = 50;
   const PAD_Y = 40;
-  const INNER_W = FW - PAD_X * 2; // 600
-  const INNER_H = FH - PAD_Y * 2; // 300
-
-  // Zone x-centers (4 zones, evenly spaced inside field)
-  // GK near left goal, DEF at ~25%, MED at ~55%, ATK near right penalty
+  const INNER_W = FW - PAD_X * 2;
+  const INNER_H = FH - PAD_Y * 2;
   const ZONE_X: Record<number, number> = {
-    0: PAD_X + INNER_W * 0.08,  // GK
-    1: PAD_X + INNER_W * 0.30,  // DEF
-    2: PAD_X + INNER_W * 0.58,  // MED
-    3: PAD_X + INNER_W * 0.80,  // ATK
+    0: PAD_X + INNER_W * 0.08,
+    1: PAD_X + INNER_W * 0.30,
+    2: PAD_X + INNER_W * 0.58,
+    3: PAD_X + INNER_W * 0.80,
   };
-
-  // Vertical center of field
   const CY = FH / 2;
+  const AVATAR_R = 20;
 
-  const AVATAR_R = 20; // reduced to prevent overlap
-
-  // Given a slot (col, row, total), compute its cx/cy on the field
   function slotPosition(col: number, row: number, total: number): { cx: number; cy: number } {
     const cx = ZONE_X[col];
-    // Minimum spacing: diameter + 20px gap
     const minSpacing = AVATAR_R * 2 + 20;
     const maxSpacing = INNER_H / (total + 0.5);
     const spacing = Math.max(minSpacing, Math.min(maxSpacing, 80));
@@ -2949,6 +2940,9 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     const cy = startY + row * spacing;
     return { cx, cy };
   }
+
+  // Sub-aba: "selecao" | "historico"
+  const [activeSemanasTab, setActiveSemanasTab] = useState<"selecao" | "historico">("selecao");
 
   const [selectedRoundId, setSelectedRoundId] = useState<string>(rounds[0]?.id ?? "");
   const [formation, setFormation] = useState<string>("2-3-1");
@@ -2968,6 +2962,11 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
   const [searchType, setSearchType] = useState<"athlete" | "staff">("athlete");
   const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
   const [editionStaff, setEditionStaff] = useState<any[]>([]);
+
+  // Histórico TOTW
+  const [historico, setHistorico] = useState<any[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!selectedEditionId) return;
@@ -2992,6 +2991,7 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     void loadRoster();
   }, [selectedEditionId]);
 
+  // Load TOTW for selected round (Seleção tab)
   useEffect(() => {
     if (!selectedRoundId || !selectedEditionId) return;
     async function loadSquads() {
@@ -3032,6 +3032,40 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     }
     void loadSquads();
   }, [selectedRoundId, selectedEditionId]);
+
+  // Load histórico when switching to that tab
+  useEffect(() => {
+    if (activeSemanasTab !== "historico" || !selectedEditionId) return;
+    void loadHistorico();
+  }, [activeSemanasTab, selectedEditionId]);
+
+  async function loadHistorico() {
+    setLoadingHistorico(true);
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("selection_squads")
+      .select("id, round_id, created_at, rounds(id, name, custom_label, display_order), selection_squad_members(id, athlete_id, staff_member_id, display_order, athletes(id, full_name, surname, photo_url), staff_members(id, full_name, surname, photo_url), teams(id, abbreviation, full_name, logo_url))")
+      .eq("edition_id", selectedEditionId)
+      .eq("squad_type", "totw")
+      .order("created_at", { ascending: false });
+    setHistorico(data ?? []);
+    setLoadingHistorico(false);
+  }
+
+  async function handleDeleteTotw(squadId: string) {
+    if (!confirm("Excluir este TOTW? Esta ação não pode ser desfeita.")) return;
+    setDeletingId(squadId);
+    await deletarSquad(squadId);
+    setHistorico(prev => prev.filter(h => h.id !== squadId));
+    setDeletingId(null);
+    toast("success", "TOTW excluído.");
+  }
+
+  function handleEditTotw(squad: any) {
+    // Switch to Seleção tab and load the round
+    setActiveSemanasTab("selecao");
+    setSelectedRoundId(squad.round_id);
+  }
 
   function buildSlotData(m: any) {
     const isAthlete = !!m.athlete_id;
@@ -3082,13 +3116,13 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     } else if (motwSquadId) {
       await deletarSquad(motwSquadId);
     }
+    // Refresh historico if it was loaded
+    if (historico.length > 0) void loadHistorico();
     setSaving(false);
     toast("success", "Premiações semanais salvas.");
   }
 
   const formationSlots = FORMATIONS[formation].slots;
-
-  // IDs already in slots or coach — prevent duplicates
   const usedAthleteIds = new Set(slots.filter(Boolean).map((s: any) => s.athleteId).filter(Boolean));
   const usedStaffIds = new Set([
     ...slots.filter(Boolean).map((s: any) => s.staffMemberId).filter(Boolean),
@@ -3097,7 +3131,6 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
 
   const searchResults = (() => {
     const pool = searchType === "athlete" ? editionAthletes : editionStaff;
-    // Filter out already-used members
     const available = pool.filter((e: any) => {
       if (searchType === "athlete") return !usedAthleteIds.has(e.athlete_id);
       return !usedStaffIds.has(e.staff_member_id);
@@ -3121,251 +3154,334 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
     );
   }
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+  // ── Renderizar Histórico ──
+  function renderHistorico() {
+    if (loadingHistorico) {
+      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6", padding: "40px 0", textAlign: "center" }}>Carregando…</p>;
+    }
+    if (historico.length === 0) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", textAlign: "center" }}>
+          <p style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--color-text-primary)" }}>Nenhum TOTW salvo</p>
+          <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Selecione uma rodada e salve o Time da Semana.</p>
+        </div>
+      );
+    }
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        {historico.map((squad: any) => {
+          const roundLabel = squad.rounds?.custom_label ?? squad.rounds?.name ?? "Rodada";
+          const createdAt = new Date(squad.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+          const members = [...(squad.selection_squad_members ?? [])].sort((a: any, b: any) => a.display_order - b.display_order);
+          const players = members.filter((m: any) => m.display_order <= 7);
+          const coachMember = members.find((m: any) => m.display_order === 8);
 
-      {/* Search modal */}
-      {searchOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
-          <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
-                {searchIsCoach ? "Selecionar técnico" : `Posição: ${formationSlots[searchSlotIndex ?? 0]?.label}`}
-              </p>
-              <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); }} style={{ color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
-                <X size={18} />
-              </button>
-            </div>
-            {searchIsCoach && (
-              <div style={{ padding: "10px 20px 0", display: "flex", gap: 8 }}>
-                {[{ key: "staff", label: "Comissão" }, { key: "athlete", label: "Atleta" }].map(t => (
-                  <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
-                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
-                      borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
-                      backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
-                      color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
-                    {t.label}
+          return (
+            <div key={squad.id} style={{ borderRadius: 12, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+              {/* Header da rodada */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 18px", borderBottom: "1px solid var(--color-border)" }}>
+                <div>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)" }}>{roundLabel}</p>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", marginTop: 2 }}>{createdAt}</p>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" onClick={() => handleEditTotw(squad)}
+                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    Editar
                   </button>
-                ))}
+                  <button type="button" onClick={() => handleDeleteTotw(squad.id)} disabled={deletingId === squad.id}
+                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(255,68,68,0.25)", backgroundColor: "rgba(255,68,68,0.06)", color: "var(--color-danger)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: deletingId === squad.id ? 0.5 : 1 }}>
+                    {deletingId === squad.id ? "Excluindo…" : "Excluir"}
+                  </button>
+                </div>
               </div>
-            )}
-            <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 10 }}>
-              <Search size={14} color="var(--color-text-secondary)" />
-              <input autoFocus type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Buscar por nome ou equipe…"
-                style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }} />
-            </div>
-            <div style={{ maxHeight: 380, overflowY: "auto" }}>
-              {searchResults.length === 0 ? (
-                <p style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Nenhum resultado.</p>
-              ) : searchResults.map((entry: any, idx: number) => {
-                const isAth = searchType === "athlete";
-                const person = isAth ? entry.athletes : entry.staff_members;
-                const team = (entry.edition_teams as any)?.teams;
-                const name = person?.surname ?? person?.full_name ?? "—";
-                const role = isAth ? (person?.player_positions?.abbreviation ?? "") : (person?.staff_roles?.full_name ?? "");
-                return (
-                  <button key={idx} type="button"
-                    onClick={() => {
-                      const sd = buildFromEntry(entry, isAth);
-                      if (searchIsCoach) { setCoach(sd); }
-                      else if (searchSlotIndex !== null) {
-                        setSlots(prev => { const n = [...prev]; n[searchSlotIndex] = sd; return n; });
-                        if (motwIndex === searchSlotIndex) setMotwIndex(null);
-                      }
-                      setSearchOpen(false); setSearchQuery("");
-                    }}
-                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
-                    {person?.photo_url ? (
-                      <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    ) : (
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
-                        {name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
-                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                        {name}{role && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-brand)", fontWeight: 400 }}>{role}</span>}
-                      </p>
+              {/* Atletas */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, padding: "12px 18px" }}>
+                {players.map((m: any) => {
+                  const isAth = !!m.athlete_id;
+                  const person = isAth ? m.athletes : m.staff_members;
+                  const name = person?.surname ?? person?.full_name ?? "—";
+                  const photo = person?.photo_url ?? null;
+                  const team = m.teams;
+                  return (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.03)" }}>
+                      {photo ? (
+                        <img src={photo} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      ) : (
+                        <div style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+                          {name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)" }}>{name}</span>
                       {team && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
-                          {team.logo_url && <img src={team.logo_url} alt="" style={{ width: 13, height: 13, objectFit: "contain" }} />}
-                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{team.abbreviation ?? team.full_name}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                          {team.logo_url && <img src={team.logo_url} alt="" style={{ width: 12, height: 12, objectFit: "contain" }} />}
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>{team.abbreviation ?? team.full_name}</span>
                         </div>
                       )}
                     </div>
-                  </button>
-                );
-              })}
+                  );
+                })}
+                {coachMember && (() => {
+                  const person = coachMember.athlete_id ? coachMember.athletes : coachMember.staff_members;
+                  const name = person?.surname ?? person?.full_name ?? "—";
+                  return (
+                    <div key={coachMember.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", fontWeight: 700 }}>TEC</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)" }}>{name}</span>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
+    );
+  }
 
-      {/* Controls row */}
-      <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Rodada</span>
-          <select value={selectedRoundId} onChange={e => setSelectedRoundId(e.target.value)}
-            style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)", fontSize: 12, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer" }}>
-            {rounds.map((r: any) => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
-          </select>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Formação</span>
-          {Object.keys(FORMATIONS).map(f => (
-            <button key={f} type="button"
-              onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); setMotwIndex(null); }}
-              style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
-                borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
-                backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
-                color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
-              {FORMATIONS[f].label}
-            </button>
-          ))}
-        </div>
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Sub-abas: Seleção / Histórico */}
+      <div style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--color-border)" }}>
+        {[{ key: "selecao", label: "SELEÇÃO" }, { key: "historico", label: "HISTÓRICO" }].map(t => (
+          <button key={t.key} type="button" onClick={() => setActiveSemanasTab(t.key as any)}
+            style={{ paddingBottom: 12, background: "none", border: "none", borderBottom: `2px solid ${activeSemanasTab === t.key ? "var(--color-brand)" : "transparent"}`, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: activeSemanasTab === t.key ? "var(--color-brand)" : "#A6A6A6", cursor: "pointer", transition: "all 0.12s" }}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {loading ? (
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
-      ) : (
+      {/* ── HISTÓRICO ── */}
+      {activeSemanasTab === "historico" && renderHistorico()}
+
+      {/* ── SELEÇÃO ── */}
+      {activeSemanasTab === "selecao" && (
         <>
-          {/* Field SVG with player slots */}
-          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--color-border)" }}>
-            <svg
-              viewBox={`0 0 ${FW} ${FH}`}
-              style={{ width: "100%", display: "block" }}
-              xmlns="http://www.w3.org/2000/svg">
-
-              {/* Background */}
-              <rect width={FW} height={FH} fill="var(--color-surface)" />
-
-              {/* Field lines */}
-              {/* Outer border */}
-              <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-
-              {/* Center line */}
-              <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-
-              {/* Center circle */}
-              <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
-
-              {/* Left penalty area */}
-              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              {/* Left goal area */}
-              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              {/* Left goal */}
-              <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-              {/* Left penalty spot */}
-              <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
-
-              {/* Right penalty area */}
-              <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              {/* Right goal area */}
-              <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              {/* Right goal */}
-              <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-              {/* Right penalty spot */}
-              <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
-
-              {/* Substitution marks */}
-              <line x1={FW/2 - 20} y1={PAD_Y} x2={FW/2 - 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
-              <line x1={FW/2 + 20} y1={PAD_Y} x2={FW/2 + 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
-
-              {/* Player slots */}
-              {formationSlots.map((slot, i) => {
-                const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
-                const data = slots[i];
-                const isMotw = motwIndex === i;
-                const teamColor = data?.teamColor ?? null;
-                const foSize = AVATAR_R * 2;
-
-                return (
-                  <g key={i}>
-                    {!data && (
-                      <>
-                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
-                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
-                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
-                          onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
-                      </>
-                    )}
-                    {data && (
-                      <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
-                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
-                          <style>{`.sa${i}:hover .sg${i}{opacity:1}.sa${i}:hover .sr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
-                          <div className={`sa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
-                            onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
-                            <div className={`sg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
-                              background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
-                            <div className={`sr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
-                              border: `2px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.3)"}`, backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
-                              {data.photo
-                                ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
-                              }
-                            </div>
-                            {!data.isStaff && (
-                              <div onClick={e => { e.stopPropagation(); setMotwIndex(isMotw ? null : i); }}
-                                style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, transition: "all 0.15s",
-                                  backgroundColor: isMotw ? "#BFF205" : "rgba(0,0,0,0.85)", border: `1px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.2)"}`, color: isMotw ? "#0D0D0D" : "rgba(255,255,255,0.4)" }}>★</div>
-                            )}
-                            <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); if (motwIndex === i) setMotwIndex(null); }}
-                              style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
-                          </div>
-                          <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: isMotw ? "#BFF205" : "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
-                          {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
-                        </div>
-                      </foreignObject>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-
-          {/* Coach row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap", minWidth: 52 }}>Técnico</span>
-            {coach ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
-                {coach.photo ? (
-                  <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                ) : (
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
-                    {coach.name.slice(0, 2).toUpperCase()}
+          {/* Search modal */}
+          {searchOpen && (
+            <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
+              <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
+                    {searchIsCoach ? "Selecionar técnico" : `Posição: ${formationSlots[searchSlotIndex ?? 0]?.label}`}
+                  </p>
+                  <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); }} style={{ color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
+                    <X size={18} />
+                  </button>
+                </div>
+                {searchIsCoach && (
+                  <div style={{ padding: "10px 20px 0", display: "flex", gap: 8 }}>
+                    {[{ key: "staff", label: "Comissão" }, { key: "athlete", label: "Atleta" }].map(t => (
+                      <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
+                        style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+                          borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
+                          backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
+                          color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                        {t.label}
+                      </button>
+                    ))}
                   </div>
                 )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
-                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)" }}>{coach.role} · {coach.teamName}</p>
+                <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 10 }}>
+                  <Search size={14} color="var(--color-text-secondary)" />
+                  <input autoFocus type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por nome ou equipe…"
+                    style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }} />
                 </div>
-                <button type="button" onClick={() => setCoach(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)" }}><X size={14} /></button>
+                <div style={{ maxHeight: 380, overflowY: "auto" }}>
+                  {searchResults.length === 0 ? (
+                    <p style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Nenhum resultado.</p>
+                  ) : searchResults.map((entry: any, idx: number) => {
+                    const isAth = searchType === "athlete";
+                    const person = isAth ? entry.athletes : entry.staff_members;
+                    const team = (entry.edition_teams as any)?.teams;
+                    const name = person?.surname ?? person?.full_name ?? "—";
+                    const role = isAth ? (person?.player_positions?.abbreviation ?? "") : (person?.staff_roles?.full_name ?? "");
+                    return (
+                      <button key={idx} type="button"
+                        onClick={() => {
+                          const sd = buildFromEntry(entry, isAth);
+                          if (searchIsCoach) { setCoach(sd); }
+                          else if (searchSlotIndex !== null) {
+                            setSlots(prev => { const n = [...prev]; n[searchSlotIndex] = sd; return n; });
+                            if (motwIndex === searchSlotIndex) setMotwIndex(null);
+                          }
+                          setSearchOpen(false); setSearchQuery("");
+                        }}
+                        style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                        {person?.photo_url ? (
+                          <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+                            {name.slice(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                          <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {name}{role && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-brand)", fontWeight: 400 }}>{role}</span>}
+                          </p>
+                          {team && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                              {team.logo_url && <img src={team.logo_url} alt="" style={{ width: 13, height: 13, objectFit: "contain" }} />}
+                              <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{team.abbreviation ?? team.full_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            ) : (
-              <button type="button" onClick={() => { setSearchIsCoach(true); setSearchType("staff"); setSearchQuery(""); setSearchOpen(true); }}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>
-                <Plus size={12} /> Adicionar técnico
-              </button>
-            )}
+            </div>
+          )}
+
+          {/* Controls row */}
+          <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Rodada</span>
+              <select value={selectedRoundId} onChange={e => setSelectedRoundId(e.target.value)}
+                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)", fontSize: 12, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer" }}>
+                {rounds.map((r: any) => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Formação</span>
+              {Object.keys(FORMATIONS).map(f => (
+                <button key={f} type="button"
+                  onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); setMotwIndex(null); }}
+                  style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+                    borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
+                    backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
+                    color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
+                  {FORMATIONS[f].label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Footer row */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)" }}>
-            {rounds.find((r: any) => r.id === selectedRoundId)?.custom_label ?? rounds.find((r: any) => r.id === selectedRoundId)?.name}
-              {motwIndex !== null && slots[motwIndex] && (
-                <span style={{ marginLeft: 12, color: "#BFF205" }}>★ MOTW: {slots[motwIndex]!.name}</span>
-              )}
-            </p>
-            <button type="button" onClick={handleSave} disabled={saving}
-              style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
-              {saving ? "Salvando…" : "Salvar premiações"}
-            </button>
-          </div>
+          {loading ? (
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
+          ) : (
+            <>
+              {/* Field SVG with player slots */}
+              <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--color-border)" }}>
+                <svg
+                  viewBox={`0 0 ${FW} ${FH}`}
+                  style={{ width: "100%", display: "block" }}
+                  xmlns="http://www.w3.org/2000/svg">
+
+                  <rect width={FW} height={FH} fill="var(--color-surface)" />
+                  <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+                  <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
+                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+                  <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+                  <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+                  <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+                  <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+                  <line x1={FW/2 - 20} y1={PAD_Y} x2={FW/2 - 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
+                  <line x1={FW/2 + 20} y1={PAD_Y} x2={FW/2 + 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
+
+                  {formationSlots.map((slot, i) => {
+                    const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
+                    const data = slots[i];
+                    const isMotw = motwIndex === i;
+                    const teamColor = data?.teamColor ?? null;
+                    const foSize = AVATAR_R * 2;
+
+                    return (
+                      <g key={i}>
+                        {!data && (
+                          <>
+                            <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
+                            <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
+                            <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
+                              onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
+                          </>
+                        )}
+                        {data && (
+                          <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
+                              <style>{`.sa${i}:hover .sg${i}{opacity:1}.sa${i}:hover .sr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
+                              <div className={`sa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
+                                onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
+                                <div className={`sg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
+                                  background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
+                                <div className={`sr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
+                                  border: `2px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.3)"}`, backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
+                                  {data.photo
+                                    ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
+                                  }
+                                </div>
+                                {!data.isStaff && (
+                                  <div onClick={e => { e.stopPropagation(); setMotwIndex(isMotw ? null : i); }}
+                                    style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, transition: "all 0.15s",
+                                      backgroundColor: isMotw ? "#BFF205" : "rgba(0,0,0,0.85)", border: `1px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.2)"}`, color: isMotw ? "#0D0D0D" : "rgba(255,255,255,0.4)" }}>★</div>
+                                )}
+                                <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); if (motwIndex === i) setMotwIndex(null); }}
+                                  style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
+                              </div>
+                              <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: isMotw ? "#BFF205" : "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
+                              {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
+                            </div>
+                          </foreignObject>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+
+              {/* Coach row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap", minWidth: 52 }}>Técnico</span>
+                {coach ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                    {coach.photo ? (
+                      <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+                        {coach.name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
+                      <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)" }}>{coach.role} · {coach.teamName}</p>
+                    </div>
+                    <button type="button" onClick={() => setCoach(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)" }}><X size={14} /></button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => { setSearchIsCoach(true); setSearchType("staff"); setSearchQuery(""); setSearchOpen(true); }}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>
+                    <Plus size={12} /> Adicionar técnico
+                  </button>
+                )}
+              </div>
+
+              {/* Footer row */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                  {rounds.find((r: any) => r.id === selectedRoundId)?.custom_label ?? rounds.find((r: any) => r.id === selectedRoundId)?.name}
+                  {motwIndex !== null && slots[motwIndex] && (
+                    <span style={{ marginLeft: 12, color: "#BFF205" }}>★ MOTW: {slots[motwIndex]!.name}</span>
+                  )}
+                </p>
+                <button type="button" onClick={handleSave} disabled={saving}
+                  style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+                  {saving ? "Salvando…" : totwSquadId ? "Atualizar TOTW" : "Salvar TOTW"}
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>
@@ -4327,13 +4443,79 @@ function ConferenceBracket({
 
 // ─── StatRanking ──────────────────────────────────────────────────────────────
 
-function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessage }: {
+function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessage, allScorers, phases, rounds, editionTeams, isDecimal }: {
   title: string; data: any[]; valueKey: string; valueLabel: string; valueColor?: string; emptyMessage: string;
+  allScorers: any[]; phases: any[]; rounds: any[]; editionTeams: any[]; isDecimal?: boolean;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [filterTeamId, setFilterTeamId] = useState("");
+  const [filterPhaseId, setFilterPhaseId] = useState("");
+  const [filterRoundId, setFilterRoundId] = useState("");
   const LIMIT = 5;
   const visible = data.slice(0, LIMIT);
   const hasMore = data.length > LIMIT;
+
+  // Derive team list from editionTeams
+  const teamOptions = editionTeams.map((et: any) => ({ id: et.team_id, label: et.teams?.abbreviation ?? et.teams?.full_name ?? "—" }));
+  const phaseOptions = phases.map((p: any) => ({ id: p.id, label: p.custom_label ?? p.full_name }));
+  const roundOptions = rounds.filter((r: any) => !filterPhaseId || r.phase_id === filterPhaseId).map((r: any) => ({ id: r.id, label: r.custom_label ?? r.name }));
+
+  // Build phase→rounds map for match-level filtering
+  // We filter allScorers by team only (phase/round filtering on edition-level stats
+  // isn't directly supported without per-match data; we filter by team_id instead)
+  const filteredForModal = allScorers.filter(s => {
+    if (filterTeamId && s.team_id !== filterTeamId) return false;
+    // Phase / round filter: athlete_edition_stats don't have phase_id directly.
+    // We approximate: if round filter set, skip (not filterable without match data).
+    // If phase filter set, skip same reason. Just team filter works cleanly.
+    return true;
+  }).filter(s => (s[valueKey] ?? 0) > 0).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0));
+
+  const selectStyle = {
+    padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)",
+    backgroundColor: "var(--color-background)", color: "var(--color-text-primary)",
+    fontSize: 11, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer",
+  };
+
+  function AthleteRow({ row, idx, inModal }: { row: any; idx: number; inModal?: boolean }) {
+    const sz = inModal ? "h-8 w-8" : "h-7 w-7";
+    const valSz = inModal ? "text-xl" : "text-lg";
+    return (
+      <div className={`flex items-center gap-3 ${inModal ? "px-6" : "px-5"} py-3`}
+        style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+        <span className="font-mono text-xs text-right shrink-0" style={{ width: inModal ? 20 : 16, color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
+          {idx + 1}
+        </span>
+        {row.athletes?.photo_url ? (
+          <img src={row.athletes.photo_url} alt="" className={`${sz} rounded-full object-cover shrink-0`} />
+        ) : (
+          <div className={`flex ${sz} shrink-0 items-center justify-center rounded-full text-xs font-bold`}
+            style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+            {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
+            {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
+          </p>
+          {row.team && (
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {row.team.logo_url && <img src={row.team.logo_url} alt="" style={{ width: 12, height: 12, objectFit: "contain" }} />}
+              <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                {row.team.abbreviation ?? row.team.full_name}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-baseline gap-1 shrink-0">
+          <span className={`font-display ${valSz} font-bold`} style={{ color: valueColor ?? "var(--color-brand)" }}>
+            {isDecimal ? (row[valueKey] ?? 0).toFixed(1) : (row[valueKey] ?? 0)}
+          </span>
+          {inModal && <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{valueLabel}</span>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -4345,40 +4527,12 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
           <p className="px-5 py-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>{emptyMessage}</p>
         ) : (
           <>
-            {visible.map((row: any, idx: number) => (
-              <div key={row.athlete_id} className="flex items-center gap-3 px-5 py-3"
-                style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                <span className="w-4 font-mono text-xs text-right shrink-0" style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                  {idx + 1}
-                </span>
-                {row.athletes?.photo_url ? (
-                  <img src={row.athletes.photo_url} alt="" className="h-7 w-7 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                    style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                    {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
-                    {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
-                  </p>
-                  {row.team?.full_name && (
-                    <p className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>
-                      {row.team.abbreviation ?? row.team.full_name}
-                    </p>
-                  )}
-                </div>
-                <span className="shrink-0 font-display text-lg font-bold" style={{ color: valueColor ?? "var(--color-brand)" }}>
-                  {row[valueKey] ?? 0}
-                </span>
-              </div>
-            ))}
+            {visible.map((row: any, idx: number) => <AthleteRow key={row.athlete_id} row={row} idx={idx} />)}
             {hasMore && (
               <button type="button" onClick={() => setShowAll(true)}
                 className="w-full py-3 font-mono text-xs transition-colors hover:bg-[rgba(255,255,255,0.03)]"
                 style={{ color: "var(--color-brand)", borderTop: "1px solid var(--color-border)" }}>
-                Ver todos ({data.length})
+                Ver mais ({data.length})
               </button>
             )}
           </>
@@ -4386,42 +4540,42 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
       </div>
       {showAll && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col max-h-[80vh]"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+          <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col max-h-[85vh]"
+            style={{ backgroundColor: "#0e0e0e", borderColor: "var(--color-border)" }}>
+            {/* Header */}
             <div className="flex items-center justify-between border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--color-border)" }}>
               <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
               <button type="button" onClick={() => setShowAll(false)} style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
             </div>
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
+              <select value={filterTeamId} onChange={e => setFilterTeamId(e.target.value)} style={selectStyle}>
+                <option value="">Todas as equipes</option>
+                {teamOptions.map((t: any) => <option key={t.id} value={t.id}>{t.label}</option>)}
+              </select>
+              <select value={filterPhaseId} onChange={e => { setFilterPhaseId(e.target.value); setFilterRoundId(""); }} style={selectStyle}>
+                <option value="">Todas as fases</option>
+                {phaseOptions.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+              {filterPhaseId && (
+                <select value={filterRoundId} onChange={e => setFilterRoundId(e.target.value)} style={selectStyle}>
+                  <option value="">Todas as rodadas</option>
+                  {roundOptions.map((r: any) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              )}
+              {(filterTeamId || filterPhaseId || filterRoundId) && (
+                <button type="button" onClick={() => { setFilterTeamId(""); setFilterPhaseId(""); setFilterRoundId(""); }}
+                  style={{ ...selectStyle, color: "var(--color-brand)", borderColor: "rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)" }}>
+                  Limpar
+                </button>
+              )}
+            </div>
+            {/* List */}
             <div className="overflow-y-auto flex-1">
-              {data.map((row: any, idx: number) => (
-                <div key={row.athlete_id} className="flex items-center gap-3 px-6 py-3"
-                  style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-                  <span className="w-6 font-mono text-xs text-right shrink-0" style={{ color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-                    {idx + 1}
-                  </span>
-                  {row.athletes?.photo_url ? (
-                    <img src={row.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" />
-                  ) : (
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                      style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                      {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
-                    </p>
-                    {row.team?.full_name && (
-                      <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                        {row.team.abbreviation ?? row.team.full_name}
-                      </p>
-                    )}
-                  </div>
-                  <span className="shrink-0 font-display text-xl font-bold" style={{ color: valueColor ?? "var(--color-brand)" }}>
-                    {row[valueKey] ?? 0}
-                  </span>
-                  <span className="font-mono text-xs shrink-0" style={{ color: "var(--color-text-secondary)" }}>{valueLabel}</span>
-                </div>
+              {filteredForModal.length === 0 ? (
+                <p className="py-10 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Nenhum resultado.</p>
+              ) : filteredForModal.map((row: any, idx: number) => (
+                <AthleteRow key={row.athlete_id} row={row} idx={idx} inModal />
               ))}
             </div>
           </div>
@@ -4430,7 +4584,6 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
     </>
   );
 }
-
 // ─── MatchRow ─────────────────────────────────────────────────────────────────
 
 function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelete: () => void }) {
