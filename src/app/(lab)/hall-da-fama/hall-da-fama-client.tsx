@@ -28,15 +28,20 @@ const ATHLETE_CATEGORIES: {
   suffix: string;
   icon: string;
 }[] = [
-  { key: "artilharia",      label: "Artilharia Histórica",    suffix: "gols",    icon: "⚽" },
-  { key: "assistencias",    label: "Mais Assistências",        suffix: "assist.", icon: "🎯" },
-  { key: "partidas",        label: "Mais Partidas Jogadas",    suffix: "jogos",   icon: "📋" },
-  { key: "cartoes_amarelos",label: "Mais Cartões Amarelos",    suffix: "amarelos",icon: "🟨" },
-  { key: "motm",            label: "Mais Prêmios MOTM",        suffix: "prêmios", icon: "⭐" },
-  { key: "tots",            label: "Mais Prêmios TOTS",        suffix: "prêmios", icon: "🏅" },
-  { key: "totw",            label: "Mais Prêmios TOTW",        suffix: "prêmios", icon: "📅" },
-  { key: "avg_rating",      label: "Maior Média de Avaliação", suffix: "pts",     icon: "📊" },
-  { key: "penalty_saves",   label: "Mais Pênaltis Defendidos", suffix: "defesas", icon: "🧤" },
+  { key: "artilharia",           label: "Artilharia Histórica",    suffix: "gols",    icon: "⚽" },
+  { key: "assistencias",         label: "Mais Assistências",        suffix: "assist.", icon: "🎯" },
+  { key: "partidas",             label: "Mais Partidas Jogadas",    suffix: "jogos",   icon: "📋" },
+  { key: "cartoes_amarelos",     label: "Mais Cartões Amarelos",    suffix: "amarelos",icon: "🟨" },
+  { key: "motm",                 label: "Mais Prêmios MOTM",        suffix: "prêmios", icon: "⭐" },
+  { key: "tots",                 label: "Mais Prêmios TOTS",        suffix: "prêmios", icon: "🏅" },
+  { key: "totw",                 label: "Mais Prêmios TOTW",        suffix: "prêmios", icon: "📅" },
+  { key: "avg_rating",           label: "Maior Média de Avaliação", suffix: "pts",     icon: "📊" },
+  { key: "penalty_saves",        label: "Mais Pênaltis Defendidos", suffix: "defesas", icon: "🧤" },
+  // Feitos especiais
+  { key: "hat_tricks",           label: "Mais Hat-tricks",          suffix: "hat-tricks", icon: "🎩" },
+  { key: "pokers",               label: "Mais Pokers",              suffix: "pokers",  icon: "🃏" },
+  { key: "manitas",              label: "Mais Manitas",             suffix: "manitas", icon: "🖐️" },
+  { key: "participacoes_diretas",label: "Participações Diretas",    suffix: "G+A",     icon: "⚡" },
 ];
 
 const TEAM_CATEGORIES: {
@@ -45,10 +50,15 @@ const TEAM_CATEGORIES: {
   suffix: string;
   icon: string;
 }[] = [
-  { key: "titulos",       label: "Mais Títulos",           suffix: "títulos", icon: "🏆" },
-  { key: "vitorias",      label: "Mais Vitórias",          suffix: "vitórias",icon: "✅" },
-  { key: "aproveitamento",label: "Melhor Aproveitamento",  suffix: "%",       icon: "📈" },
-  { key: "gols_marcados", label: "Mais Gols Marcados",     suffix: "gols",    icon: "⚽" },
+  { key: "titulos",            label: "Mais Títulos",             suffix: "títulos",  icon: "🏆" },
+  { key: "vitorias",           label: "Mais Vitórias",            suffix: "vitórias", icon: "✅" },
+  { key: "aproveitamento",     label: "Melhor Aproveitamento",    suffix: "%",        icon: "📈" },
+  { key: "gols_marcados",      label: "Mais Gols Marcados",       suffix: "gols",     icon: "⚽" },
+  // Novas categorias
+  { key: "sequencia_vitorias", label: "Maior Sequência de V's",   suffix: "vitórias", icon: "🔥" },
+  { key: "sequencia_invicto",  label: "Maior Invencibilidade",    suffix: "jogos",    icon: "🛡️" },
+  { key: "maior_goleada",      label: "Maior Goleada",            suffix: "gols dif.",icon: "💥" },
+  { key: "mais_cleansheets",   label: "Mais Cleansheets",         suffix: "jogos",    icon: "🧱" },
 ];
 
 const STAFF_CATEGORIES: {
@@ -191,7 +201,11 @@ function RankingModal({ label, icon, suffix, entries, onClose }: ModalProps) {
               : isTeam
                 ? entry.logo_url
                 : (entry as StaffEntry).photo_url;
-            const sub = isAthlete ? entry.team_name : null;
+            const sub = isAthlete
+              ? entry.team_name
+              : isTeam
+                ? (entry as TeamEntry).subtitle ?? null
+                : null;
 
             return (
               <div
@@ -203,7 +217,6 @@ function RankingModal({ label, icon, suffix, entries, onClose }: ModalProps) {
                   backgroundColor: idx < 3 ? "rgba(255,255,255,0.015)" : "transparent",
                 }}
               >
-                {/* Posição */}
                 <span style={{
                   fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
                   color: rankColor(idx), width: 24, flexShrink: 0, textAlign: "center",
@@ -225,6 +238,7 @@ function RankingModal({ label, icon, suffix, entries, onClose }: ModalProps) {
                     <p style={{
                       fontFamily: "var(--font-mono)", fontSize: 10,
                       color: "var(--color-text-secondary)", margin: 0,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     }}>
                       {sub}
                     </p>
@@ -307,7 +321,11 @@ function CategoryCard({ label, icon, suffix, entries, roundAvatar = true }: Card
                   ? entry.full_name
                   : ((entry as StaffEntry).surname ?? (entry as StaffEntry).full_name);
               const photoUrl = isAthlete ? entry.photo_url : isTeam ? entry.logo_url : (entry as StaffEntry).photo_url;
-              const sub = isAthlete ? entry.team_name : null;
+              const sub = isAthlete
+                ? entry.team_name
+                : isTeam
+                  ? (entry as TeamEntry).subtitle ?? null
+                  : null;
 
               return (
                 <div
@@ -339,6 +357,7 @@ function CategoryCard({ label, icon, suffix, entries, roundAvatar = true }: Card
                       <p style={{
                         fontFamily: "var(--font-mono)", fontSize: 10,
                         color: "var(--color-text-secondary)", margin: 0,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                       }}>
                         {sub}
                       </p>
