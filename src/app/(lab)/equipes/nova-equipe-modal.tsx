@@ -9,13 +9,26 @@ import {
   useEffect,
   useState,
 } from "react";
-import { criarEquipe } from "./actions";
+import { criarEquipe, editarEquipe } from "./actions";
 import { Camera, X } from "lucide-react";
+
+type Team = {
+  id: string;
+  full_name: string;
+  short_name: string | null;
+  abbreviation: string | null;
+  gender: string | null;
+  logo_url: string | null;
+  primary_color: string | null;
+  secondary_color: string | null;
+  founded_year: number | null;
+};
 
 type NovaEquipeModalProps = {
   isOpen: boolean;
   onClose: () => void;
   defaultGender?: string;
+  editingTeam?: Team | null;
 };
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -23,8 +36,10 @@ function rgbToHex(r: number, g: number, b: number): string {
   return `#${to(r)}${to(g)}${to(b)}`;
 }
 
-export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeModalProps) {
+export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }: NovaEquipeModalProps) {
   const router = useRouter();
+  const isEditing = !!editingTeam;
+
   const [fullName, setFullName] = useState("");
   const [gender, setGender] = useState(defaultGender ?? "male");
   const [file, setFile] = useState<File | null>(null);
@@ -34,20 +49,41 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Ao abrir o modal: pré-popula se for edição, limpa se for criação
   useEffect(() => {
-    if (isOpen) return;
-    setFullName("");
-    setGender(defaultGender ?? "male");
-    setFile(null);
-    setHexColors([]);
-    setSelectedColors([null, null, null]);
-    setLoading(false);
-    setError(null);
-    setPreviewUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
-  }, [isOpen, defaultGender]);
+    if (!isOpen) return;
 
-  useEffect(() => { if (defaultGender) setGender(defaultGender); }, [defaultGender]);
+    if (editingTeam) {
+      setFullName(editingTeam.full_name);
+      setGender(editingTeam.gender ?? defaultGender ?? "male");
+      setFile(null);
+      setPreviewUrl(editingTeam.logo_url ?? null);
+      setHexColors([]);
+      setSelectedColors([
+        editingTeam.primary_color ?? null,
+        editingTeam.secondary_color ?? null,
+        null,
+      ]);
+      setError(null);
+      setLoading(false);
+    } else {
+      setFullName("");
+      setGender(defaultGender ?? "male");
+      setFile(null);
+      setPreviewUrl(null);
+      setHexColors([]);
+      setSelectedColors([null, null, null]);
+      setError(null);
+      setLoading(false);
+    }
+  }, [isOpen, editingTeam]);
 
+  // Sincroniza gênero quando defaultGender muda (só em modo criação)
+  useEffect(() => {
+    if (!isEditing && defaultGender) setGender(defaultGender);
+  }, [defaultGender, isEditing]);
+
+  // Bloqueia scroll do body
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -55,9 +91,15 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
-  // Extração de cores do logo
+  // Extração de cores do logo — só roda quando um novo arquivo é carregado
   useEffect(() => {
-    if (!previewUrl) { setHexColors([]); setSelectedColors([null, null, null]); return; }
+    if (!previewUrl || !file) { 
+      // Se não há novo arquivo, não extrai — preserva as cores existentes
+      if (!file) return;
+      setHexColors([]); 
+      setSelectedColors([null, null, null]); 
+      return; 
+    }
     if (file?.type === "image/svg+xml") { setHexColors([]); setSelectedColors([null, null, null]); return; }
 
     const img = document.createElement("img");
@@ -87,7 +129,6 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
           .sort((a, b) => b[1] - a[1]).slice(0, 6)
           .map(([key]) => { const [r, g, b] = key.split(",").map(Number); return rgbToHex(r, g, b); });
         setHexColors(sorted);
-        // Pré-seleciona as 3 primeiras automaticamente
         setSelectedColors([sorted[0] ?? null, sorted[1] ?? null, sorted[2] ?? null]);
       } catch { setHexColors([]); setSelectedColors([null, null, null]); }
     };
@@ -97,7 +138,11 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
 
   const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
     const next = e.target.files?.[0] ?? null;
-    setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return next ? URL.createObjectURL(next) : null; });
+    setPreviewUrl((old) => {
+      // Só revoga se for uma URL de objeto local (não uma URL do Supabase)
+      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
+      return next ? URL.createObjectURL(next) : null;
+    });
     setFile(next);
     if (next?.type === "image/svg+xml") { setHexColors([]); setSelectedColors([null, null, null]); }
   }, []);
@@ -120,11 +165,20 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
       if (selectedColors[0]) formData.append("primary_color", selectedColors[0]);
       if (selectedColors[1]) formData.append("secondary_color", selectedColors[1]);
       if (selectedColors[2]) formData.append("tertiary_color", selectedColors[2]);
-      const result = await criarEquipe(formData);
-      if (result.error) { setError(result.error); return; }
-      if (!result.id) { setError("Não foi possível obter o ID da equipe criada."); return; }
-      router.push(`/equipes/${result.id}`);
-      onClose();
+
+      if (isEditing) {
+        const result = await editarEquipe(editingTeam.id, formData);
+        if ("error" in result) { setError(result.error); return; }
+        router.refresh();
+        onClose();
+      }
+       else {
+        const result = await criarEquipe(formData);
+        if (result.error) { setError(result.error); return; }
+        if (!result.id) { setError("Não foi possível obter o ID da equipe criada."); return; }
+        router.push(`/equipes/${result.id}`);
+        onClose();
+      }
     } finally { setLoading(false); }
   }
 
@@ -154,8 +208,12 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
         {/* Header */}
         <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
           <div>
-            <p id="nova-equipe-title" style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>Nova equipe</p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>Preencha as informações básicas</p>
+            <p id="nova-equipe-title" style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>
+              {isEditing ? "Editar equipe" : "Nova equipe"}
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+              {isEditing ? editingTeam.full_name : "Preencha as informações básicas"}
+            </p>
           </div>
           <button type="button" onClick={onClose}
             style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
@@ -190,8 +248,8 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)" }}>PNG, WebP ou SVG</p>
               </div>
 
-              {/* Cores extraídas */}
-              {hexColors.length > 0 && (
+              {/* Cores — mostra paleta se novo arquivo foi carregado, ou mostra cores existentes em modo edição */}
+              {hexColors.length > 0 ? (
                 <div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 10 }}>
                     Cores detectadas — selecione para cada posição
@@ -219,7 +277,6 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
                         <div key={`${hex}-${i}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
                           <button type="button"
                             onClick={() => {
-                              // Ao clicar, atribui ao próximo slot vazio; se já está selecionado, remove
                               if (isSelected) {
                                 setSelectedColors(prev => { const next = [...prev]; next[slotIdx] = null; return next; });
                               } else {
@@ -240,7 +297,25 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
                     })}
                   </div>
                 </div>
-              )}
+              ) : isEditing && (selectedColors[0] || selectedColors[1]) ? (
+                /* Em modo edição sem novo logo: mostra as cores atuais como preview estático */
+                <div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 10 }}>
+                    Cores atuais — substitua o logo para alterar
+                  </span>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    {slotLabels.map((label, slotIdx) => (
+                      <div key={slotIdx} style={{ borderRadius: 10, border: `1px solid ${selectedColors[slotIdx] ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.06)"}`, backgroundColor: selectedColors[slotIdx] ? "rgba(191,242,5,0.04)" : "rgba(255,255,255,0.02)", padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: selectedColors[slotIdx] ?? "rgba(255,255,255,0.06)", border: selectedColors[slotIdx] ? "2px solid rgba(255,255,255,0.2)" : "2px dashed rgba(255,255,255,0.1)" }} />
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: selectedColors[slotIdx] ? "#BFF205" : "rgba(255,255,255,0.25)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>{label}</span>
+                        {selectedColors[slotIdx] && (
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: selectedColors[slotIdx]! }}>{selectedColors[slotIdx]}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Nome completo */}
               <div>
@@ -252,7 +327,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
                   onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
               </div>
 
-              {/* Gênero — pill buttons */}
+              {/* Gênero */}
               <div>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Gênero *</span>
                 <div style={{ display: "flex", gap: 8 }}>
@@ -283,7 +358,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender }: NovaEquipeMo
           </button>
           <button type="submit" form="nova-equipe-form" disabled={loading || !fullName.trim() || !gender}
             style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: loading || !fullName.trim() || !gender ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: loading || !fullName.trim() || !gender ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
-            {loading ? "Criando…" : "Criar equipe"}
+            {loading ? (isEditing ? "Salvando…" : "Criando…") : (isEditing ? "Salvar alterações" : "Criar equipe")}
           </button>
         </div>
       </div>

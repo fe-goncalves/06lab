@@ -151,6 +151,9 @@ export default function DashboardClient({
   }, [activeTab, selectedDate]);
 
   async function loadNotifications() {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!userId || typeof userId !== "string" || !uuidRegex.test(userId)) return;
+  
     const supabase = createClient();
     const { data } = await supabase
       .from("notifications")

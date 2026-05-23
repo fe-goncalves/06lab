@@ -29,6 +29,7 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<"male" | "female">("male");
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
 
   const filtered = teams.filter(t => {
     const matchSearch = !search ||
@@ -46,12 +47,11 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
 
   return (
     <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
-      {/* Header bar — igual ao dashboard */}
+      {/* Header bar */}
       <div
         className="flex h-14 shrink-0 items-center border-b px-8"
         style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
       >
-        {/* Abas centralizadas */}
         <div className="flex flex-1 items-center justify-center gap-8">
           <button
             type="button"
@@ -59,11 +59,7 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
             style={{ color: activeTab === "male" ? "var(--color-brand)" : "#A6A6A6" }}
           >
-            <Users
-              size={16}
-              strokeWidth={2}
-              style={{ color: activeTab === "male" ? "var(--color-brand)" : "#A6A6A6" }}
-            />
+            <Users size={16} strokeWidth={2} style={{ color: activeTab === "male" ? "var(--color-brand)" : "#A6A6A6" }} />
             MASCULINO
             <span
               className="font-mono text-xs rounded px-1.5 py-0.5"
@@ -82,11 +78,7 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
             style={{ color: activeTab === "female" ? "var(--color-brand)" : "#A6A6A6" }}
           >
-            <Users
-              size={16}
-              strokeWidth={2}
-              style={{ color: activeTab === "female" ? "var(--color-brand)" : "#A6A6A6" }}
-            />
+            <Users size={16} strokeWidth={2} style={{ color: activeTab === "female" ? "var(--color-brand)" : "#A6A6A6" }} />
             FEMININO
             <span
               className="font-mono text-xs rounded px-1.5 py-0.5"
@@ -100,10 +92,9 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
           </button>
         </div>
 
-        {/* Direita — nova equipe */}
         <button
           type="button"
-          onClick={() => setModalOpen(true)}
+          onClick={() => { setEditingTeam(null); setModalOpen(true); }}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
           style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
         >
@@ -114,7 +105,6 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
 
       {/* Conteúdo */}
       <div className="flex-1 p-6 md:p-8">
-        {/* Search */}
         <div className="mb-6">
           <input
             type="text"
@@ -126,12 +116,10 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
           />
         </div>
 
-        {/* Contagem */}
         <p className="mb-4 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
           {filtered.length} {filtered.length === 1 ? "equipe" : "equipes"}
         </p>
 
-        {/* Lista */}
         {filtered.length === 0 ? (
           <div
             className="flex items-center justify-center rounded-xl border py-16 text-center"
@@ -146,18 +134,36 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
         ) : (
           <div>
             {filtered.map((team, idx) => (
-              <TeamRow key={team.id} team={team} isFirst={idx === 0} />
+              <TeamRow
+                key={team.id}
+                team={team}
+                isFirst={idx === 0}
+                onEdit={() => { setEditingTeam(team); setModalOpen(true); }}
+              />
             ))}
           </div>
         )}
       </div>
 
-      <NovaEquipeModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultGender={activeTab === "male" ? "male" : "female"} />
+      <NovaEquipeModal
+        isOpen={modalOpen}
+        onClose={() => { setModalOpen(false); setEditingTeam(null); }}
+        defaultGender={activeTab === "male" ? "male" : "female"}
+        editingTeam={editingTeam}
+      />
     </div>
   );
 }
 
-function TeamRow({ team, isFirst }: { team: Team; isFirst: boolean }) {
+function TeamRow({
+  team,
+  isFirst,
+  onEdit,
+}: {
+  team: Team;
+  isFirst: boolean;
+  onEdit: () => void;
+}) {
   const [hovered, setHovered] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const neonColor = team.primary_color ?? "var(--color-brand)";
@@ -190,7 +196,7 @@ function TeamRow({ team, isFirst }: { team: Team; isFirst: boolean }) {
         href={`/equipes/${team.id}`}
         className="relative z-10 flex items-center gap-6 py-4 pr-4"
       >
-        {/* Logo sem fundo */}
+        {/* Logo */}
         <div className="flex h-10 w-10 shrink-0 items-center justify-center">
           {team.logo_url ? (
             <img src={team.logo_url} alt="" className="h-10 w-10 object-contain" />
@@ -212,22 +218,23 @@ function TeamRow({ team, isFirst }: { team: Team; isFirst: boolean }) {
         </span>
 
         {/* Ações */}
-        <div className="flex items-center gap-4 shrink-0" onClick={e => e.preventDefault()}>
-          <Link
-            href={`/equipes/${team.id}`}
+        <div className="flex items-center gap-4 shrink-0">
+          {/* CORRIGIDO: button em vez de Link para evitar <a> aninhado */}
+          <button
+            type="button"
             title="Editar equipe"
             className="transition-colors hover:text-[var(--color-brand)]"
             style={{ color: "var(--color-text-secondary)" }}
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
           >
             <SquarePen size={17} strokeWidth={1.8} />
-          </Link>
+          </button>
           <Link
             href="#"
             title="Ver no 06.score"
             className="transition-colors hover:text-[var(--color-brand)]"
             style={{ color: "var(--color-text-secondary)" }}
-            onClick={e => e.stopPropagation()}
+            onClick={e => { e.preventDefault(); e.stopPropagation(); }}
             target="_blank"
             rel="noopener noreferrer"
           >

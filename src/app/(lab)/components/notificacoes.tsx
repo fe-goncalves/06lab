@@ -48,10 +48,18 @@ export default function Notificacoes({ userId }: { userId: string }) {
   async function loadNotifications() {
     setLoading(true);
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLoading(false); return; }
+    const { data: profile } = await supabase
+      .from("user_profiles")
+      .select("id")
+      .eq("auth_user_id", user.id)
+      .single();
+    if (!profile) { setLoading(false); return; }
     const { data } = await supabase
       .from("notifications")
       .select("*")
-      .eq("recipient_id", userId)
+      .eq("recipient_id", profile.id)
       .order("created_at", { ascending: false })
       .limit(20);
     setNotifications(data ?? []);
