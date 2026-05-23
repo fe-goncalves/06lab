@@ -3,7 +3,8 @@
 import { createClient } from "@/lib/supabase";
 import Link from "next/link";
 import { Dice6, Search, Bell, Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { SearchModal } from "@/app/(lab)/components/search/SearchModal";
 
 type Team = {
   id: string;
@@ -129,7 +130,22 @@ export default function DashboardClient({
   const [showNotif, setShowNotif] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
 
-  // Jogos
+  // ── Busca global ─────────────────────────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // Atalho global Cmd+K / Ctrl+K
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  // ── Jogos ─────────────────────────────────────────────────────────────────
   const [today] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<Date>(today);
   const [calendarCenter, setCalendarCenter] = useState<Date>(today);
@@ -371,7 +387,14 @@ export default function DashboardClient({
 
         {/* Direita — search + notificações */}
         <div className="flex items-center gap-4">
-          <button type="button" className="transition-opacity hover:opacity-70" style={{ color: "#A6A6A6" }}>
+          {/* Botão de busca — abre o SearchModal */}
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className="transition-opacity hover:opacity-70"
+            style={{ color: "#A6A6A6" }}
+            title="Buscar (Ctrl+K)"
+          >
             <Search size={17} strokeWidth={2} />
           </button>
 
@@ -693,6 +716,8 @@ export default function DashboardClient({
           </div>
         </div>
       )}
+
+      {/* ── Modal de Calendário ── */}
       {showCalendarModal && (
         <CalendarModal
           selectedDate={selectedDate}
@@ -712,6 +737,13 @@ export default function DashboardClient({
           }}
         />
       )}
+
+      {/* ── Modal de Busca Global ── */}
+      <SearchModal
+        isOpen={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        organizationId={orgId}
+      />
     </div>
   );
 }
