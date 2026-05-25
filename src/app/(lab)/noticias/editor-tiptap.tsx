@@ -3,8 +3,10 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
-import { Bold, Italic, Heading2, Heading3, List, ListOrdered, ImageIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bold, Italic, Heading2, Heading3, List, ListOrdered, ImageIcon, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import imageCompression from "browser-image-compression";
+import { createClient } from "@/lib/supabase";
 
 type Props = {
   initialContent?: object;
@@ -14,6 +16,8 @@ type Props = {
 export default function EditorTipTap({ initialContent, onChange }: Props) {
   const [imageUrl, setImageUrl] = useState("");
   const [showImageInput, setShowImageInput] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageFileRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     extensions: [
@@ -41,6 +45,33 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
     editor.chain().focus().setImage({ src: url }).run();
     setImageUrl("");
     setShowImageInput(false);
+  }
+
+  async function handleImageFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !editor) return;
+    setUploadingImage(true);
+    try {
+      const compressed = await imageCompression(file, {
+        maxSizeMB: 0.5,
+        maxWidthOrHeight: 1200,
+        useWebWorker: true,
+        fileType: "image/jpeg",
+      });
+      const supabase = createClient();
+      const path = `body/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+      const { error } = await supabase.storage
+        .from("news")
+        .upload(path, compressed, { contentType: "image/jpeg", cacheControl: "3600" });
+      if (error) throw error;
+      const { data: pub } = supabase.storage.from("news").getPublicUrl(path);
+      editor.chain().focus().setImage({ src: pub.publicUrl }).run();
+    } catch (err) {
+      console.error("Erro ao fazer upload da imagem:", err);
+    } finally {
+      setUploadingImage(false);
+      if (imageFileRef.current) imageFileRef.current.value = "";
+    }
   }
 
   const btnBase: React.CSSProperties = {
@@ -127,8 +158,26 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
           style={showImageInput ? btnActive : btnBase}
         >
           <ImageIcon size={13} strokeWidth={2.5} />
-          Imagem
+          URL
         </button>
+
+        <button
+          type="button"
+          onClick={() => imageFileRef.current?.click()}
+          disabled={uploadingImage}
+          style={btnBase}
+        >
+          <Upload size={13} strokeWidth={2.5} />
+          {uploadingImage ? "Enviando..." : "Upload"}
+        </button>
+
+        <input
+          ref={imageFileRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageFileUpload}
+          className="hidden"
+        />
 
         {showImageInput && (
           <div className="flex items-center gap-2 ml-1">

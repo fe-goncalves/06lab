@@ -62,23 +62,27 @@ export default async function NoticiaPage({ params }: Props) {
   }
 
   // Equipes e competições da organização para os selects
-  const { data: teams } = await supabase
-    .from("teams")
-    .select("id, full_name, abbreviation, logo_url")
-    .eq("organization_id", orgId)
-    .order("full_name");
+  const [teamsResult, competitionsResult] = await Promise.all([
+    supabase
+      .from("teams")
+      .select("id, full_name, abbreviation, logo_url")
+      .eq("organization_id", orgId)
+      .order("full_name"),
+    supabase
+      .from("competitions")
+      .select("id, full_name, short_name, logo_url")
+      .eq("organization_id", orgId)
+      .order("full_name"),
+  ]);
 
-  const { data: competitions } = await supabase
-    .from("competitions")
-    .select("id, full_name, short_name, logo_url")
-    .eq("organization_id", orgId)
-    .order("full_name");
+  const teams = teamsResult.data ?? [];
+  const competitions = competitionsResult.data ?? [];
 
   return (
     <NoticiaFormClient
       article={article}
-      teams={teams ?? []}
-      competitions={competitions ?? []}
+      teams={teams}
+      competitions={competitions}
       initialTeamIds={initialTeamIds}
       initialCompetitionIds={initialCompetitionIds}
     />

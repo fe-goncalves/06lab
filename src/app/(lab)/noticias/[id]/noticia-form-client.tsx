@@ -3,9 +3,10 @@
 import { useState, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, Upload, X, Check } from "lucide-react";
+import { ArrowLeft, Trash2, Check } from "lucide-react";
 import dynamic from "next/dynamic";
 import { salvarNoticia, excluirNoticia } from "../actions";
+import CoverUpload from "../cover-upload";
 
 const EditorTipTap = dynamic(() => import("../editor-tiptap"), { ssr: false });
 
@@ -56,20 +57,9 @@ export default function NoticiaFormClient({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null); // mantido para compatibilidade
 
-  function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCoverFile(file);
-    setCoverPreview(URL.createObjectURL(file));
-  }
-
-  function removeCover() {
-    setCoverFile(null);
-    setCoverPreview(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }
+  // Gerenciado pelo CoverUpload
 
   function toggleTeam(id: string) {
     setSelectedTeams((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]);
@@ -102,9 +92,10 @@ export default function NoticiaFormClient({
       } else {
         setSuccess(true);
         if (!article?.id) {
-          router.replace(`/noticias/${result.id}`);
+          router.push(`/noticias/${result.id}`);
+        } else {
+          setTimeout(() => setSuccess(false), 3000);
         }
-        setTimeout(() => setSuccess(false), 3000);
       }
     });
   }
@@ -295,42 +286,10 @@ export default function NoticiaFormClient({
             style={{ border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}
           >
             <label style={labelStyle}>Imagem de capa</label>
-            {coverPreview ? (
-              <div className="relative">
-                <img
-                  src={coverPreview}
-                  alt="Capa"
-                  className="w-full rounded object-cover"
-                  style={{ maxHeight: "180px" }}
-                />
-                <button
-                  type="button"
-                  onClick={removeCover}
-                  className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full"
-                  style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff" }}
-                >
-                  <X size={12} strokeWidth={2.5} />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full flex-col items-center justify-center gap-2 rounded py-8 transition-colors hover:bg-white/5"
-                style={{ border: "1px dashed var(--color-border)" }}
-              >
-                <Upload size={20} strokeWidth={1.5} style={{ color: "var(--color-text-secondary)" }} />
-                <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                  Clique para enviar
-                </span>
-              </button>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleCoverChange}
-              className="hidden"
+            <CoverUpload
+              existingUrl={coverPreview}
+              onFileReady={(file) => setCoverFile(file)}
+              onExistingUrl={(url) => setCoverPreview(url)}
             />
           </div>
 

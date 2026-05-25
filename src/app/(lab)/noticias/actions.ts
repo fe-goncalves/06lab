@@ -101,8 +101,7 @@ export async function salvarNoticia(formData: FormData): Promise<{ id: string } 
     );
   }
 
-  revalidatePath("/noticias");
-  revalidatePath(`/noticias/${articleId}`);
+  revalidatePath("/noticias", "page");
   return { id: articleId };
 }
 
