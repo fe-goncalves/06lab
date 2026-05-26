@@ -2999,7 +2999,7 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
       const supabase = createClient();
       const { data: squads } = await supabase
         .from("selection_squads")
-        .select("id, squad_type, selection_squad_members(id, athlete_id, staff_member_id, team_id, display_order, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), teams(id, full_name, abbreviation, logo_url, primary_color))")
+        .select("id, squad_type, formation, selection_squad_members(id, athlete_id, staff_member_id, team_id, display_order, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), teams(id, full_name, abbreviation, logo_url, primary_color))")
         .eq("edition_id", selectedEditionId).eq("round_id", selectedRoundId);
 
       const totw = (squads ?? []).find((s: any) => s.squad_type === "totw");
@@ -3008,6 +3008,9 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
       setMotwSquadId(motw?.id ?? null);
 
       if (totw?.selection_squad_members) {
+        if (totw.formation && FORMATIONS[totw.formation]) {
+          setFormation(totw.formation);
+        }
         const members = [...totw.selection_squad_members].sort((a: any, b: any) => a.display_order - b.display_order);
         const playerSlots = members.filter((m: any) => m.display_order <= 7);
         const coachSlot = members.find((m: any) => m.display_order === 8);
@@ -3103,19 +3106,28 @@ function SemanasTab({ selectedEditionId, rounds, editionTeams }: {
   async function handleSave() {
     if (!selectedRoundId) return;
     setSaving(true);
+    
+    console.log('=== MOTW DEBUG ===');
+    console.log('motwIndex:', motwIndex);
+    console.log('slots[motwIndex]:', motwIndex !== null ? slots[motwIndex] : 'N/A');
+    console.log('athleteId:', motwIndex !== null ? slots[motwIndex]?.athleteId : 'N/A');
+    console.log('teamId:', motwIndex !== null ? slots[motwIndex]?.teamId : 'N/A');
+    console.log('selectedRoundId:', selectedRoundId);
+    console.log('selectedEditionId:', selectedEditionId);
     const allMembers: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[] = [];
     slots.forEach((s, i) => {
       if (s) allMembers.push({ athleteId: s.athleteId ?? undefined, staffMemberId: s.staffMemberId ?? undefined, teamId: s.teamId, displayOrder: i + 1 });
     });
     if (coach) allMembers.push({ staffMemberId: coach.staffMemberId ?? undefined, athleteId: coach.athleteId ?? undefined, teamId: coach.teamId, displayOrder: 8 });
-    const totwResult = await criarOuAtualizarTOTW(selectedEditionId, selectedRoundId, allMembers);
+    const totwResult = await criarOuAtualizarTOTW(selectedEditionId, selectedRoundId, allMembers, formation);
     if ("error" in totwResult) { toast("error", totwResult.error); setSaving(false); return; }
-    if (motwIndex !== null && slots[motwIndex]?.athleteId) {
-      const m = slots[motwIndex]!;
-      await criarOuAtualizarMOTW(selectedEditionId, selectedRoundId, m.athleteId, m.teamId);
-    } else if (motwSquadId) {
-      await deletarSquad(motwSquadId);
-    }
+    const motwSlot = motwIndex !== null ? slots[motwIndex] : null;
+if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined) {
+  const motwResult = await criarOuAtualizarMOTW(selectedEditionId, selectedRoundId, motwSlot.athleteId, motwSlot.teamId);
+  console.log('=== MOTW RESULT ===', JSON.stringify(motwResult));
+} else if (motwSquadId) {
+  await deletarSquad(motwSquadId);
+}
     // Refresh historico if it was loaded
     if (historico.length > 0) void loadHistorico();
     setSaving(false);

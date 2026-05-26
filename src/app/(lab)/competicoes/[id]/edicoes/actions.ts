@@ -791,6 +791,7 @@ export async function criarOuAtualizarTOTW(
   editionId: string,
   roundId: string,
   members: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[],
+  formation: string = '2-3-1',
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -811,21 +812,23 @@ export async function criarOuAtualizarTOTW(
     .select("id").eq("edition_id", editionId).eq("round_id", roundId).eq("squad_type", "totw")
     .maybeSingle();
 
-  if (existing) {
-    squadId = existing.id;
-    await supabase.from("selection_squad_members").delete().eq("squad_id", squadId);
-  } else {
-    const { data: inserted, error } = await supabase
-      .from("selection_squads")
-      .insert({
-        organization_id: profile.organization_id,
-        edition_id: editionId,
-        season_id: season?.season_id ?? null,
-        year_id: (season?.seasons as any)?.year_id ?? null,
-        squad_type: "totw",
-        round_id: roundId,
-        created_by: profile.id,
-      })
+    if (existing) {
+      squadId = existing.id;
+      await supabase.from("selection_squad_members").delete().eq("squad_id", squadId);
+      await supabase.from("selection_squads").update({ formation }).eq("id", squadId);
+    } else {
+      const { data: inserted, error } = await supabase
+        .from("selection_squads")
+        .insert({
+          organization_id: profile.organization_id,
+          edition_id: editionId,
+          season_id: season?.season_id ?? null,
+          year_id: (season?.seasons as any)?.year_id ?? null,
+          squad_type: "totw",
+          round_id: roundId,
+          created_by: profile.id,
+          formation,
+        })
       .select("id").single();
     if (error) return { error: error.message };
     squadId = inserted.id;
