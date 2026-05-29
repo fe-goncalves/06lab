@@ -173,7 +173,7 @@ const drawMatchScoreSheet = (doc: jsPDF, match: MatchData) => {
 
 // ─── Busca de dados no Supabase ────────────────────────────────────────────────
 
-export async function gerarSumulaPDF(matchId: string): Promise<jsPDF> {
+async function fetchMatchDataForPDF(matchId: string): Promise<MatchData> {
   const supabase = createClient();
 
   // 1. Busca a partida — sem join em competition_editions para evitar ambiguidade de FK
@@ -274,8 +274,7 @@ export async function gerarSumulaPDF(matchId: string): Promise<jsPDF> {
   const teamA = match.teams_a as any;
   const teamB = match.teams_b as any;
 
-  // 4. Monta o objeto no formato esperado pelo drawMatchScoreSheet
-  const matchData: MatchData = {
+  return {
     competition_name: competitionName,
     phase_name: phase?.custom_label ?? phase?.full_name ?? '',
     round_name: (match.rounds as any)?.custom_label ?? (match.rounds as any)?.name ?? '',
@@ -295,10 +294,25 @@ export async function gerarSumulaPDF(matchId: string): Promise<jsPDF> {
       committee: rosterB.committee,
     },
   };
+}
 
-  // 5. Gera e retorna o PDF
+export async function gerarSumulaPDF(matchId: string): Promise<jsPDF> {
+  const matchData = await fetchMatchDataForPDF(matchId);
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   drawMatchScoreSheet(doc, matchData);
+  return doc;
+}
+
+export async function gerarSumulasPDF(matchIds: string[]): Promise<jsPDF> {
+  if (matchIds.length === 0) {
+    throw new Error('Nenhuma partida selecionada.');
+  }
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  for (let i = 0; i < matchIds.length; i++) {
+    if (i > 0) doc.addPage();
+    const matchData = await fetchMatchDataForPDF(matchIds[i]);
+    drawMatchScoreSheet(doc, matchData);
+  }
   return doc;
 }
 

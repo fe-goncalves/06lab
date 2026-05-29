@@ -32,6 +32,30 @@ type Round = { id: string; name: string; custom_label: string | null; phase_id: 
 type EditionTeam = { id: string; team_id: string; arrival_origin: string | null; is_free_agent_pool: boolean; teams: Team | null };
 type Standing = any;
 type Scorer = any;
+type TableMarker = {
+  id: string;
+  phase_id?: string;
+  description: string;
+  color_hex: string;
+  show_background: boolean;
+  position_from: number;
+  position_to: number;
+  display_order: number;
+};
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = (hex ?? "").replace("#", "");
+  if (h.length !== 6) return `rgba(191,242,5,${alpha})`;
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return `rgba(191,242,5,${alpha})`;
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function getMarkerForRank(markers: TableMarker[], rank: number): TableMarker | undefined {
+  return markers.find(m => rank >= m.position_from && rank <= m.position_to);
+}
 
 const STATUS_LABEL: Record<string, string> = { scheduled: "AG", ongoing: "AO VIVO", finished: "FT", postponed: "AD" };
 const STATUS_COLOR: Record<string, string> = { scheduled: "#A6A6A6", ongoing: "#BFF205", finished: "#A6A6A6", postponed: "#FF4444" };
@@ -110,10 +134,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
 
   const [standingsMode, setStandingsMode] = useState<"view" | "edit_points" | "reorder" | "edit_markers">("view");
-  const [markers, setMarkers] = useState<any[]>([]);
+  const [markers, setMarkers] = useState<TableMarker[]>([]);
   const [loadingMarkers, setLoadingMarkers] = useState(false);
   const [savingMarkers, setSavingMarkers] = useState(false);
-  const [editingMarkers, setEditingMarkers] = useState<any[]>([]);
+  const [editingMarkers, setEditingMarkers] = useState<TableMarker[]>([]);
   const [standingsMenuOpen, setStandingsMenuOpen] = useState(false);
   const [standingsConfirmRecalc, setStandingsConfirmRecalc] = useState(false);
   const [editedPoints, setEditedPoints] = useState<Record<string, { awarded: number; deducted: number }>>({});
@@ -375,7 +399,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       .select("*")
       .eq("phase_id", phaseId)
       .order("display_order");
-    setMarkers(data ?? []);
+    setMarkers((data ?? []) as TableMarker[]);
     setLoadingMarkers(false);
   }
 
@@ -407,6 +431,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       loadYellowAlerts(selectedEditionId);
     }
   }, [selectedEditionId, loadEditionData]);
+
+  useEffect(() => {
+    if (selectedPhaseId) void loadMarkers(selectedPhaseId);
+    else setMarkers([]);
+  }, [selectedPhaseId]);
 
   const selectedNewMatchPhase = phases.find(p => p.id === newMatchPhaseId);
   const roundsForSelectedPhase = rounds.filter(r => r.phase_id === newMatchPhaseId);
@@ -629,7 +658,180 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     }
   
     const isClassif = selectedPhase.phase_type === "round_robin" || selectedPhase.phase_type === "group_stage";
-  
+    const activeMarkers: TableMarker[] = (
+      standingsMode === "edit_markers"
+        ? editingMarkers.filter(m => m.description?.trim() && m.color_hex)
+        : markers
+    ).sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+
+    function startEditMarkers() {
+      setStandingsMode("edit_markers");
+      setStandingsMenuOpen(false);
+      setEditingMarkers(
+        markers.length > 0
+          ? markers.map(m => ({ ...m }))
+          : [{
+            id: `new-${Date.now()}`,
+            description: "",
+            color_hex: "#BFF205",
+            show_background: true,
+            position_from: 1,
+            position_to: 2,
+            display_order: 0,
+          }],
+      );
+    }
+
+    async function handleSaveMarkers() {
+      if (!selectedPhaseId) return;
+      const valid = editingMarkers
+        .map((m, i) => ({
+          ...m,
+          description: m.description?.trim() ?? "",
+          position_from: Math.max(1, Number(m.position_from) || 1),
+          position_to: Math.max(1, Number(m.position_to) || 1),
+          display_order: i,
+        }))
+        .filter(m => m.description && m.color_hex);
+
+      for (const m of valid) {
+        if (m.position_to < m.position_from) {
+          toast("error", `Em "${m.description}", a posição final deve ser maior ou igual à inicial.`);
+          return;
+        }
+      }
+
+      setSavingMarkers(true);
+      const supabase = createClient();
+      const { error: delError } = await supabase.from("table_markers").delete().eq("phase_id", selectedPhaseId);
+      if (delError) {
+        setSavingMarkers(false);
+        toast("error", delError.message);
+        return;
+      }
+      if (valid.length > 0) {
+        const { error: insError } = await supabase.from("table_markers").insert(
+          valid.map(m => ({
+            phase_id: selectedPhaseId,
+            description: m.description,
+            color_hex: m.color_hex.startsWith("#") ? m.color_hex : `#${m.color_hex}`,
+            show_background: m.show_background ?? true,
+            position_from: m.position_from,
+            position_to: m.position_to,
+            display_order: m.display_order,
+          })),
+        );
+        if (insError) {
+          setSavingMarkers(false);
+          toast("error", insError.message);
+          return;
+        }
+      }
+      await loadMarkers(selectedPhaseId);
+      setSavingMarkers(false);
+      setStandingsMode("view");
+      setEditingMarkers([]);
+      toast("success", "Marcações salvas.");
+    }
+
+    function StandingsMarkersLegend() {
+      if (activeMarkers.length === 0 || standingsMode === "edit_markers") return null;
+      return (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, padding: "12px 18px", borderTop: "1px solid var(--color-border)" }}>
+          {activeMarkers.map(m => (
+            <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: m.color_hex, flexShrink: 0 }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+                {m.description}
+                <span style={{ opacity: 0.55 }}> · {m.position_from}º–{m.position_to}º</span>
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    function StandingsMarkersEditor() {
+      if (standingsMode !== "edit_markers") return null;
+      return (
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.45)", margin: "0 0 12px" }}>
+            Marcações na tabela
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, marginBottom: 6, paddingRight: 0 }}>
+            {["Título", "Cor", "Do º", "Até º", ""].map((label, i) => (
+              <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>{label}</span>
+            ))}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {editingMarkers.map((m, idx) => (
+              <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, alignItems: "center" }}>
+                <input
+                  type="text"
+                  placeholder="Título (ex: Classificados)"
+                  value={m.description}
+                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))}
+                  style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none" }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input
+                    type="color"
+                    value={m.color_hex?.startsWith("#") ? m.color_hex : "#BFF205"}
+                    onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, color_hex: e.target.value } : x))}
+                    style={{ width: 32, height: 32, padding: 0, border: "none", borderRadius: 6, cursor: "pointer", background: "none" }}
+                  />
+                  <input
+                    type="text"
+                    value={m.color_hex ?? ""}
+                    onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, color_hex: e.target.value } : x))}
+                    style={{ flex: 1, padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-primary)", outline: "none" }}
+                  />
+                </div>
+                <input
+                  type="number" min={1} title="Posição inicial"
+                  value={m.position_from}
+                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, position_from: Number(e.target.value) } : x))}
+                  style={{ padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", textAlign: "center" as const }}
+                />
+                <input
+                  type="number" min={1} title="Posição final"
+                  value={m.position_to}
+                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, position_to: Number(e.target.value) } : x))}
+                  style={{ padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", textAlign: "center" as const }}
+                />
+                <button
+                  type="button"
+                  title="Remover marcação"
+                  onClick={() => setEditingMarkers(prev => prev.filter((_, i) => i !== idx))}
+                  style={{ width: 32, height: 32, borderRadius: 7, border: "1px solid rgba(255,68,68,0.3)", background: "rgba(255,68,68,0.08)", color: "var(--color-danger)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", margin: "10px 0 0", lineHeight: 1.5 }}>
+            Defina faixas de posição (ex.: 1º–4º classificados, 5º–8º repescagem). As cores aparecem na tabela e na legenda abaixo.
+          </p>
+          <button
+            type="button"
+            onClick={() => setEditingMarkers(prev => [...prev, {
+              id: `new-${Date.now()}-${prev.length}`,
+              description: "",
+              color_hex: "#A6A6A6",
+              show_background: true,
+              position_from: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 1) : 1,
+              position_to: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 2) : 2,
+              display_order: prev.length,
+            }])}
+            style={{ marginTop: 10, padding: "6px 12px", borderRadius: 7, border: "1px dashed rgba(255,255,255,0.15)", background: "none", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+          >
+            + Adicionar marcação
+          </button>
+        </div>
+      );
+    }
+
     // ── Tabela base ────────────────────────────────────────────────────────
     function StandingsTable({ rows, highlightTop = 4, showActions = false }: {
       rows: any[]; highlightTop?: number; showActions?: boolean;
@@ -658,6 +860,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 const awarded = editedPoints[row.team_id]?.awarded ?? 0;
                 const deducted = editedPoints[row.team_id]?.deducted ?? 0;
                 const effectivePts = (row.points ?? 0) + awarded - deducted;
+                const rank = idx + 1;
+                const rankMarker = getMarkerForRank(activeMarkers, rank);
+                const useLegacyHighlight = activeMarkers.length === 0 && idx < highlightTop;
                 return (
                   <tr key={row.team_id}
                     draggable={standingsMode === "reorder"}
@@ -677,11 +882,14 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     style={{
                       borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
                       cursor: standingsMode === "reorder" ? "grab" : "default",
-                      backgroundColor: standingsMode === "reorder" ? "rgba(255,255,255,0.01)" : "transparent",
+                      backgroundColor: rankMarker?.show_background
+                        ? hexToRgba(rankMarker.color_hex, 0.1)
+                        : standingsMode === "reorder" ? "rgba(255,255,255,0.01)" : "transparent",
+                      boxShadow: rankMarker ? `inset 3px 0 0 ${rankMarker.color_hex}` : undefined,
                       transition: "background 0.1s",
                     }}
                     className="hover:bg-[rgba(255,255,255,0.02)]">
-                    <td className="px-4 py-3 font-mono text-xs" style={{ color: idx < highlightTop ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{idx + 1}</td>
+                    <td className="px-4 py-3 font-mono text-xs" style={{ color: rankMarker?.color_hex ?? (useLegacyHighlight ? "var(--color-brand)" : "var(--color-text-secondary)") }}>{rank}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {row.teams?.logo_url
@@ -787,24 +995,34 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     // ── Header com botão Gerenciar ────────────────────────────────────────
     function StandingsHeader({ rows }: { rows: any[] }) {
       const isEditing = standingsMode !== "view";
+      const saving = standingsMode === "edit_markers" ? savingMarkers : savingStandings;
       return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: standingsMode === "edit_markers" ? "none" : "1px solid var(--color-border)" }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "var(--color-text-primary)" }}>
-            Classificações
+            {standingsMode === "edit_markers" ? "Marcações" : "Classificações"}
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {isEditing && (
               <>
                 <button type="button"
-                  onClick={() => { setStandingsMode("view"); setEditedPoints({}); setReorderedTeams([]); }}
+                  onClick={() => {
+                    setStandingsMode("view");
+                    setEditedPoints({});
+                    setReorderedTeams([]);
+                    setEditingMarkers([]);
+                  }}
                   style={{ padding: "5px 14px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "none", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}>
                   Cancelar
                 </button>
                 <button type="button"
-                  disabled={savingStandings}
-                  onClick={() => standingsMode === "edit_points" ? handleSavePoints(rows) : handleSaveOrder(rows)}
-                  style={{ padding: "5px 14px", borderRadius: 7, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", opacity: savingStandings ? 0.6 : 1 }}>
-                  {savingStandings ? "Salvando…" : "Salve"}
+                  disabled={saving}
+                  onClick={() => {
+                    if (standingsMode === "edit_points") void handleSavePoints(rows);
+                    else if (standingsMode === "reorder") void handleSaveOrder(rows);
+                    else void handleSaveMarkers();
+                  }}
+                  style={{ padding: "5px 14px", borderRadius: 7, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+                  {saving ? "Salvando…" : "Salvar"}
                 </button>
               </>
             )}
@@ -821,6 +1039,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setStandingsMenuOpen(false)} />
                     <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 220, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
                       {[
+                        { icon: "◧", label: "Gerenciar marcações", action: startEditMarkers },
                         { icon: "↕", label: "Reordenar equipes", action: () => { setStandingsMode("reorder"); setStandingsMenuOpen(false); setReorderedTeams(rows.map((r: any) => r.team_id)); } },
                         { icon: "✎", label: "Editar pontos", action: () => { setStandingsMode("edit_points"); setStandingsMenuOpen(false); setEditedPoints({}); } },
                         { icon: "↺", label: "Recalcular a classificação", action: () => { setStandingsMenuOpen(false); setStandingsConfirmRecalc(true); }, danger: false },
@@ -900,9 +1119,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   </p>
                   <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                     <StandingsHeader rows={groupRows} />
+                    <StandingsMarkersEditor />
                     {groupRows.length === 0
                       ? <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Sem dados de classificação.</p>
                       : <StandingsTable rows={groupRows} highlightTop={2} />}
+                    <StandingsMarkersLegend />
                   </div>
                 </div>
               );
@@ -920,6 +1141,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           {standingsConfirmRecalc && <RecalcConfirmModal />}
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
             <StandingsHeader rows={rows} />
+            <StandingsMarkersEditor />
             {rows.length === 0
               ? <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum dado de classificação disponível.</p>
               : <StandingsTable rows={
@@ -927,6 +1149,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     ? [...rows].sort((a, b) => reorderedTeams.indexOf(a.team_id) - reorderedTeams.indexOf(b.team_id))
                     : rows
                 } highlightTop={4} />}
+            <StandingsMarkersLegend />
           </div>
         </>
       );
@@ -4917,6 +5140,7 @@ function RankingConfigTab({
   const [values, setValues] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [recalculating, setRecalculating] = useState(false);
 
   useEffect(() => {
     if (!selectedEditionId) return;
@@ -4950,6 +5174,26 @@ function RankingConfigTab({
     setSaving(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Configuração de ranking salva.");
+  }
+
+  async function handleRecalculate() {
+    setRecalculating(true);
+    const supabase = createClient();
+    const { data: edition } = await supabase
+      .from("competition_editions")
+      .select("competition_id, competitions(organization_id, gender, sport_slug)")
+      .eq("id", selectedEditionId)
+      .maybeSingle();
+    const comp = (edition?.competitions as any);
+    if (!comp) { toast("error", "Competição não encontrada."); setRecalculating(false); return; }
+    const { error } = await supabase.rpc("calculate_ranking", {
+      p_organization_id: comp.organization_id,
+      p_gender: comp.gender,
+      p_sport_slug: comp.sport_slug,
+    });
+    setRecalculating(false);
+    if (error) { toast("error", error.message); return; }
+    toast("success", "Ranking recalculado.");
   }
 
   if (!loaded) {

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from "react-image-crop";
-import imageCompression from "browser-image-compression";
+import { compressNewsImage } from "@/lib/images/compress-news-image";
 import "react-image-crop/dist/ReactCrop.css";
 import { Upload, X, Check } from "lucide-react";
 
@@ -76,18 +76,12 @@ export default function CoverUpload({ existingUrl, onFileReady, onExistingUrl }:
       canvas.height
     );
 
-    const blob = await new Promise<Blob>((res) =>
-      canvas.toBlob((b) => res(b!), "image/jpeg", 0.92)
+    const blob = await new Promise<Blob>((res, rej) =>
+      canvas.toBlob((b) => (b ? res(b) : rej(new Error("Falha ao exportar recorte"))), "image/png")
     );
 
-    const croppedFile = new File([blob], "cover.jpg", { type: "image/jpeg" });
-
-    const compressed = await imageCompression(croppedFile, {
-      maxSizeMB: 0.8,
-      maxWidthOrHeight: 1920,
-      useWebWorker: true,
-      fileType: "image/jpeg",
-    });
+    const croppedFile = new File([blob], "cover.png", { type: "image/png" });
+    const compressed = await compressNewsImage(croppedFile, "cover");
 
     const previewUrl = URL.createObjectURL(compressed);
     setPreview(previewUrl);

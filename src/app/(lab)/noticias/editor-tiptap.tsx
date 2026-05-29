@@ -5,7 +5,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import { Bold, Italic, Heading2, Heading3, List, ListOrdered, ImageIcon, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import imageCompression from "browser-image-compression";
+import { compressNewsImage, newsImageContentType } from "@/lib/images/compress-news-image";
 import { createClient } from "@/lib/supabase";
 
 type Props = {
@@ -52,17 +52,14 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
     if (!file || !editor) return;
     setUploadingImage(true);
     try {
-      const compressed = await imageCompression(file, {
-        maxSizeMB: 0.5,
-        maxWidthOrHeight: 1200,
-        useWebWorker: true,
-        fileType: "image/jpeg",
-      });
+      const compressed = await compressNewsImage(file, "body");
       const supabase = createClient();
-      const path = `body/${Date.now()}-${file.name.replace(/[^\w.\-]/g, "_")}`;
+      const safeName = compressed.name.replace(/[^\w.\-]/g, "_");
+      const path = `body/${Date.now()}-${safeName}`;
+      const contentType = newsImageContentType(compressed);
       const { error } = await supabase.storage
         .from("news")
-        .upload(path, compressed, { contentType: "image/jpeg", cacheControl: "3600" });
+        .upload(path, compressed, { contentType, cacheControl: "3600" });
       if (error) throw error;
       const { data: pub } = supabase.storage.from("news").getPublicUrl(path);
       editor.chain().focus().setImage({ src: pub.publicUrl }).run();

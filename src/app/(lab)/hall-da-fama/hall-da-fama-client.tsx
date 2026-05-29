@@ -37,9 +37,14 @@ const ATHLETE_CATEGORIES: {
   { key: "totw",                 label: "Mais Prêmios TOTW",        suffix: "prêmios", icon: "📅" },
   { key: "avg_rating",           label: "Maior Média de Avaliação", suffix: "pts",     icon: "📊" },
   { key: "penalty_saves",        label: "Mais Pênaltis Defendidos", suffix: "defesas", icon: "🧤" },
-  // Feitos especiais
-  { key: "hat_tricks",           label: "Mais Hat-tricks",          suffix: "hat-tricks", icon: "🎩" },
-  { key: "pokers",               label: "Mais Pokers",              suffix: "pokers",  icon: "🃏" },
+  { key: "hat_tricks",           label: "Hat-tricks Históricos",    suffix: "hat-tricks", icon: "🎩" },
+  { key: "pokers",               label: "Pokers Históricos",        suffix: "pokers",  icon: "🃏" },
+  { key: "mvp",                  label: "Mais MVPs",                suffix: "prêmios", icon: "🏅" },
+  { key: "top_scorer",           label: "Mais Artilheiro",          suffix: "prêmios", icon: "⚽" },
+  { key: "top_assists",          label: "Mais Garçom",              suffix: "prêmios", icon: "🎯" },
+  { key: "best_goalkeeper",      label: "Mais Melhor Goleiro",      suffix: "prêmios", icon: "🧤" },
+  { key: "motw",                 label: "Mais MOTW",                suffix: "prêmios", icon: "🌟" },
+  { key: "penalty_conversion",   label: "Melhor Aproveit. Pênaltis", suffix: "%",    icon: "🎯" },
   { key: "manitas",              label: "Mais Manitas",             suffix: "manitas", icon: "🖐️" },
   { key: "participacoes_diretas",label: "Participações Diretas",    suffix: "G+A",     icon: "⚡" },
 ];
@@ -58,7 +63,10 @@ const TEAM_CATEGORIES: {
   { key: "sequencia_vitorias", label: "Maior Sequência de V's",   suffix: "vitórias", icon: "🔥" },
   { key: "sequencia_invicto",  label: "Maior Invencibilidade",    suffix: "jogos",    icon: "🛡️" },
   { key: "maior_goleada",      label: "Maior Goleada",            suffix: "gols dif.",icon: "💥" },
-  { key: "mais_cleansheets",   label: "Mais Cleansheets",         suffix: "jogos",    icon: "🧱" },
+  { key: "mais_cleansheets",   label: "Mais Clean Sheets",        suffix: "jogos",    icon: "🧱" },
+  { key: "runner_up",          label: "Mais Vice-campeonatos",    suffix: "vices",    icon: "🥈" },
+  { key: "podios",             label: "Mais Pódios",              suffix: "pódios",   icon: "🏅" },
+  { key: "totw_appearances",   label: "Mais Aparições no TOTW",   suffix: "TOTW",     icon: "📅" },
 ];
 
 const STAFF_CATEGORIES: {
@@ -67,8 +75,10 @@ const STAFF_CATEGORIES: {
   suffix: string;
   icon: string;
 }[] = [
-  { key: "tecnicos_titulos",    label: "Mais Títulos como Técnico",   suffix: "títulos", icon: "🏆" },
-  { key: "tecnicos_premiacoes", label: "Mais Prêmios Melhor Técnico", suffix: "prêmios", icon: "🎖️" },
+  { key: "tecnicos_titulos",    label: "Mais Títulos como Comissão",  suffix: "títulos", icon: "🏆" },
+  { key: "tecnicos_premiacoes", label: "Mais Melhor Técnico",        suffix: "prêmios", icon: "🎖️" },
+  { key: "staff_partidas",      label: "Mais Partidas como Comissão", suffix: "jogos",  icon: "📋" },
+  { key: "staff_motw",          label: "Mais MOTW como Comissão",    suffix: "prêmios", icon: "⭐" },
 ];
 
 // ─── Helpers visuais ──────────────────────────────────────────────────────────
@@ -171,7 +181,7 @@ function RankingModal({ label, icon, suffix, entries, onClose }: ModalProps) {
               fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600,
               color: "var(--color-text-secondary)", marginLeft: 4,
             }}>
-              — {entries.length} atletas
+              — {entries.length} registros
             </span>
           </div>
           <button
@@ -546,8 +556,8 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
 
         <select value={filtros.gender ?? ""} onChange={(e) => handleFiltroChange("gender", e.target.value)} style={selectStyle}>
           <option value="">Todos os gêneros</option>
-          <option value="M">Masculino</option>
-          <option value="F">Feminino</option>
+          <option value="male">Masculino</option>
+          <option value="female">Feminino</option>
         </select>
 
         {temFiltroAtivo && (

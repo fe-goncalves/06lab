@@ -48,11 +48,17 @@ export interface HallDaFamaData {
   totw: AthleteEntry[];
   avg_rating: AthleteEntry[];
   penalty_saves: AthleteEntry[];
-  // ── Atletas – feitos especiais (achievements) ────────────────────────
+  // ── Atletas – feitos especiais ───────────────────────────────────────
   hat_tricks: AthleteEntry[];
   pokers: AthleteEntry[];
   manitas: AthleteEntry[];
   participacoes_diretas: AthleteEntry[];
+  mvp: AthleteEntry[];
+  top_scorer: AthleteEntry[];
+  top_assists: AthleteEntry[];
+  best_goalkeeper: AthleteEntry[];
+  motw: AthleteEntry[];
+  penalty_conversion: AthleteEntry[];
   // ── Equipes – existentes ─────────────────────────────────────────────
   titulos: TeamEntry[];
   vitorias: TeamEntry[];
@@ -63,9 +69,21 @@ export interface HallDaFamaData {
   sequencia_invicto: TeamEntry[];
   maior_goleada: TeamEntry[];
   mais_cleansheets: TeamEntry[];
+  runner_up: TeamEntry[];
+  podios: TeamEntry[];
+  totw_appearances: TeamEntry[];
   // ── Comissão Técnica ─────────────────────────────────────────────────
   tecnicos_titulos: StaffEntry[];
   tecnicos_premiacoes: StaffEntry[];
+  staff_partidas: StaffEntry[];
+  staff_motw: StaffEntry[];
+}
+
+function resolveGenderDb(gender?: string): "male" | "female" | undefined {
+  if (!gender) return undefined;
+  if (gender === "M" || gender === "male") return "male";
+  if (gender === "F" || gender === "female") return "female";
+  return undefined;
 }
 
 // ─── Helper: dados de atletas em batch ────────────────────────────────────────
@@ -125,7 +143,8 @@ async function resolverEditionIds(
 
   if (filtros.competitionId) query = query.eq("competition_id", filtros.competitionId);
   if (filtros.seasonId)      query = query.eq("season_id", filtros.seasonId);
-  if (filtros.gender)        query = query.eq("competitions.gender", filtros.gender);
+  const genderDb = resolveGenderDb(filtros.gender);
+  if (genderDb) query = query.eq("competitions.gender", genderDb);
 
   const { data } = await query;
   return (data ?? []).map((e: any) => e.id);
@@ -155,9 +174,11 @@ function dadosVazios(): HallDaFamaData {
     artilharia: [], assistencias: [], partidas: [], cartoes_amarelos: [],
     motm: [], tots: [], totw: [], avg_rating: [], penalty_saves: [],
     hat_tricks: [], pokers: [], manitas: [], participacoes_diretas: [],
+    mvp: [], top_scorer: [], top_assists: [], best_goalkeeper: [], motw: [], penalty_conversion: [],
     titulos: [], vitorias: [], aproveitamento: [], gols_marcados: [],
     sequencia_vitorias: [], sequencia_invicto: [], maior_goleada: [], mais_cleansheets: [],
-    tecnicos_titulos: [], tecnicos_premiacoes: [],
+    runner_up: [], podios: [], totw_appearances: [],
+    tecnicos_titulos: [], tecnicos_premiacoes: [], staff_partidas: [], staff_motw: [],
   };
 }
 
@@ -182,6 +203,7 @@ export async function buscarHallDaFama(
   const editionIds = await resolverEditionIds(supabase, orgId, filtros);
   const temFiltroTime = !!filtros.teamId;
   const usarCareerStats = editionIds === null && !temFiltroTime;
+  const genderDb = resolveGenderDb(filtros.gender);
 
   if (editionIds !== null && editionIds.length === 0) {
     return dadosVazios();
@@ -198,12 +220,27 @@ export async function buscarHallDaFama(
   let totw: AthleteEntry[]             = [];
   let avg_rating: AthleteEntry[]       = [];
   let penalty_saves: AthleteEntry[]    = [];
+  let mvp: AthleteEntry[]              = [];
+  let top_scorer: AthleteEntry[]       = [];
+  let top_assists: AthleteEntry[]      = [];
+  let best_goalkeeper: AthleteEntry[]  = [];
+  let motw: AthleteEntry[]             = [];
+  let penalty_conversion: AthleteEntry[] = [];
 
   if (usarCareerStats) {
-    const { data: careerData } = await supabase
+    let careerQuery = supabase
       .from("athlete_career_stats")
-      .select("athlete_id, total_goals, total_assists, total_matches, total_yellow_cards, total_motm, total_tots, total_totw, total_penalty_saves, avg_rating")
+      .select(`
+        athlete_id, total_goals, total_assists, total_matches, total_yellow_cards,
+        total_motm, total_tots, total_totw, total_penalty_saves, avg_rating,
+        total_hat_tricks, total_pokers, total_mvp, total_top_scorer, total_top_assists,
+        total_best_goalkeeper, total_motw, total_penalties_taken, total_penalties_scored,
+        athletes!inner(id, gender)
+      `)
       .eq("organization_id", orgId);
+    if (genderDb) careerQuery = careerQuery.eq("athletes.gender", genderDb);
+
+    const { data: careerData } = await careerQuery;
 
     const rows = (careerData ?? []) as any[];
     if (rows.length > 0) {
@@ -222,15 +259,29 @@ export async function buscarHallDaFama(
         };
       };
 
-      artilharia       = [...rows].sort((a, b) => (b.total_goals ?? 0) - (a.total_goals ?? 0)).filter((r) => (r.total_goals ?? 0) > 0).map((r) => toEntry(r, r.total_goals));
-      assistencias     = [...rows].sort((a, b) => (b.total_assists ?? 0) - (a.total_assists ?? 0)).filter((r) => (r.total_assists ?? 0) > 0).map((r) => toEntry(r, r.total_assists));
-      partidas         = [...rows].sort((a, b) => (b.total_matches ?? 0) - (a.total_matches ?? 0)).filter((r) => (r.total_matches ?? 0) > 0).map((r) => toEntry(r, r.total_matches));
-      cartoes_amarelos = [...rows].sort((a, b) => (b.total_yellow_cards ?? 0) - (a.total_yellow_cards ?? 0)).filter((r) => (r.total_yellow_cards ?? 0) > 0).map((r) => toEntry(r, r.total_yellow_cards));
-      motm             = [...rows].sort((a, b) => (b.total_motm ?? 0) - (a.total_motm ?? 0)).filter((r) => (r.total_motm ?? 0) > 0).map((r) => toEntry(r, r.total_motm));
-      tots             = [...rows].sort((a, b) => (b.total_tots ?? 0) - (a.total_tots ?? 0)).filter((r) => (r.total_tots ?? 0) > 0).map((r) => toEntry(r, r.total_tots));
-      totw             = [...rows].sort((a, b) => (b.total_totw ?? 0) - (a.total_totw ?? 0)).filter((r) => (r.total_totw ?? 0) > 0).map((r) => toEntry(r, r.total_totw));
+      const sortField = (field: string) =>
+        [...rows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toEntry(r, r[field]));
+
+      artilharia       = sortField("total_goals");
+      assistencias     = sortField("total_assists");
+      partidas         = sortField("total_matches");
+      cartoes_amarelos = sortField("total_yellow_cards");
+      motm             = sortField("total_motm");
+      tots             = sortField("total_tots");
+      totw             = sortField("total_totw");
       avg_rating       = [...rows].filter((r) => (r.total_matches ?? 0) >= 10 && r.avg_rating != null).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)).map((r) => toEntry(r, Math.round((r.avg_rating ?? 0) * 10) / 10));
-      penalty_saves    = [...rows].sort((a, b) => (b.total_penalty_saves ?? 0) - (a.total_penalty_saves ?? 0)).filter((r) => (r.total_penalty_saves ?? 0) > 0).map((r) => toEntry(r, r.total_penalty_saves));
+      penalty_saves    = sortField("total_penalty_saves");
+      mvp              = sortField("total_mvp");
+      top_scorer       = sortField("total_top_scorer");
+      top_assists      = sortField("total_top_assists");
+      best_goalkeeper  = sortField("total_best_goalkeeper");
+      motw             = sortField("total_motw");
+      penalty_conversion = [...rows]
+        .filter((r) => (r.total_penalties_taken ?? 0) >= 3)
+        .map((r) => ({ r, pct: Math.round(((r.total_penalties_scored ?? 0) / r.total_penalties_taken) * 100) }))
+        .filter(({ pct }) => pct > 0)
+        .sort((a, b) => b.pct - a.pct)
+        .map(({ r, pct }) => toEntry(r, pct));
     }
 
   } else {
@@ -247,9 +298,9 @@ export async function buscarHallDaFama(
       const { data: statsData } = await statsQuery;
       let rows = (statsData ?? []) as any[];
 
-      if (filtros.gender && rows.length > 0) {
+      if (genderDb && rows.length > 0) {
         const athleteIds = [...new Set(rows.map((r) => r.athlete_id))];
-        const { data: genderData } = await supabase.from("athletes").select("id").in("id", athleteIds).eq("gender", filtros.gender);
+        const { data: genderData } = await supabase.from("athletes").select("id").in("id", athleteIds).eq("gender", genderDb);
         const validIds = new Set((genderData ?? []).map((a: any) => a.id));
         rows = rows.filter((r) => validIds.has(r.athlete_id));
       }
@@ -297,21 +348,108 @@ export async function buscarHallDaFama(
         avg_rating       = [...aggRows].filter((r) => r.rating_count >= 10 && r.avg_rating != null).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)).map((r) => toEntry(r, Math.round((r.avg_rating ?? 0) * 10) / 10));
         penalty_saves    = [...aggRows].sort((a, b) => b.total_penalty_saves - a.total_penalty_saves).filter((r) => r.total_penalty_saves > 0).map((r) => toEntry(r, r.total_penalty_saves));
       }
+
+      // Prêmios e MOTW por edição (quando há filtros)
+      if (editionIdsParaUsar.length > 0) {
+        let statsAwardQuery = supabase
+          .from("athlete_edition_stats")
+          .select("athlete_id, motw_count, penalties_taken, penalties_scored, athletes!inner(gender)")
+          .in("edition_id", editionIdsParaUsar);
+        if (filtros.teamId) statsAwardQuery = statsAwardQuery.eq("team_id", filtros.teamId);
+        if (genderDb) statsAwardQuery = statsAwardQuery.eq("athletes.gender", genderDb);
+
+        const { data: awardStatsData } = await statsAwardQuery;
+        const motwAgg = new Map<string, number>();
+        const penAgg = new Map<string, { taken: number; scored: number }>();
+        for (const r of (awardStatsData ?? []) as any[]) {
+          motwAgg.set(r.athlete_id, (motwAgg.get(r.athlete_id) ?? 0) + (r.motw_count ?? 0));
+          const p = penAgg.get(r.athlete_id) ?? { taken: 0, scored: 0 };
+          p.taken += r.penalties_taken ?? 0;
+          p.scored += r.penalties_scored ?? 0;
+          penAgg.set(r.athlete_id, p);
+        }
+
+        const athleteMapMotw = await enriquecerAtletas(supabase, [...motwAgg.keys(), ...penAgg.keys()]);
+        const toEntryFiltered = (id: string, value: number): AthleteEntry => {
+          const a = athleteMapMotw.get(id);
+          return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value };
+        };
+
+        motw = Array.from(motwAgg.entries()).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, v]) => toEntryFiltered(id, v));
+        penalty_conversion = Array.from(penAgg.entries())
+          .filter(([, p]) => p.taken >= 3)
+          .map(([id, p]) => ({ id, pct: Math.round((p.scored / p.taken) * 100) }))
+          .filter(({ pct }) => pct > 0)
+          .sort((a, b) => b.pct - a.pct)
+          .map(({ id, pct }) => toEntryFiltered(id, pct));
+
+        let editionAwardsQuery = supabase
+          .from("edition_awards")
+          .select("award_type, athlete_id, athletes!inner(gender)")
+          .in("edition_id", editionIdsParaUsar)
+          .in("award_type", ["mvp", "top_scorer", "top_assists", "best_goalkeeper"])
+          .not("athlete_id", "is", null);
+        if (genderDb) editionAwardsQuery = editionAwardsQuery.eq("athletes.gender", genderDb);
+
+        const { data: editionAwardsData } = await editionAwardsQuery;
+        const awardCounts = new Map<string, Map<string, number>>();
+        for (const r of (editionAwardsData ?? []) as any[]) {
+          if (!r.athlete_id) continue;
+          if (!awardCounts.has(r.award_type)) awardCounts.set(r.award_type, new Map());
+          const m = awardCounts.get(r.award_type)!;
+          m.set(r.athlete_id, (m.get(r.athlete_id) ?? 0) + 1);
+        }
+
+        const buildAwardRanking = async (type: string): Promise<AthleteEntry[]> => {
+          const counts = awardCounts.get(type);
+          if (!counts) return [];
+          const ids = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+          const am = await enriquecerAtletas(supabase, ids);
+          return [...counts.entries()].sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, v]) => {
+            const a = am.get(id);
+            return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value: v };
+          });
+        };
+
+        [mvp, top_scorer, top_assists, best_goalkeeper] = await Promise.all([
+          buildAwardRanking("mvp"),
+          buildAwardRanking("top_scorer"),
+          buildAwardRanking("top_assists"),
+          buildAwardRanking("best_goalkeeper"),
+        ]);
+      }
     }
   }
 
-  // ─── Atletas – feitos especiais (athlete_match_achievements) ─────────────────
+  // ─── Atletas – feitos especiais (athlete_match_achievements / career) ─────────
 
   let hat_tricks: AthleteEntry[]            = [];
   let pokers: AthleteEntry[]                = [];
   let manitas: AthleteEntry[]               = [];
   let participacoes_diretas: AthleteEntry[] = [];
 
-  // achievements sempre usam edition_ids para respeitar filtros de competição/temporada/gênero
-  // sem filtros: busca de todas as edições da org
+  if (usarCareerStats) {
+    let htQuery = supabase
+      .from("athlete_career_stats")
+      .select("athlete_id, total_hat_tricks, total_pokers, athletes!inner(gender)")
+      .eq("organization_id", orgId);
+    if (genderDb) htQuery = htQuery.eq("athletes.gender", genderDb);
+    const { data: htCareer } = await htQuery;
+    const htRows = (htCareer ?? []) as any[];
+    if (htRows.length > 0) {
+      const athleteMapHt = await enriquecerAtletas(supabase, htRows.map((r) => r.athlete_id));
+      const toHtEntry = (r: any, value: number): AthleteEntry => {
+        const a = athleteMapHt.get(r.athlete_id);
+        return { athlete_id: r.athlete_id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value };
+      };
+      hat_tricks = [...htRows].sort((a, b) => (b.total_hat_tricks ?? 0) - (a.total_hat_tricks ?? 0)).filter((r) => (r.total_hat_tricks ?? 0) > 0).map((r) => toHtEntry(r, r.total_hat_tricks));
+      pokers     = [...htRows].sort((a, b) => (b.total_pokers ?? 0) - (a.total_pokers ?? 0)).filter((r) => (r.total_pokers ?? 0) > 0).map((r) => toHtEntry(r, r.total_pokers));
+    }
+  }
+
   const editionIdsAchiev: string[] = editionIds ?? await todasEdicoesOrg(supabase, orgId);
 
-  if (editionIdsAchiev.length > 0) {
+  if (!usarCareerStats && editionIdsAchiev.length > 0) {
     const achievTypes = ["hat_trick", "poker", "manita", "goal_and_assist"] as const;
 
     const achievQueries = achievTypes.map((type) => {
@@ -338,10 +476,9 @@ export async function buscarHallDaFama(
         .sort((a, b) => b[1] - a[1])
         .slice(0, 10);
 
-      // Filtro de gênero
-      if (filtros.gender && entries.length > 0) {
+      if (genderDb && entries.length > 0) {
         const ids = entries.map(([id]) => id);
-        const { data: gd } = await supabase.from("athletes").select("id").in("id", ids).eq("gender", filtros.gender);
+        const { data: gd } = await supabase.from("athletes").select("id").in("id", ids).eq("gender", genderDb);
         const validIds = new Set((gd ?? []).map((a: any) => a.id));
         entries = entries.filter(([id]) => validIds.has(id));
       }
@@ -369,6 +506,44 @@ export async function buscarHallDaFama(
   let vitorias: TeamEntry[]       = [];
   let aproveitamento: TeamEntry[] = [];
   let gols_marcados: TeamEntry[]  = [];
+  let runner_up: TeamEntry[]      = [];
+  let podios: TeamEntry[]         = [];
+  let totw_appearances: TeamEntry[] = [];
+  let mais_cleansheets: TeamEntry[] = [];
+
+  if (usarCareerStats) {
+    let tcQuery = supabase
+      .from("team_career_stats")
+      .select(`
+        team_id, total_titles, total_clean_sheets, total_runner_up, total_third_place,
+        total_totw_appearances,
+        teams!inner(full_name, logo_url, gender, organization_id)
+      `)
+      .eq("teams.organization_id", orgId);
+    if (genderDb) tcQuery = tcQuery.eq("teams.gender", genderDb);
+    if (filtros.teamId) tcQuery = tcQuery.eq("team_id", filtros.teamId);
+
+    const { data: tcData } = await tcQuery;
+    const tcRows = (tcData ?? []) as any[];
+    const toTeamCareerEntry = (r: any, value: number): TeamEntry => ({
+      team_id: r.team_id,
+      full_name: r.teams?.full_name ?? "",
+      logo_url: r.teams?.logo_url ?? null,
+      value,
+    });
+    const sortTc = (field: string) =>
+      [...tcRows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toTeamCareerEntry(r, r[field]));
+
+    titulos            = sortTc("total_titles");
+    mais_cleansheets   = sortTc("total_clean_sheets");
+    runner_up          = sortTc("total_runner_up");
+    totw_appearances   = sortTc("total_totw_appearances");
+    podios = [...tcRows]
+      .map((r) => ({ r, value: (r.total_titles ?? 0) + (r.total_runner_up ?? 0) + (r.total_third_place ?? 0) }))
+      .filter(({ value }) => value > 0)
+      .sort((a, b) => b.value - a.value)
+      .map(({ r, value }) => toTeamCareerEntry(r, value));
+  }
 
   if (editionIdsEquipes.length > 0) {
     let teamStatsQuery = supabase
@@ -388,27 +563,59 @@ export async function buscarHallDaFama(
     }
 
     const teamIds = Array.from(teamAgg.keys());
-    const { data: teamsData } = await supabase.from("teams").select("id, full_name, logo_url").in("id", teamIds).eq("organization_id", orgId);
+    let teamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", teamIds).eq("organization_id", orgId);
+    if (genderDb) teamsQuery = teamsQuery.eq("gender", genderDb);
+    const { data: teamsData } = await teamsQuery;
     const teamsMap = new Map((teamsData ?? []).map((t: any) => [t.id, t]));
 
-    const { data: awardsData } = await supabase
-      .from("edition_awards")
-      .select("winning_team_id")
-      .eq("award_type", "champion")
-      .in("edition_id", editionIdsEquipes)
-      .not("winning_team_id", "is", null);
+    if (!usarCareerStats) {
+      const { data: awardsData } = await supabase
+        .from("edition_awards")
+        .select("award_type, winning_team_id")
+        .in("award_type", ["champion", "runner_up", "third_place"])
+        .in("edition_id", editionIdsEquipes)
+        .not("winning_team_id", "is", null);
 
-    const tituloCount = new Map<string, number>();
-    for (const a of (awardsData ?? []) as any[]) {
-      tituloCount.set(a.winning_team_id, (tituloCount.get(a.winning_team_id) ?? 0) + 1);
+      let awardRows = (awardsData ?? []) as any[];
+      if (genderDb && awardRows.length > 0) {
+        const awardTeamIds = [...new Set(awardRows.map((a) => a.winning_team_id).filter(Boolean))];
+        const { data: genderTeams } = await supabase.from("teams").select("id").in("id", awardTeamIds).eq("gender", genderDb);
+        const validTeamIds = new Set((genderTeams ?? []).map((t: any) => t.id));
+        awardRows = awardRows.filter((a) => validTeamIds.has(a.winning_team_id));
+      }
+
+      const tituloCount = new Map<string, number>();
+      const runnerUpCount = new Map<string, number>();
+      const podioCount = new Map<string, number>();
+      for (const a of awardRows) {
+        if (!a.winning_team_id) continue;
+        if (a.award_type === "champion") {
+          tituloCount.set(a.winning_team_id, (tituloCount.get(a.winning_team_id) ?? 0) + 1);
+          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+        }
+        if (a.award_type === "runner_up") {
+          runnerUpCount.set(a.winning_team_id, (runnerUpCount.get(a.winning_team_id) ?? 0) + 1);
+          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+        }
+        if (a.award_type === "third_place") {
+          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+        }
+      }
+
+      const toAwardTeamEntry = (entries: [string, number][]): TeamEntry[] =>
+        entries.sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, count]) => {
+          const t = teamsMap.get(id);
+          return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
+        });
+
+      titulos   = toAwardTeamEntry([...tituloCount.entries()]);
+      runner_up = toAwardTeamEntry([...runnerUpCount.entries()]);
+      podios    = toAwardTeamEntry([...podioCount.entries()]);
     }
 
-    titulos = Array.from(tituloCount.entries()).sort((a, b) => b[1] - a[1]).map(([id, count]) => {
-      const t = teamsMap.get(id);
-      return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
-    });
-
-    const aggArr = Array.from(teamAgg.entries()).map(([id, stats]) => ({ team_id: id, ...stats, team: teamsMap.get(id) }));
+    const aggArr = Array.from(teamAgg.entries())
+      .filter(([id]) => teamsMap.has(id))
+      .map(([id, stats]) => ({ team_id: id, ...stats, team: teamsMap.get(id) }));
 
     vitorias = [...aggArr].filter((t) => t.total_wins > 0).sort((a, b) => b.total_wins - a.total_wins).map((t) => ({ team_id: t.team_id, full_name: t.team?.full_name ?? "", logo_url: t.team?.logo_url ?? null, value: t.total_wins }));
     aproveitamento = [...aggArr].filter((t) => t.total_matches >= 5).sort((a, b) => b.total_wins / b.total_matches - a.total_wins / a.total_matches).map((t) => ({ team_id: t.team_id, full_name: t.team?.full_name ?? "", logo_url: t.team?.logo_url ?? null, value: Math.round((t.total_wins / t.total_matches) * 100) }));
@@ -567,9 +774,7 @@ export async function buscarHallDaFama(
 
   // ─── Equipes – Mais cleansheets ───────────────────────────────────────────────
 
-  let mais_cleansheets: TeamEntry[] = [];
-
-  if (editionIdsEquipes.length > 0) {
+  if (!usarCareerStats && editionIdsEquipes.length > 0) {
     // Busca partidas finalizadas e calcula cleansheets por equipe
     // Uma equipe tem cleansheet quando não sofreu gols (score do adversário = 0)
     let csQuery = supabase
@@ -610,13 +815,17 @@ export async function buscarHallDaFama(
 
       if (sortedCs.length > 0) {
         const csTeamIds = sortedCs.map(([id]) => id);
-        const { data: csTeamsData } = await supabase.from("teams").select("id, full_name, logo_url").in("id", csTeamIds);
+        let csTeamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", csTeamIds);
+        if (genderDb) csTeamsQuery = csTeamsQuery.eq("gender", genderDb);
+        const { data: csTeamsData } = await csTeamsQuery;
         const csTeamsMap = new Map((csTeamsData ?? []).map((t: any) => [t.id, t]));
 
-        mais_cleansheets = sortedCs.map(([id, count]) => {
-          const t = csTeamsMap.get(id);
-          return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
-        });
+        mais_cleansheets = sortedCs
+          .filter(([id]) => csTeamsMap.has(id))
+          .map(([id, count]) => {
+            const t = csTeamsMap.get(id);
+            return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
+          });
       }
     }
   }
@@ -625,48 +834,87 @@ export async function buscarHallDaFama(
 
   let tecnicos_titulos: StaffEntry[]    = [];
   let tecnicos_premiacoes: StaffEntry[] = [];
+  let staff_partidas: StaffEntry[]      = [];
+  let staff_motw: StaffEntry[]          = [];
 
-  let staffQuery = supabase
-    .from("edition_awards")
-    .select("award_type, staff_member_id")
-    .in("award_type", ["champion", "best_coach"])
-    .not("staff_member_id", "is", null)
-    .eq("organization_id", orgId);
-  if (editionIds !== null && editionIds.length > 0) staffQuery = staffQuery.in("edition_id", editionIds);
-
-  const { data: staffData } = await staffQuery;
-  const staffTitulo = new Map<string, number>();
-  const staffPremio = new Map<string, number>();
-
-  for (const r of (staffData ?? []) as any[]) {
-    if (!r.staff_member_id) continue;
-    if (r.award_type === "champion") staffTitulo.set(r.staff_member_id, (staffTitulo.get(r.staff_member_id) ?? 0) + 1);
-    if (r.award_type === "best_coach") staffPremio.set(r.staff_member_id, (staffPremio.get(r.staff_member_id) ?? 0) + 1);
-  }
-
-  const allStaffIds = [...new Set([...staffTitulo.keys(), ...staffPremio.keys()])];
-  let staffMap = new Map<string, any>();
-  if (allStaffIds.length > 0) {
-    const { data: staffMembersData } = await supabase.from("staff_members").select("id, full_name, surname, photo_url").in("id", allStaffIds);
-    staffMap = new Map((staffMembersData ?? []).map((s: any) => [s.id, s]));
-  }
-
-  tecnicos_titulos = Array.from(staffTitulo.entries()).sort((a, b) => b[1] - a[1]).map(([id, count]) => {
-    const s = staffMap.get(id);
-    return { staff_member_id: id, full_name: s?.full_name ?? "", surname: s?.surname ?? null, photo_url: s?.photo_url ?? null, value: count };
+  const toStaffEntry = (r: any, value: number, staff: any): StaffEntry => ({
+    staff_member_id: r.staff_member_id,
+    full_name: staff?.full_name ?? "",
+    surname: staff?.surname ?? null,
+    photo_url: staff?.photo_url ?? null,
+    value,
   });
 
-  tecnicos_premiacoes = Array.from(staffPremio.entries()).sort((a, b) => b[1] - a[1]).map(([id, count]) => {
-    const s = staffMap.get(id);
-    return { staff_member_id: id, full_name: s?.full_name ?? "", surname: s?.surname ?? null, photo_url: s?.photo_url ?? null, value: count };
-  });
+  if (usarCareerStats) {
+    let scQuery = supabase
+      .from("staff_career_stats")
+      .select(`
+        staff_member_id, total_titles, total_best_coach, total_matches_attended, total_motw,
+        staff_members!inner(full_name, surname, photo_url, gender)
+      `)
+      .eq("organization_id", orgId);
+    if (genderDb) scQuery = scQuery.eq("staff_members.gender", genderDb);
+
+    const { data: scData } = await scQuery;
+    const scRows = (scData ?? []) as any[];
+    const sortStaff = (field: string) =>
+      [...scRows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toStaffEntry(r, r[field], r.staff_members));
+
+    tecnicos_titulos    = sortStaff("total_titles");
+    tecnicos_premiacoes = sortStaff("total_best_coach");
+    staff_partidas      = sortStaff("total_matches_attended");
+    staff_motw          = sortStaff("total_motw");
+  } else if (editionIdsEquipes.length > 0) {
+    let seQuery = supabase
+      .from("staff_edition_stats")
+      .select(`
+        staff_member_id, total_titles, matches_attended, motw_count, best_coach_count,
+        staff_members!inner(full_name, surname, photo_url, gender)
+      `)
+      .in("edition_id", editionIdsEquipes);
+    if (genderDb) seQuery = seQuery.eq("staff_members.gender", genderDb);
+
+    const { data: seData } = await seQuery;
+    const agg = new Map<string, { titles: number; coach: number; matches: number; motw: number; staff: any }>();
+    for (const r of (seData ?? []) as any[]) {
+      if (!agg.has(r.staff_member_id)) {
+        agg.set(r.staff_member_id, { titles: 0, coach: 0, matches: 0, motw: 0, staff: r.staff_members });
+      }
+      const e = agg.get(r.staff_member_id)!;
+      e.titles  += r.total_titles ?? 0;
+      e.coach   += r.best_coach_count ?? 0;
+      e.matches += r.matches_attended ?? 0;
+      e.motw    += r.motw_count ?? 0;
+    }
+
+    type StaffAgg = { titles: number; coach: number; matches: number; motw: number; staff: any };
+    const buildStaffRanking = (getValue: (e: StaffAgg) => number): StaffEntry[] =>
+      [...agg.entries()]
+        .map(([id, e]) => ({ id, e, value: getValue(e) }))
+        .filter(({ value }) => value > 0)
+        .sort((a, b) => b.value - a.value)
+        .map(({ id, e, value }) => ({
+          staff_member_id: id,
+          full_name: e.staff?.full_name ?? "",
+          surname: e.staff?.surname ?? null,
+          photo_url: e.staff?.photo_url ?? null,
+          value,
+        }));
+
+    tecnicos_titulos    = buildStaffRanking((e) => e.titles);
+    tecnicos_premiacoes = buildStaffRanking((e) => e.coach);
+    staff_partidas      = buildStaffRanking((e) => e.matches);
+    staff_motw          = buildStaffRanking((e) => e.motw);
+  }
 
   return {
     artilharia, assistencias, partidas, cartoes_amarelos, motm, tots, totw, avg_rating, penalty_saves,
     hat_tricks, pokers, manitas, participacoes_diretas,
+    mvp, top_scorer, top_assists, best_goalkeeper, motw, penalty_conversion,
     titulos, vitorias, aproveitamento, gols_marcados,
     sequencia_vitorias, sequencia_invicto, maior_goleada, mais_cleansheets,
-    tecnicos_titulos, tecnicos_premiacoes,
+    runner_up, podios, totw_appearances,
+    tecnicos_titulos, tecnicos_premiacoes, staff_partidas, staff_motw,
   };
 }
 
@@ -686,6 +934,39 @@ export async function recalcularEstatisticas(): Promise<{ success: true } | { er
   // Recalcula achievements para todas as partidas finalizadas
   const { error: e3 } = await supabase.rpc("recalculate_match_achievements_all");
   if (e3) return { error: e3.message };
+
+  const { data: staffEditions, error: e4 } = await supabase
+    .from("match_staff_lineups")
+    .select("staff_member_id, matches(phases(edition_id))");
+
+  if (e4) return { error: e4.message };
+
+  const staffEditionPairs = new Set<string>();
+  const staffIds = new Set<string>();
+
+  for (const row of (staffEditions ?? []) as any[]) {
+    const staffId = row.staff_member_id as string | null;
+    const editionId = row.matches?.phases?.edition_id as string | null;
+    if (!staffId) continue;
+    staffIds.add(staffId);
+    if (editionId) staffEditionPairs.add(`${staffId}:${editionId}`);
+  }
+
+  for (const pair of staffEditionPairs) {
+    const [staffId, editionId] = pair.split(":");
+    const { error } = await supabase.rpc("recalculate_staff_edition_stats", {
+      p_staff_member_id: staffId,
+      p_edition_id: editionId,
+    });
+    if (error) return { error: error.message };
+  }
+
+  for (const staffId of staffIds) {
+    const { error } = await supabase.rpc("recalculate_staff_career_stats", {
+      p_staff_member_id: staffId,
+    });
+    if (error) return { error: error.message };
+  }
 
   return { success: true };
 }
