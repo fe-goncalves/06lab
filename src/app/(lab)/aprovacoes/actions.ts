@@ -96,12 +96,28 @@ export async function aprovarRelatorio(
     .from("user_profiles").select("id")
     .eq("auth_user_id", user.id).maybeSingle();
 
+  const { data: report } = await supabase
+    .from("match_reports")
+    .select("match_id")
+    .eq("id", id)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("match_reports")
     .update({ status: "approved", reviewed_by: profile?.id, reviewed_at: new Date().toISOString() })
     .eq("id", id);
 
   if (error) return { error: error.message };
+
+  if (report?.match_id) {
+    const { syncEditionStatsForMatch } = await import("@/lib/edition-stats-sync");
+    await syncEditionStatsForMatch(supabase, report.match_id, {
+      previousStatus: null,
+      newStatus: "finished",
+      force: true,
+    });
+  }
+
   return { success: true };
 }
 

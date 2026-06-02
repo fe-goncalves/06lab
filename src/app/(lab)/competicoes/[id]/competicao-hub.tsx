@@ -11,7 +11,7 @@ import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw } from "lucide-react";
 import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
-import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, deletarSquad, recalcularEstatisticasEdicao } from "./edicoes/actions";
+import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, buscarTOTS, criarOuAtualizarTOTS, deletarSquad, recalcularEstatisticasEdicao, salvarAjustesPontosClassificacao } from "./edicoes/actions";
 import { Star, Search, AlertTriangle } from "lucide-react";
 import { criarSuspensao, editarSuspensao, desativarSuspensao } from "@/app/(lab)/suspensoes/actions";
 
@@ -536,7 +536,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     const team = allTeams.find(t => t.id === teamId);
     if (team) {
       setEditionTeams(prev => [...prev, {
-        id: crypto.randomUUID(),
+        id: "id" in result ? result.id : crypto.randomUUID(),
         team_id: teamId,
         arrival_origin: null,
         is_free_agent_pool: false,
@@ -953,20 +953,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     // ── Barra de ações ────────────────────────────────────────────────────
     async function handleSavePoints(rows: any[]) {
       setSavingStandings(true);
-      const supabase = createClient();
-      const updates = Object.entries(editedPoints)
+      const adjustments = Object.entries(editedPoints)
         .filter(([, v]) => v.awarded > 0 || v.deducted > 0)
-        .map(([teamId, { awarded, deducted }]) => {
-          const row = rows.find((r: any) => r.team_id === teamId);
-          const base = row?.points ?? 0;
-          return supabase
-            .from("team_edition_stats")
-            .update({ points: base + awarded - deducted })
-            .eq("edition_id", selectedEditionId)
-            .eq("team_id", teamId);
-        });
-      await Promise.all(updates);
+        .map(([teamId, { awarded, deducted }]) => ({ teamId, awarded, deducted }));
+      const result = await salvarAjustesPontosClassificacao(selectedEditionId, adjustments);
       setSavingStandings(false);
+      if ("error" in result) {
+        toast("error", result.error);
+        return;
+      }
       setStandingsMode("view");
       setEditedPoints({});
       await loadEditionData(selectedEditionId);
@@ -1961,7 +1956,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                           }}
                           onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                           onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.45" : "0.75")}
-                          onClick={() => router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`)}>
+                          onClick={() => {
+                            if (!et.team_id || !selectedEditionId) return;
+                            router.push(`/competicoes/${competition.id}/equipes/${et.team_id}?edicao=${selectedEditionId}`);
+                          }}>
 
                           {/* Logo */}
                           {et.teams?.logo_url ? (
@@ -2004,7 +2002,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                             <HubActionButton
                               icon={<Users size={14} strokeWidth={2.5} />}
                               label="Elenco"
-                              onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`); }}
+                              onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/equipes/${et.team_id}?edicao=${selectedEditionId}`); }}
                               color="var(--color-brand)"
                             />
                             {isInactive ? (
@@ -2040,7 +2038,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       style={{ borderTop: "1px solid var(--color-border)", opacity: 0.6, cursor: "pointer" }}
                       onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
                       onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}
-                      onClick={() => router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`)}>
+                      onClick={() => router.push(`/competicoes/${competition.id}/equipes/${et.team_id}?edicao=${selectedEditionId}`)}>
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border"
                         style={{ borderColor: "var(--color-border)", borderStyle: "dashed" }}>
                         <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>SC</span>
@@ -2057,7 +2055,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         <HubActionButton
                           icon={<Users size={14} strokeWidth={2.5} />}
                           label="Ver elenco"
-                          onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/edicoes/${selectedEditionId}/equipes/${et.team_id}`); }}
+                          onClick={e => { e.stopPropagation(); router.push(`/competicoes/${competition.id}/equipes/${et.team_id}?edicao=${selectedEditionId}`); }}
                           color="var(--color-brand)"
                         />
                       </div>
@@ -3723,6 +3721,422 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
   );
 }
 
+// ─── TotsTab ──────────────────────────────────────────────────────────────────
+
+function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
+  const FORMATIONS: Record<string, { label: string; slots: { col: number; row: number; total: number; label: string }[] }> = {
+    "2-3-1": {
+      label: "2-3-1",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 2, label: "DEF" }, { col: 1, row: 1, total: 2, label: "DEF" },
+        { col: 2, row: 0, total: 3, label: "MED" }, { col: 2, row: 1, total: 3, label: "MED" }, { col: 2, row: 2, total: 3, label: "MED" },
+        { col: 3, row: 0, total: 1, label: "ATK" },
+      ],
+    },
+    "1-3-2": {
+      label: "1-3-2",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 1, label: "DEF" },
+        { col: 2, row: 0, total: 3, label: "MED" }, { col: 2, row: 1, total: 3, label: "MED" }, { col: 2, row: 2, total: 3, label: "MED" },
+        { col: 3, row: 0, total: 2, label: "ATK" }, { col: 3, row: 1, total: 2, label: "ATK" },
+      ],
+    },
+    "2-2-2": {
+      label: "2-2-2",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 2, label: "DEF" }, { col: 1, row: 1, total: 2, label: "DEF" },
+        { col: 2, row: 0, total: 2, label: "MED" }, { col: 2, row: 1, total: 2, label: "MED" },
+        { col: 3, row: 0, total: 2, label: "ATK" }, { col: 3, row: 1, total: 2, label: "ATK" },
+      ],
+    },
+    "3-3": {
+      label: "3-3",
+      slots: [
+        { col: 0, row: 0, total: 1, label: "GK" },
+        { col: 1, row: 0, total: 3, label: "DEF" }, { col: 1, row: 1, total: 3, label: "DEF" }, { col: 1, row: 2, total: 3, label: "DEF" },
+        { col: 3, row: 0, total: 3, label: "ATK" }, { col: 3, row: 1, total: 3, label: "ATK" }, { col: 3, row: 2, total: 3, label: "ATK" },
+      ],
+    },
+  };
+
+  const FW = 700;
+  const FH = 380;
+  const PAD_X = 50;
+  const PAD_Y = 40;
+  const INNER_W = FW - PAD_X * 2;
+  const INNER_H = FH - PAD_Y * 2;
+  const ZONE_X: Record<number, number> = {
+    0: PAD_X + INNER_W * 0.08,
+    1: PAD_X + INNER_W * 0.30,
+    2: PAD_X + INNER_W * 0.58,
+    3: PAD_X + INNER_W * 0.80,
+  };
+  const CY = FH / 2;
+  const AVATAR_R = 20;
+
+  function slotPosition(col: number, row: number, total: number): { cx: number; cy: number } {
+    const cx = ZONE_X[col];
+    const minSpacing = AVATAR_R * 2 + 20;
+    const maxSpacing = INNER_H / (total + 0.5);
+    const spacing = Math.max(minSpacing, Math.min(maxSpacing, 80));
+    const startY = CY - spacing * (total - 1) / 2;
+    const cy = startY + row * spacing;
+    return { cx, cy };
+  }
+
+  const [formation, setFormation] = useState<string>("2-3-1");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [totsSquadId, setTotsSquadId] = useState<string | null>(null);
+  const [slots, setSlots] = useState<(any | null)[]>(Array(7).fill(null));
+  const [coach, setCoach] = useState<any | null>(null);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchSlotIndex, setSearchSlotIndex] = useState<number | null>(null);
+  const [searchIsCoach, setSearchIsCoach] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchType, setSearchType] = useState<"athlete" | "staff">("athlete");
+  const [editionAthletes, setEditionAthletes] = useState<any[]>([]);
+  const [editionStaff, setEditionStaff] = useState<any[]>([]);
+
+  function buildSlotData(m: any) {
+    const isAthlete = !!m.athlete_id;
+    return {
+      athleteId: m.athlete_id ?? null,
+      staffMemberId: m.staff_member_id ?? null,
+      teamId: m.team_id,
+      name: isAthlete ? (m.athletes?.surname ?? m.athletes?.full_name ?? "—") : (m.staff_members?.surname ?? m.staff_members?.full_name ?? "—"),
+      photo: isAthlete ? m.athletes?.photo_url : m.staff_members?.photo_url,
+      role: isAthlete ? (m.athletes?.player_positions?.abbreviation ?? m.athletes?.player_positions?.full_name ?? "") : (m.staff_members?.staff_roles?.full_name ?? "Comissão"),
+      teamName: m.teams?.abbreviation ?? m.teams?.full_name ?? "",
+      teamLogo: m.teams?.logo_url ?? null,
+      teamColor: m.teams?.primary_color ?? null,
+      isStaff: !isAthlete,
+    };
+  }
+
+  function buildFromEntry(entry: any, isAthlete: boolean): any {
+    const et = entry.edition_teams as any;
+    const person = isAthlete ? entry.athletes : entry.staff_members;
+    return {
+      athleteId: isAthlete ? entry.athlete_id : null,
+      staffMemberId: isAthlete ? null : entry.staff_member_id,
+      teamId: et?.team_id ?? "",
+      name: person?.surname ?? person?.full_name ?? "—",
+      photo: person?.photo_url ?? null,
+      role: isAthlete ? (person?.player_positions?.abbreviation ?? person?.player_positions?.full_name ?? "") : (person?.staff_roles?.full_name ?? "Comissão"),
+      teamName: et?.teams?.abbreviation ?? et?.teams?.full_name ?? "",
+      teamLogo: et?.teams?.logo_url ?? null,
+      teamColor: et?.teams?.primary_color ?? null,
+      isStaff: !isAthlete,
+    };
+  }
+
+  function applySquadToState(tots: any) {
+    if (!tots?.selection_squad_members) {
+      setSlots(Array(7).fill(null));
+      setCoach(null);
+      return;
+    }
+    if (tots.formation && FORMATIONS[tots.formation]) setFormation(tots.formation);
+    const members = [...tots.selection_squad_members].sort((a: any, b: any) => a.display_order - b.display_order);
+    const playerSlots = members.filter((m: any) => m.display_order <= 7);
+    const coachSlot = members.find((m: any) => m.display_order === 8);
+    const newSlots: (any | null)[] = Array(7).fill(null);
+    playerSlots.forEach((m: any, i: number) => { if (i < 7) newSlots[i] = buildSlotData(m); });
+    setSlots(newSlots);
+    setCoach(coachSlot ? buildSlotData(coachSlot) : null);
+  }
+
+  useEffect(() => {
+    if (!selectedEditionId) return;
+    async function loadRoster() {
+      const supabase = createClient();
+      const { data: etData } = await supabase
+        .from("edition_teams").select("id, team_id")
+        .eq("edition_id", selectedEditionId).eq("is_free_agent_pool", false);
+      const etIds = (etData ?? []).map((e: any) => e.id);
+      if (etIds.length === 0) return;
+      const [{ data: athletes }, { data: staff }] = await Promise.all([
+        supabase.from("edition_roster_entries")
+          .select("athlete_id, edition_team_id, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), edition_teams(team_id, teams(id, full_name, abbreviation, logo_url, primary_color))")
+          .eq("member_type", "athlete").eq("status", "approved").in("edition_team_id", etIds),
+        supabase.from("edition_roster_entries")
+          .select("staff_member_id, edition_team_id, staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), edition_teams(team_id, teams(id, full_name, abbreviation, logo_url, primary_color))")
+          .eq("member_type", "staff").eq("status", "approved").in("edition_team_id", etIds),
+      ]);
+      setEditionAthletes(athletes ?? []);
+      setEditionStaff(staff ?? []);
+    }
+    void loadRoster();
+  }, [selectedEditionId]);
+
+  useEffect(() => {
+    if (!selectedEditionId) return;
+    async function loadTots() {
+      setLoading(true);
+      const result = await buscarTOTS(selectedEditionId);
+      if ("error" in result) {
+        toast("error", result.error);
+        setLoading(false);
+        return;
+      }
+      setTotsSquadId(result.squad?.id ?? null);
+      applySquadToState(result.squad);
+      setLoading(false);
+    }
+    void loadTots();
+  }, [selectedEditionId]);
+
+  async function handleSave() {
+    setSaving(true);
+    const allMembers: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[] = [];
+    slots.forEach((s, i) => {
+      if (s) allMembers.push({ athleteId: s.athleteId ?? undefined, staffMemberId: s.staffMemberId ?? undefined, teamId: s.teamId, displayOrder: i + 1 });
+    });
+    if (coach) allMembers.push({ staffMemberId: coach.staffMemberId ?? undefined, athleteId: coach.athleteId ?? undefined, teamId: coach.teamId, displayOrder: 8 });
+    const result = await criarOuAtualizarTOTS(selectedEditionId, allMembers, formation);
+    setSaving(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    const refreshed = await buscarTOTS(selectedEditionId);
+    if (!("error" in refreshed)) {
+      setTotsSquadId(refreshed.squad?.id ?? null);
+      applySquadToState(refreshed.squad);
+    }
+    toast("success", "TOTS salvo.");
+  }
+
+  const formationSlots = FORMATIONS[formation].slots;
+  const usedAthleteIds = new Set(slots.filter(Boolean).map((s: any) => s.athleteId).filter(Boolean));
+  const usedStaffIds = new Set([
+    ...slots.filter(Boolean).map((s: any) => s.staffMemberId).filter(Boolean),
+    ...(coach ? [coach.staffMemberId] : []),
+  ]);
+
+  const searchResults = (() => {
+    const pool = searchType === "athlete" ? editionAthletes : editionStaff;
+    const available = pool.filter((e: any) => {
+      if (searchType === "athlete") return !usedAthleteIds.has(e.athlete_id);
+      return !usedStaffIds.has(e.staff_member_id);
+    });
+    if (searchQuery.trim().length === 0) return available.slice(0, 10);
+    const q = searchQuery.toLowerCase();
+    return available.filter((e: any) => {
+      const person = searchType === "athlete" ? e.athletes : e.staff_members;
+      return (person?.surname ?? "").toLowerCase().includes(q) ||
+             (person?.full_name ?? "").toLowerCase().includes(q) ||
+             ((e.edition_teams as any)?.teams?.full_name ?? "").toLowerCase().includes(q);
+    }).slice(0, 10);
+  })();
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em" }}>
+        TOTS — Seleção da Temporada
+      </p>
+
+      {searchOpen && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
+          <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+            <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
+                {searchIsCoach ? "Selecionar técnico" : `Posição: ${formationSlots[searchSlotIndex ?? 0]?.label}`}
+              </p>
+              <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); }} style={{ color: "var(--color-text-secondary)", background: "none", border: "none", cursor: "pointer" }}>
+                <X size={18} />
+              </button>
+            </div>
+            {searchIsCoach && (
+              <div style={{ padding: "10px 20px 0", display: "flex", gap: 8 }}>
+                {[{ key: "staff", label: "Comissão" }, { key: "athlete", label: "Atleta" }].map(t => (
+                  <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
+                    style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+                      borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
+                      backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
+                      color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: 10 }}>
+              <Search size={14} color="var(--color-text-secondary)" />
+              <input autoFocus type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Buscar por nome ou equipe…"
+                style={{ flex: 1, background: "none", border: "none", outline: "none", fontSize: 14, color: "var(--color-text-primary)", fontFamily: "var(--font-sans)" }} />
+            </div>
+            <div style={{ maxHeight: 380, overflowY: "auto" }}>
+              {searchResults.length === 0 ? (
+                <p style={{ padding: "20px", textAlign: "center", fontSize: 13, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Nenhum resultado.</p>
+              ) : searchResults.map((entry: any, idx: number) => {
+                const isAth = searchType === "athlete";
+                const person = isAth ? entry.athletes : entry.staff_members;
+                const team = (entry.edition_teams as any)?.teams;
+                const name = person?.surname ?? person?.full_name ?? "—";
+                const role = isAth ? (person?.player_positions?.abbreviation ?? "") : (person?.staff_roles?.full_name ?? "");
+                return (
+                  <button key={idx} type="button"
+                    onClick={() => {
+                      const sd = buildFromEntry(entry, isAth);
+                      if (searchIsCoach) setCoach(sd);
+                      else if (searchSlotIndex !== null) {
+                        setSlots(prev => { const n = [...prev]; n[searchSlotIndex] = sd; return n; });
+                      }
+                      setSearchOpen(false); setSearchQuery("");
+                    }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                    {person?.photo_url ? (
+                      <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    ) : (
+                      <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
+                        {name.slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        {name}{role && <span style={{ marginLeft: 6, fontSize: 11, color: "var(--color-brand)", fontWeight: 400 }}>{role}</span>}
+                      </p>
+                      {team && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+                          {team.logo_url && <img src={team.logo_url} alt="" style={{ width: 13, height: 13, objectFit: "contain" }} />}
+                          <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>{team.abbreviation ?? team.full_name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Formação</span>
+        {Object.keys(FORMATIONS).map(f => (
+          <button key={f} type="button"
+            onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); }}
+            style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
+              borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
+              backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
+              color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
+            {FORMATIONS[f].label}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
+      ) : (
+        <>
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--color-border)" }}>
+            <div style={{ position: "absolute", top: 12, left: 0, right: 0, textAlign: "center", zIndex: 2, pointerEvents: "none" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.2em", color: "rgba(191,242,5,0.55)", textTransform: "uppercase" as const }}>
+                SELEÇÃO DA TEMPORADA
+              </span>
+            </div>
+            <svg viewBox={`0 0 ${FW} ${FH}`} style={{ width: "100%", display: "block" }} xmlns="http://www.w3.org/2000/svg">
+              <rect width={FW} height={FH} fill="var(--color-surface)" />
+              <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
+              <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+              <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+              <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
+              <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
+              <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+
+              {formationSlots.map((slot, i) => {
+                const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
+                const data = slots[i];
+                const teamColor = data?.teamColor ?? null;
+                const foSize = AVATAR_R * 2;
+
+                return (
+                  <g key={i}>
+                    {!data && (
+                      <>
+                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
+                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
+                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
+                          onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
+                      </>
+                    )}
+                    {data && (
+                      <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
+                          <style>{`.tsa${i}:hover .tsg${i}{opacity:1}.tsa${i}:hover .tsr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
+                          <div className={`tsa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
+                            onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
+                            <div className={`tsg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
+                              background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
+                            <div className={`tsr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
+                              border: "2px solid rgba(255,255,255,0.3)", backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
+                              {data.photo
+                                ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
+                              }
+                            </div>
+                            <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); }}
+                              style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
+                          </div>
+                          <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
+                          {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
+                        </div>
+                      </foreignObject>
+                    )}
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 16px", borderRadius: 10, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", whiteSpace: "nowrap", minWidth: 52 }}>Técnico</span>
+            {coach ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                {coach.photo ? (
+                  <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                ) : (
+                  <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
+                    {coach.name.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
+                  <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)" }}>{coach.role} · {coach.teamName}</p>
+                </div>
+                <button type="button" onClick={() => setCoach(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger)" }}><X size={14} /></button>
+              </div>
+            ) : (
+              <button type="button" onClick={() => { setSearchIsCoach(true); setSearchType("staff"); setSearchQuery(""); setSearchOpen(true); }}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "transparent", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)" }}>
+                <Plus size={12} /> Adicionar técnico
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" onClick={handleSave} disabled={saving}
+              style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+              {saving ? "Salvando…" : totsSquadId ? "Atualizar TOTS" : "Salvar TOTS"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── BracketView ──────────────────────────────────────────────────────────────
 // Substitui todo o bloco anterior a partir deste comentário.
 // Requer: useState, useEffect, useRef (já importados no topo do arquivo),
@@ -5015,8 +5429,7 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
   const STATUS_OPTIONS = [
     { v: "planned", l: "Planejada", desc: "Ainda não iniciada" },
     { v: "ongoing", l: "Em andamento", desc: "Competição ativa" },
-    { v: "finished", l: "Finalizada", desc: "Encerrada" },
-    { v: "cancelled", l: "Cancelada", desc: "Cancelada" },
+    { v: "closed", l: "Encerrada", desc: "Competição encerrada" },
   ];
 
   return (
@@ -5283,7 +5696,7 @@ function PremiacoesTab({
   onRefreshAwards: (editionId: string) => void;
   selectedEditionId: string;
 }) {
-  const [activeSub, setActiveSub] = useState<"individuais" | "coletivas">("individuais");
+  const [activeSub, setActiveSub] = useState<"individuais" | "coletivas" | "tots">("individuais");
   const [savingBatch, setSavingBatch] = useState(false);
   const [savingColetiva, setSavingColetiva] = useState<string | null>(null);
   const border = "1px solid rgba(255,255,255,0.08)";
@@ -5377,11 +5790,24 @@ function PremiacoesTab({
     return awards.find((a: any) => a.award_type === type);
   }
 
+  // Premiação coletiva da equipe (registro sem atleta/staff individual)
+  function getCollectiveTeamId(awardType: string) {
+    const teamAward = awards.find((a: any) =>
+      a.award_type === awardType &&
+      a.winning_team_id &&
+      !a.athlete_id &&
+      !a.staff_member_id,
+    );
+    return teamAward?.winning_team_id ?? "";
+  }
+
   // Seleções coletivas pendentes: { [awardType]: teamId }
   const [collectiveSelections, setCollectiveSelections] = useState<Record<string, string>>(() => {
     const result: Record<string, string> = {};
     for (const a of awards) {
-      if (a.winning_team_id) result[a.award_type] = a.winning_team_id;
+      if (a.winning_team_id && !a.athlete_id && !a.staff_member_id) {
+        result[a.award_type] = a.winning_team_id;
+      }
     }
     return result;
   });
@@ -5389,7 +5815,9 @@ function PremiacoesTab({
   useEffect(() => {
     const result: Record<string, string> = {};
     for (const a of awards) {
-      if (a.winning_team_id) result[a.award_type] = a.winning_team_id;
+      if (a.winning_team_id && !a.athlete_id && !a.staff_member_id) {
+        result[a.award_type] = a.winning_team_id;
+      }
     }
     setCollectiveSelections(result);
   }, [awards]);
@@ -5554,10 +5982,15 @@ function PremiacoesTab({
 
   // ── AwardCard coletivo (controlado pelo pai) ──────────────────────────────
   function CollectiveAwardCard({ awardType, label, icon, rank }: { awardType: string; label: string; icon: React.ReactNode; rank: number }) {
-    const existing = getAward(awardType);
+    const existing = awards.find((a: any) =>
+      a.award_type === awardType &&
+      a.winning_team_id &&
+      !a.athlete_id &&
+      !a.staff_member_id,
+    );
     const selectedTeamId = collectiveSelections[awardType] ?? "";
     const selectedET = realTeams.find((et: any) => et.team_id === selectedTeamId);
-    const savedTeamId = existing?.winning_team_id ?? "";
+    const savedTeamId = getCollectiveTeamId(awardType);
     const isDirty = selectedTeamId !== savedTeamId;
 
     const usedTeamIds = new Set(
@@ -5636,7 +6069,7 @@ function PremiacoesTab({
   const collectiveSlots = buildCollectiveSlots();
 
   const hasCollectiveChanges = collectiveSlots.some(({ awardType }) => {
-    const saved = awards.find((a: any) => a.award_type === awardType)?.winning_team_id ?? "";
+    const saved = getCollectiveTeamId(awardType);
     return (collectiveSelections[awardType] ?? "") !== saved;
   });
 
@@ -5645,7 +6078,7 @@ function PremiacoesTab({
   async function handleSaveBatchColetiva() {
     setSavingBatchColetiva(true);
     const toSave = collectiveSlots.filter(({ awardType }) => {
-      const saved = awards.find((a: any) => a.award_type === awardType)?.winning_team_id ?? "";
+      const saved = getCollectiveTeamId(awardType);
       return collectiveSelections[awardType] && collectiveSelections[awardType] !== saved;
     });
 
@@ -5668,10 +6101,10 @@ function PremiacoesTab({
   if (loadingAwards) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#666", padding: "32px 0" }}>Carregando…</p>;
 
   return (
-    <div style={{ maxWidth: 640, display: "flex", flexDirection: "column", gap: 24 }}>
+    <div style={{ maxWidth: activeSub === "tots" ? "100%" : 640, display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Sub-abas */}
       <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-        {[{ key: "individuais", label: "INDIVIDUAIS" }, { key: "coletivas", label: "COLETIVAS" }].map(sub => (
+        {[{ key: "individuais", label: "INDIVIDUAIS" }, { key: "coletivas", label: "COLETIVAS" }, { key: "tots", label: "TOTS" }].map(sub => (
           <button key={sub.key} type="button" onClick={() => setActiveSub(sub.key as any)}
             style={{ padding: "10px 20px", border: "none", borderBottom: `2px solid ${activeSub === sub.key ? "#BFF205" : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: activeSub === sub.key ? "#BFF205" : "rgba(255,255,255,0.3)", cursor: "pointer", transition: "all 0.12s", marginBottom: -1 }}>
             {sub.label}
@@ -5717,6 +6150,11 @@ function PremiacoesTab({
             </>
           )}
         </div>
+      )}
+
+      {/* TOTS */}
+      {activeSub === "tots" && (
+        <TotsTab selectedEditionId={selectedEditionId} />
       )}
     </div>
   );
@@ -6056,9 +6494,13 @@ function MatchupEditModal({
   }
  
   async function handleUpdateMatch(matchId: string, field: string, value: string) {
-    const supabase = createClient();
-    await supabase.from("matches").update({ [field]: value || null }).eq("id", matchId);
-    setMatchesLocal(prev => prev.map(m => m.id === matchId ? { ...m, [field]: value } : m));
+    const { atualizarCampoPartida } = await import("@/app/(lab)/partidas/[matchId]/actions");
+    const result = await atualizarCampoPartida(matchId, field, value || null);
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    setMatchesLocal(prev => prev.map(m => m.id === matchId ? { ...m, [field]: value || null } : m));
   }
  
   async function handleAddMatch(isSecondLeg: boolean) {

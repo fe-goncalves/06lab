@@ -259,6 +259,194 @@ export async function removerAtletaEdicao(
   return { success: true };
 }
 
+const COLLECTIVE_AWARD_TYPES = new Set([
+  "champion",
+  "runner_up",
+  "third_place",
+  "fourth_place",
+  "fifth_place",
+  "sixth_place",
+  "seventh_place",
+  "eighth_place",
+  "ninth_place",
+  "tenth_place",
+  "eleventh_place",
+  "twelfth_place",
+  "thirteenth_place",
+  "fourteenth_place",
+  "fifteenth_place",
+  "sixteenth_place",
+  "seventeenth_place",
+  "eighteenth_place",
+  "nineteenth_place",
+  "twentieth_place",
+  "twenty_first_or_more",
+]);
+
+function isCollectiveAwardType(awardType: string): boolean {
+  return COLLECTIVE_AWARD_TYPES.has(awardType);
+}
+
+const AWARD_TYPE_TO_POSITION: Record<string, number> = {
+  champion: 1,
+  runner_up: 2,
+  third_place: 3,
+  fourth_place: 4,
+  fifth_place: 5,
+  sixth_place: 6,
+  seventh_place: 7,
+  eighth_place: 8,
+  ninth_place: 9,
+  tenth_place: 10,
+  eleventh_place: 11,
+  twelfth_place: 12,
+  thirteenth_place: 13,
+  fourteenth_place: 14,
+  fifteenth_place: 15,
+  sixteenth_place: 16,
+  seventeenth_place: 17,
+  eighteenth_place: 18,
+  nineteenth_place: 19,
+  twentieth_place: 20,
+  relegated: 99,
+};
+
+async function recalculateCareerStatsForAwards(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  athleteIds: string[],
+  staffIds: string[],
+): Promise<string | null> {
+  const uniqueAthletes = [...new Set(athleteIds.filter(Boolean))];
+  const uniqueStaff = [...new Set(staffIds.filter(Boolean))];
+
+  const results = await Promise.all([
+    ...uniqueAthletes.map((athleteId) =>
+      supabase.rpc("recalculate_athlete_career_stats", { p_athlete_id: athleteId }),
+    ),
+    ...uniqueStaff.map((staffId) =>
+      supabase.rpc("recalculate_staff_career_stats", { p_staff_member_id: staffId }),
+    ),
+  ]);
+
+  const failed = results.find((r) => r.error);
+  return failed?.error?.message ?? null;
+}
+
+async function resolveEditionTeamForAward(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  editionId: string,
+  teamOrEditionTeamId: string,
+): Promise<{ editionTeamId: string; winningTeamId: string } | { error: string }> {
+  const { data: editionTeam, error } = await supabase
+    .from("edition_teams")
+    .select("id, team_id")
+    .eq("edition_id", editionId)
+    .or(`team_id.eq.${teamOrEditionTeamId},id.eq.${teamOrEditionTeamId}`)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!editionTeam?.id || !editionTeam.team_id) {
+    return { error: "Equipe não encontrada nesta edição." };
+  }
+
+  return { editionTeamId: editionTeam.id, winningTeamId: editionTeam.team_id };
+}
+
+async function propagateCollectiveAwardToRoster(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  params: {
+    editionId: string;
+    organizationId: string;
+    awardType: string;
+    teamId: string;
+    seasonId: string | null;
+    yearId: string | null;
+    assignedBy: string;
+  },
+): Promise<{ error?: string; athleteIds: string[]; staffIds: string[] }> {
+  const { editionId, organizationId, awardType, teamId, seasonId, yearId, assignedBy } = params;
+
+  const resolved = await resolveEditionTeamForAward(supabase, editionId, teamId);
+  if ("error" in resolved) return { error: resolved.error, athleteIds: [], staffIds: [] };
+
+  const { editionTeamId, winningTeamId } = resolved;
+  const assignedAt = new Date().toISOString();
+
+  const { data: eligibleAthletes, error: athletesError } = await supabase
+    .from("edition_roster_entries")
+    .select("athlete_id")
+    .eq("edition_team_id", editionTeamId)
+    .eq("status", "approved")
+    .eq("member_type", "athlete")
+    .eq("is_transfer_origin", false)
+    .not("athlete_id", "is", null);
+
+  if (athletesError) return { error: athletesError.message, athleteIds: [], staffIds: [] };
+
+  const athleteIds = (eligibleAthletes ?? [])
+    .map((e) => e.athlete_id)
+    .filter((id): id is string => Boolean(id));
+
+  if (athleteIds.length > 0) {
+    const athleteAwards = athleteIds.map((athleteId) => ({
+      edition_id: editionId,
+      organization_id: organizationId,
+      award_type: awardType,
+      athlete_id: athleteId,
+      staff_member_id: null,
+      winning_team_id: winningTeamId,
+      season_id: seasonId,
+      year_id: yearId,
+      assigned_by: assignedBy,
+      assigned_at: assignedAt,
+    }));
+
+    const { error: insertAthletesError } = await supabase
+      .from("edition_awards")
+      .insert(athleteAwards);
+
+    if (insertAthletesError) return { error: insertAthletesError.message, athleteIds: [], staffIds: [] };
+  }
+
+  const { data: eligibleStaff, error: staffError } = await supabase
+    .from("edition_roster_entries")
+    .select("staff_member_id, edition_team_id")
+    .eq("edition_team_id", editionTeamId)
+    .eq("status", "approved")
+    .eq("member_type", "staff")
+    .or("is_transfer_origin.eq.false,is_transfer_origin.is.null")
+    .not("staff_member_id", "is", null);
+
+  if (staffError) return { error: staffError.message, athleteIds, staffIds: [] };
+
+  const staffIds = (eligibleStaff ?? [])
+    .map((e) => e.staff_member_id)
+    .filter((id): id is string => Boolean(id));
+
+  if (staffIds.length > 0) {
+    const staffAwards = staffIds.map((staffMemberId) => ({
+      edition_id: editionId,
+      organization_id: organizationId,
+      award_type: awardType,
+      athlete_id: null,
+      staff_member_id: staffMemberId,
+      winning_team_id: winningTeamId,
+      season_id: seasonId,
+      year_id: yearId,
+      assigned_by: assignedBy,
+      assigned_at: assignedAt,
+    }));
+
+    const { error: insertStaffError } = await supabase
+      .from("edition_awards")
+      .insert(staffAwards);
+
+    if (insertStaffError) return { error: insertStaffError.message, athleteIds, staffIds: [] };
+  }
+
+  return { athleteIds, staffIds };
+}
+
 export async function atribuirPremiacao(
   editionId: string,
   formData: FormData,
@@ -278,7 +466,9 @@ export async function atribuirPremiacao(
   const winning_team_id = String(formData.get("winning_team_id") ?? "").trim() || null;
 
   if (!award_type) return { error: "Tipo de premiação obrigatório." };
-  if (!athlete_id && !staff_member_id && !winning_team_id) return { error: "Atleta, membro de comissão ou equipe é obrigatório." };
+  if (!athlete_id && !staff_member_id && !winning_team_id) {
+    return { error: "Atleta, membro de comissão ou equipe é obrigatório." };
+  }
 
   const { data: edition } = await supabase
     .from("competition_editions")
@@ -287,13 +477,32 @@ export async function atribuirPremiacao(
     .maybeSingle();
 
   const season_id = edition?.season_id ?? null;
-  const year_id = (edition?.seasons as any)?.year_id ?? null;
+  const year_id = (edition?.seasons as { year_id?: string | null } | null)?.year_id ?? null;
 
-  await supabase
+  const { data: previousAwards } = await supabase
+    .from("edition_awards")
+    .select("athlete_id, staff_member_id")
+    .eq("edition_id", editionId)
+    .eq("award_type", award_type);
+
+  const recalcAthleteIds = new Set(
+    (previousAwards ?? [])
+      .map((a) => a.athlete_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const recalcStaffIds = new Set(
+    (previousAwards ?? [])
+      .map((a) => a.staff_member_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+
+  const { error: deleteError } = await supabase
     .from("edition_awards")
     .delete()
     .eq("edition_id", editionId)
     .eq("award_type", award_type);
+
+  if (deleteError) return { error: deleteError.message };
 
   const { error } = await supabase
     .from("edition_awards")
@@ -311,6 +520,49 @@ export async function atribuirPremiacao(
     });
 
   if (error) return { error: error.message };
+
+  const finalPosition = AWARD_TYPE_TO_POSITION[award_type];
+  if (finalPosition && winning_team_id && !athlete_id && !staff_member_id) {
+    const resolvedTeam = await resolveEditionTeamForAward(supabase, editionId, winning_team_id);
+    if (!("error" in resolvedTeam)) {
+      await supabase
+        .from("team_edition_stats")
+        .update({ final_position: finalPosition })
+        .eq("edition_id", editionId)
+        .eq("team_id", resolvedTeam.winningTeamId);
+    }
+  }
+
+  const isCollectiveTeamAward =
+    isCollectiveAwardType(award_type) &&
+    Boolean(winning_team_id) &&
+    !athlete_id &&
+    !staff_member_id;
+
+  if (isCollectiveTeamAward && winning_team_id) {
+    const propagation = await propagateCollectiveAwardToRoster(supabase, {
+      editionId,
+      organizationId: profile.organization_id,
+      awardType: award_type,
+      teamId: winning_team_id,
+      seasonId: season_id,
+      yearId: year_id,
+      assignedBy: profile.id,
+    });
+
+    if (propagation.error) return { error: propagation.error };
+
+    propagation.athleteIds.forEach((id) => recalcAthleteIds.add(id));
+    propagation.staffIds.forEach((id) => recalcStaffIds.add(id));
+  }
+
+  const recalcError = await recalculateCareerStatsForAwards(
+    supabase,
+    [...recalcAthleteIds],
+    [...recalcStaffIds],
+  );
+  if (recalcError) return { error: recalcError };
+
   return { success: true };
 }
 
@@ -321,12 +573,79 @@ export async function removerPremiacao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  const { data: award } = await supabase
+    .from("edition_awards")
+    .select("edition_id, award_type, athlete_id, staff_member_id, winning_team_id")
+    .eq("id", awardId)
+    .maybeSingle();
+
+  if (!award) return { error: "Premiação não encontrada." };
+
+  const isCollectiveTeamAward =
+    isCollectiveAwardType(award.award_type) &&
+    Boolean(award.winning_team_id) &&
+    !award.athlete_id &&
+    !award.staff_member_id;
+
+  let recalcAthleteIds: string[] = [];
+  let recalcStaffIds: string[] = [];
+
+  if (isCollectiveTeamAward && award.winning_team_id) {
+    const { data: linkedAwards } = await supabase
+      .from("edition_awards")
+      .select("athlete_id, staff_member_id")
+      .eq("edition_id", award.edition_id)
+      .eq("award_type", award.award_type)
+      .eq("winning_team_id", award.winning_team_id);
+
+    recalcAthleteIds = (linkedAwards ?? [])
+      .map((a) => a.athlete_id)
+      .filter((id): id is string => Boolean(id));
+    recalcStaffIds = (linkedAwards ?? [])
+      .map((a) => a.staff_member_id)
+      .filter((id): id is string => Boolean(id));
+
+    const { error: deleteIndividualsError } = await supabase
+      .from("edition_awards")
+      .delete()
+      .eq("edition_id", award.edition_id)
+      .eq("award_type", award.award_type)
+      .eq("winning_team_id", award.winning_team_id)
+      .not("athlete_id", "is", null);
+
+    if (deleteIndividualsError) return { error: deleteIndividualsError.message };
+
+    const { error: deleteStaffIndividualsError } = await supabase
+      .from("edition_awards")
+      .delete()
+      .eq("edition_id", award.edition_id)
+      .eq("award_type", award.award_type)
+      .eq("winning_team_id", award.winning_team_id)
+      .not("staff_member_id", "is", null);
+
+    if (deleteStaffIndividualsError) return { error: deleteStaffIndividualsError.message };
+  }
+
   const { error } = await supabase
     .from("edition_awards")
     .delete()
     .eq("id", awardId);
 
   if (error) return { error: error.message };
+
+  if (isCollectiveTeamAward && award.winning_team_id) {
+    await supabase
+      .from("team_edition_stats")
+      .update({ final_position: null })
+      .eq("edition_id", award.edition_id)
+      .eq("team_id", award.winning_team_id);
+  }
+
+  if (isCollectiveTeamAward) {
+    const recalcError = await recalculateCareerStatsForAwards(supabase, recalcAthleteIds, recalcStaffIds);
+    if (recalcError) return { error: recalcError };
+  }
+
   return { success: true };
 }
 
@@ -764,6 +1083,7 @@ export async function inscreverAtletaQualquer(
     edition_team_id: editionTeamId,
     member_type: memberType,
     status: "pending",
+    is_transfer_origin: false,
     submitted_by: profile?.id,
     submitter_type: "admin",
     submitted_at: new Date().toISOString(),
@@ -851,6 +1171,94 @@ export async function criarOuAtualizarTOTW(
   return { success: true };
 }
 
+const SQUAD_MEMBERS_SELECT =
+  "id, squad_type, formation, selection_squad_members(id, athlete_id, staff_member_id, team_id, display_order, athletes(id, full_name, surname, photo_url, player_positions(full_name, abbreviation)), staff_members(id, full_name, surname, photo_url, staff_roles(full_name)), teams(id, full_name, abbreviation, logo_url, primary_color))";
+
+export async function buscarTOTS(
+  editionId: string,
+): Promise<{ squad: any | null } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: squad, error } = await supabase
+    .from("selection_squads")
+    .select(SQUAD_MEMBERS_SELECT)
+    .eq("edition_id", editionId)
+    .eq("squad_type", "tots")
+    .is("round_id", null)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  return { squad: squad ?? null };
+}
+
+export async function criarOuAtualizarTOTS(
+  editionId: string,
+  members: { athleteId?: string; staffMemberId?: string; teamId: string; displayOrder: number }[],
+  formation: string = "2-3-1",
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("id, organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+  if (!profile) return { error: "Perfil não encontrado." };
+
+  const { data: season } = await supabase
+    .from("competition_editions").select("season_id, seasons(year_id)")
+    .eq("id", editionId).maybeSingle();
+
+  let squadId: string;
+  const { data: existing } = await supabase
+    .from("selection_squads")
+    .select("id")
+    .eq("edition_id", editionId)
+    .eq("squad_type", "tots")
+    .is("round_id", null)
+    .maybeSingle();
+
+  if (existing) {
+    squadId = existing.id;
+    await supabase.from("selection_squad_members").delete().eq("squad_id", squadId);
+    await supabase.from("selection_squads").update({ formation }).eq("id", squadId);
+  } else {
+    const { data: inserted, error } = await supabase
+      .from("selection_squads")
+      .insert({
+        organization_id: profile.organization_id,
+        edition_id: editionId,
+        season_id: season?.season_id ?? null,
+        year_id: (season?.seasons as any)?.year_id ?? null,
+        squad_type: "tots",
+        round_id: null,
+        created_by: profile.id,
+        formation,
+      })
+      .select("id").single();
+    if (error) return { error: error.message };
+    squadId = inserted.id;
+  }
+
+  if (members.length > 0) {
+    const { error } = await supabase.from("selection_squad_members").insert(
+      members.map(m => ({
+        squad_id: squadId,
+        athlete_id: m.athleteId ?? null,
+        staff_member_id: m.staffMemberId ?? null,
+        team_id: m.teamId,
+        display_order: m.displayOrder,
+      })),
+    );
+    if (error) return { error: error.message };
+  }
+
+  await recalcularSelectionStats(supabase, editionId);
+  return { success: true };
+}
+
 export async function criarOuAtualizarMOTW(
   editionId: string,
   roundId: string,
@@ -915,6 +1323,7 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
 
   const squadIds = squads.map((s: any) => s.id);
   const totwSquadIds = squads.filter((s: any) => s.squad_type === "totw").map((s: any) => s.id);
+  const totsSquadIds = squads.filter((s: any) => s.squad_type === "tots").map((s: any) => s.id);
   const motwSquadIds = squads.filter((s: any) => s.squad_type === "motw").map((s: any) => s.id);
 
   const { data: allMembers } = await supabase
@@ -926,12 +1335,16 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
   if (!allMembers) return;
 
   const totwCounts: Record<string, number> = {};
+  const totsCounts: Record<string, number> = {};
   const motwCounts: Record<string, number> = {};
 
   allMembers.forEach((m: any) => {
     if (!m.athlete_id) return;
     if (totwSquadIds.includes(m.squad_id)) {
       totwCounts[m.athlete_id] = (totwCounts[m.athlete_id] ?? 0) + 1;
+    }
+    if (totsSquadIds.includes(m.squad_id)) {
+      totsCounts[m.athlete_id] = (totsCounts[m.athlete_id] ?? 0) + 1;
     }
     if (motwSquadIds.includes(m.squad_id)) {
       motwCounts[m.athlete_id] = (motwCounts[m.athlete_id] ?? 0) + 1;
@@ -948,6 +1361,7 @@ async function recalcularSelectionStats(supabase: any, editionId: string) {
   const updates = stats.map((s: any) => ({
     id: s.id,
     totw_count: totwCounts[s.athlete_id] ?? 0,
+    tots_count: totsCounts[s.athlete_id] ?? 0,
     motw_count: motwCounts[s.athlete_id] ?? 0,
   }));
 
@@ -1154,12 +1568,34 @@ export async function recalcularEstatisticasEdicao(
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
-  
-  const { error: e1 } = await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: editionId });
-  if (e1) return { error: e1.message };
-  const { error: e2 } = await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: editionId });
-  if (e2) return { error: e2.message };
-  
+
+  const { syncEditionStats } = await import("@/lib/edition-stats-sync");
+  const result = await syncEditionStats(supabase, editionId);
+  if (result.error) return { error: result.error };
+
+  return { success: true };
+}
+
+export async function salvarAjustesPontosClassificacao(
+  editionId: string,
+  adjustments: { teamId: string; awarded: number; deducted: number }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { addStandingsPointAdjustments, syncEditionStats } = await import("@/lib/edition-stats-sync");
+
+  const deltas = adjustments
+    .map((a) => ({ teamId: a.teamId, delta: a.awarded - a.deducted }))
+    .filter((a) => a.delta !== 0);
+
+  const adjustResult = await addStandingsPointAdjustments(supabase, editionId, deltas);
+  if (adjustResult.error) return { error: adjustResult.error };
+
+  const syncResult = await syncEditionStats(supabase, editionId);
+  if (syncResult.error) return { error: syncResult.error };
+
   return { success: true };
 }
 

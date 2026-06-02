@@ -3,6 +3,11 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { validarURL, DOMINIOS_VIDEO } from "@/lib/security/urls";
+import {
+  getEditionIdForMatch,
+  syncEditionStats,
+  syncEditionStatsForMatch,
+} from "@/lib/edition-stats-sync";
 
 export async function criarPartida(
   faseId: string,
@@ -117,6 +122,12 @@ export async function editarPartida(
     return { error: "URL de fotos inválida. Use uma URL HTTPS válida." };
   }
 
+  const { data: previous } = await supabase
+    .from("matches")
+    .select("status, score_a, score_b, team_a_id, team_b_id")
+    .eq("id", matchId)
+    .maybeSingle();
+
   const updateData: Record<string, any> = {
     status, finish_type, score_a, score_b,
     motm_athlete_id, motm_team_id, highlights_url, photos_url,
@@ -132,6 +143,74 @@ export async function editarPartida(
     .eq("id", matchId);
 
   if (error) return { error: error.message };
+
+  const syncResult = await syncEditionStatsForMatch(supabase, matchId, {
+    previousStatus: previous?.status,
+    newStatus: status,
+    scoresChanged:
+      previous != null &&
+      (previous.score_a !== score_a || previous.score_b !== score_b),
+  }, {
+    includeCareerStats: status === "finished",
+    teamIds: [previous?.team_a_id, previous?.team_b_id].filter(Boolean) as string[],
+  });
+  if (syncResult.error) return { error: syncResult.error };
+
+  return { success: true };
+}
+
+export async function atualizarCampoPartida(
+  matchId: string,
+  field: string,
+  value: string | null,
+): Promise<{ success: true } | { error: string }> {
+  const allowed = new Set([
+    "status", "match_date", "match_time", "venue_id",
+    "team_a_id", "team_b_id", "score_a", "score_b",
+  ]);
+  if (!allowed.has(field)) return { error: "Campo não permitido." };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: previous } = await supabase
+    .from("matches")
+    .select("status, score_a, score_b, team_a_id, team_b_id")
+    .eq("id", matchId)
+    .maybeSingle();
+
+  if (!previous) return { error: "Partida não encontrada." };
+
+  let parsed: string | number | null = value;
+  if (field === "score_a" || field === "score_b") {
+    parsed = value === null || value === "" ? 0 : Number(value);
+    if (Number.isNaN(parsed)) return { error: "Placar inválido." };
+  } else if (value === "" || value === "null") {
+    parsed = null;
+  }
+
+  const { error } = await supabase
+    .from("matches")
+    .update({ [field]: parsed })
+    .eq("id", matchId);
+
+  if (error) return { error: error.message };
+
+  const newStatus = field === "status" ? String(parsed) : previous.status;
+  const newScoreA = field === "score_a" ? Number(parsed) : previous.score_a;
+  const newScoreB = field === "score_b" ? Number(parsed) : previous.score_b;
+
+  const syncResult = await syncEditionStatsForMatch(supabase, matchId, {
+    previousStatus: previous.status,
+    newStatus,
+    scoresChanged: newScoreA !== previous.score_a || newScoreB !== previous.score_b,
+  }, {
+    includeCareerStats: newStatus === "finished",
+    teamIds: [previous.team_a_id, previous.team_b_id].filter(Boolean) as string[],
+  });
+  if (syncResult.error) return { error: syncResult.error };
+
   return { success: true };
 }
 
@@ -355,6 +434,16 @@ export async function adicionarAcao(
     }
   }
 
+  const { data: matchStatus } = await supabase
+    .from("matches")
+    .select("status")
+    .eq("id", matchId)
+    .maybeSingle();
+
+  if (matchStatus?.status === "finished") {
+    await syncEditionStatsForMatch(supabase, matchId, { force: true });
+  }
+
   return { id: inserted.id };
 }
 
@@ -387,18 +476,7 @@ export async function deletarAcao(
     }
   }
 
-  // Recalcula stats da edição
-  const { data: match } = await supabase
-    .from("matches").select("phase_id").eq("id", matchId).maybeSingle();
-
-  if (match?.phase_id) {
-    const { data: phase } = await supabase
-      .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
-    if (phase?.edition_id) {
-      await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
-      await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
-    }
-  }
+  await syncEditionStatsForMatch(supabase, matchId, { force: true });
 
   return { success: true };
 }
@@ -412,9 +490,11 @@ export async function deletarPartida(
 
   const { data: match } = await supabase
     .from("matches")
-    .select("matchup_id")
+    .select("matchup_id, status, phase_id")
     .eq("id", matchId)
     .maybeSingle();
+
+  const editionId = await getEditionIdForMatch(supabase, matchId);
 
   const { error } = await supabase
     .from("matches")
@@ -422,6 +502,11 @@ export async function deletarPartida(
     .eq("id", matchId);
 
   if (error) return { error: error.message };
+
+  if (editionId && match?.status === "finished") {
+    const syncResult = await syncEditionStats(supabase, editionId);
+    if (syncResult.error) return { error: syncResult.error };
+  }
 
   if (match?.matchup_id) {
     const { count } = await supabase
@@ -455,15 +540,15 @@ export async function publicarResultado(
 
   if (existing?.status === "approved") {
     const { data: match } = await supabase
-      .from("matches").select("phase_id, team_a_id, team_b_id").eq("id", matchId).maybeSingle();
-    if (match?.phase_id) {
-      const { data: phase } = await supabase
-        .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
-      if (phase?.edition_id) {
-        await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
-        await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
-      }
-    }
+      .from("matches").select("team_a_id, team_b_id").eq("id", matchId).maybeSingle();
+    await syncEditionStatsForMatch(supabase, matchId, {
+      previousStatus: "finished",
+      newStatus: "finished",
+      force: true,
+    }, {
+      includeCareerStats: true,
+      teamIds: [match?.team_a_id, match?.team_b_id].filter(Boolean) as string[],
+    });
     return { success: true };
   }
 
@@ -513,18 +598,16 @@ export async function publicarResultado(
   if (reportError) return { error: reportError.message };
 
   const { data: match } = await supabase
-    .from("matches").select("phase_id, team_a_id, team_b_id").eq("id", matchId).maybeSingle();
+    .from("matches").select("team_a_id, team_b_id").eq("id", matchId).maybeSingle();
 
-  if (match?.phase_id) {
-    const { data: phase } = await supabase
-      .from("phases").select("edition_id").eq("id", match.phase_id).maybeSingle();
-    if (phase?.edition_id) {
-      await supabase.rpc("recalculate_team_edition_stats", { p_edition_id: phase.edition_id });
-      await supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: phase.edition_id });
-      if (match.team_a_id) await supabase.rpc("recalculate_team_career_stats", { p_team_id: match.team_a_id });
-      if (match.team_b_id) await supabase.rpc("recalculate_team_career_stats", { p_team_id: match.team_b_id });
-    }
-  }
+  const syncResult = await syncEditionStatsForMatch(supabase, matchId, {
+    previousStatus: null,
+    newStatus: "finished",
+  }, {
+    includeCareerStats: true,
+    teamIds: [match?.team_a_id, match?.team_b_id].filter(Boolean) as string[],
+  });
+  if (syncResult.error) return { error: syncResult.error };
 
   return { success: true };
 }
@@ -617,11 +700,27 @@ export async function encerrarPartida(
   const supabase = await createClient();
   const finishType = (fd.get("finish_type") as string) || null;
   const aggregateWinnerId = (fd.get("aggregate_winner_id") as string) || null;
+  const { data: previous } = await supabase
+    .from("matches")
+    .select("status, team_a_id, team_b_id")
+    .eq("id", matchId)
+    .maybeSingle();
+
   const { error } = await supabase
     .from("matches")
     .update({ status: "finished", finish_type: finishType, aggregate_winner_id: aggregateWinnerId })
     .eq("id", matchId);
   if (error) return { error: error.message };
+
+  const syncResult = await syncEditionStatsForMatch(supabase, matchId, {
+    previousStatus: previous?.status,
+    newStatus: "finished",
+  }, {
+    includeCareerStats: true,
+    teamIds: [previous?.team_a_id, previous?.team_b_id].filter(Boolean) as string[],
+  });
+  if (syncResult.error) return { error: syncResult.error };
+
   return { ok: true };
 }
 
@@ -685,6 +784,17 @@ export async function editarAcao(
       }
 
       await supabase.from("matches").update({ score_a: newScoreA, score_b: newScoreB }).eq("id", effectiveMatchId);
+    }
+  }
+
+  if (effectiveMatchId) {
+    const { data: matchStatus } = await supabase
+      .from("matches")
+      .select("status")
+      .eq("id", effectiveMatchId)
+      .maybeSingle();
+    if (matchStatus?.status === "finished") {
+      await syncEditionStatsForMatch(supabase, effectiveMatchId, { force: true });
     }
   }
 

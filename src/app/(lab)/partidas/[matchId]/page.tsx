@@ -33,6 +33,8 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     { data: matchReferees },
     { data: allReferees },
     { data: matchRatings },
+    { data: teamStats },
+    { data: shootout },
   ] = await Promise.all([
     supabase.from("match_actions")
       .select("*, primary_athlete:athletes!match_actions_primary_athlete_id_fkey(id, full_name, surname), secondary_athlete:athletes!match_actions_secondary_athlete_id_fkey(id, full_name, surname)")
@@ -55,6 +57,13 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
     supabase.from("match_athlete_ratings")
       .select("athlete_id, rating")
       .eq("match_id", matchId),
+    supabase.from("match_team_stats")
+      .select("team_id, period, fouls")
+      .eq("match_id", matchId),
+    supabase.from("match_penalty_shootout")
+      .select("*")
+      .eq("match_id", matchId)
+      .order("kick_order"),
   ]);
 
   if (match) (match as any).venues_list = venues ?? [];
@@ -154,6 +163,8 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       matchReferees={matchReferees ?? []}
       allReferees={allReferees ?? []}
       initialRatings={matchRatings ?? []}
+      initialTeamStats={teamStats ?? []}
+      initialShootout={shootout ?? []}
     />
   );
 }

@@ -19,7 +19,7 @@ if (typeof document !== "undefined") {
 }
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -334,7 +334,6 @@ export default function PartidaClient({
   // Ação
   const [addingAction, setAddingAction] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [published, setPublished] = useState(false);
   const [showActionModal, setShowActionModal] = useState(false);
   const [editingAction, setEditingAction] = useState<any | null>(null);
   const [openActionType, setOpenActionType] = useState<string | null>(null);
@@ -494,13 +493,19 @@ export default function PartidaClient({
     setMatchReferees(prev => prev.filter(r => r.referee_id !== refereeId));
   }
 
-  async function handlePublish() {
+  async function handlePublish(): Promise<boolean> {
     setPublishing(true);
-    const r = await publicarResultado(match.id);
-    setPublishing(false);
-    if ("error" in r) { toast("error", r.error); return; }
-    setPublished(true);
-    toast("success", "Resultado publicado. Stats atualizadas.");
+    try {
+      const r = await publicarResultado(match.id);
+      if ("error" in r) {
+        toast("error", r.error);
+        return false;
+      }
+      toast("success", "Resultado publicado. Stats atualizadas.");
+      return true;
+    } finally {
+      setPublishing(false);
+    }
   }
 
   async function handleSaveLineups(ratings: Record<string, number | null>) {
@@ -530,8 +535,13 @@ export default function PartidaClient({
     const period = activePeriod;
     const current = getFouls(teamId, period);
     const next = Math.max(0, current + delta);
+    const prevStats = teamStats;
     setTeamStats(prev => ({ ...prev, [teamId]: { ...(prev[teamId] ?? {}), [period]: next } }));
-    await salvarFaltas(match.id, teamId, period, next);
+    const result = await salvarFaltas(match.id, teamId, period, next);
+    if ("error" in result) {
+      setTeamStats(prevStats);
+      toast("error", result.error);
+    }
   }
 
   async function handleAddAction(fd: FormData) {
@@ -873,6 +883,7 @@ export default function PartidaClient({
             savingVisibility={savingVisibility}
             onToggleVisibility={handleToggleVisibility}
             initialRatings={initialRatings ?? []}
+            editionTeamsWithAthletes={editionTeamsWithAthletes ?? []}
           />
         )}
 
@@ -899,7 +910,6 @@ export default function PartidaClient({
             setEndAggregateWinnerId={setEndAggregateWinnerId}
             savingEnd={savingEnd}
             publishing={publishing}
-            published={published}
             addingAction={addingAction}
             editingAction={editingAction}
             setEditingAction={setEditingAction}
@@ -1413,7 +1423,24 @@ function InfoTab({
 
 // ─── FormacoesTab ─────────────────────────────────────────────────────────────
 
-function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup, ratingsArePublic, savingVisibility, onToggleVisibility, initialRatings }: {
+type RatingComEquipe = { athlete_id: string; rating: number; edition_team_id: string };
+
+function calcularMediaEquipe(
+  ratings: RatingComEquipe[],
+  editionTeamId: string,
+): { media: number; avaliados: number } | null {
+  const notasEquipe = ratings.filter(
+    (r) => r.edition_team_id === editionTeamId && r.rating !== null,
+  );
+  if (notasEquipe.length === 0) return null;
+  const soma = notasEquipe.reduce((acc, r) => acc + Number(r.rating), 0);
+  return {
+    media: Math.round((soma / notasEquipe.length) * 10) / 10,
+    avaliados: notasEquipe.length,
+  };
+}
+
+function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineups, getAthletes, getStaffMembers, savingLineups, handleSaveLineups, toggleLineup, ratingsArePublic, savingVisibility, onToggleVisibility, initialRatings, editionTeamsWithAthletes }: {
   match: any;
   lineups: Record<string, LineupEntry>;
   setLineups: React.Dispatch<React.SetStateAction<Record<string, LineupEntry>>>;
@@ -1428,6 +1455,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
   savingVisibility: boolean;
   onToggleVisibility: (value: boolean) => void;
   initialRatings: { athlete_id: string; rating: number }[];
+  editionTeamsWithAthletes: { id: string; team_id: string; athletes: Athlete[] }[];
 }) {
   const isMobile = useIsMobile();
   const teamA = match.teams_a;
@@ -1466,17 +1494,39 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
     return result;
   }
 
-  // Nota média dos atletas presentes que têm nota preenchida (para exibir no header)
-  function avgRating(teamId: string): string | null {
-    const athletes = getAthletes(teamId);
-    const values = athletes
-      .filter(a => lineups[a.id]?.is_present)
-      .map(a => parseRating(ratings[a.id] ?? ""))
-      .filter((v): v is number => v !== null);
-    if (values.length === 0) return null;
-    const avg = values.reduce((s, v) => s + v, 0) / values.length;
-    return avg.toFixed(1);
-  }
+  const editionTeamIdA = editionTeamsWithAthletes.find(et => et.team_id === match.team_a_id)?.id ?? "";
+  const editionTeamIdB = editionTeamsWithAthletes.find(et => et.team_id === match.team_b_id)?.id ?? "";
+
+  const athleteEditionTeamId = useMemo(() => {
+    const map: Record<string, string> = {};
+    editionTeamsWithAthletes.forEach(et => {
+      et.athletes.forEach(a => {
+        map[a.id] = et.id;
+      });
+    });
+    return map;
+  }, [editionTeamsWithAthletes]);
+
+  const ratingsRows = useMemo((): RatingComEquipe[] => {
+    const rows: RatingComEquipe[] = [];
+    Object.entries(ratings).forEach(([athlete_id, raw]) => {
+      if (!lineups[athlete_id]?.is_present) return;
+      const edition_team_id = athleteEditionTeamId[athlete_id];
+      const rating = parseRating(raw);
+      if (!edition_team_id || rating === null) return;
+      rows.push({ athlete_id, rating, edition_team_id });
+    });
+    return rows;
+  }, [ratings, lineups, athleteEditionTeamId]);
+
+  const mediaEquipeA = useMemo(
+    () => (editionTeamIdA ? calcularMediaEquipe(ratingsRows, editionTeamIdA) : null),
+    [ratingsRows, editionTeamIdA],
+  );
+  const mediaEquipeB = useMemo(
+    () => (editionTeamIdB ? calcularMediaEquipe(ratingsRows, editionTeamIdB) : null),
+    [ratingsRows, editionTeamIdB],
+  );
 
   function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
     return (
@@ -1490,7 +1540,40 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
     );
   }
 
-  function TeamPanel({ teamId, team }: { teamId: string; team: any }) {
+  function TeamMediaFooter({ media }: { media: { media: number; avaliados: number } }) {
+    return (
+      <div style={{
+        padding: "14px 16px",
+        borderLeft: border, borderRight: border, borderBottom: border,
+        backgroundColor: "rgba(191,242,5,0.04)",
+        borderTop: "1px solid rgba(191,242,5,0.12)",
+      }}>
+        <p style={{
+          fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+          letterSpacing: "0.14em", textTransform: "uppercase" as const,
+          color: "rgba(191,242,5,0.55)", margin: "0 0 8px",
+        }}>
+          Média da equipe
+        </p>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 28, fontWeight: 900,
+            color: "var(--color-brand)", lineHeight: 1,
+          }}>
+            {media.media.toFixed(1)}
+          </span>
+          <span style={{
+            fontFamily: "var(--font-mono)", fontSize: 11,
+            color: "rgba(255,255,255,0.35)",
+          }}>
+            ({media.avaliados} {media.avaliados === 1 ? "avaliado" : "avaliados"})
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  function TeamPanel({ teamId, team, media }: { teamId: string; team: any; media: { media: number; avaliados: number } | null }) {
     const allAthletes = getAthletes(teamId).sort((a, b) =>
       (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)
     );
@@ -1790,17 +1873,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               {team?.short_name ?? team?.full_name ?? "Equipe"}
             </p>
           </div>
-          {/* Contador atletas + média de notas */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            {(() => {
-              const avg = avgRating(teamId);
-              return avg ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(191,242,5,0.5)", letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Média</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 900, color: "var(--color-brand)", lineHeight: 1 }}>{avg}</span>
-                </div>
-              ) : null;
-            })()}
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
@@ -1860,6 +1933,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
             </>
           )}
         </div>
+
+        {media && <TeamMediaFooter media={media} />}
 
         {/* Seção Comissão Técnica */}
         {allStaff.length > 0 && (
@@ -1940,8 +2015,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
       </div>
 
       <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 16, alignItems: "flex-start" }}>
-        <TeamPanel teamId={match.team_a_id} team={teamA} />
-        <TeamPanel teamId={match.team_b_id} team={teamB} />
+        <TeamPanel teamId={match.team_a_id} team={teamA} media={mediaEquipeA} />
+        <TeamPanel teamId={match.team_b_id} team={teamB} media={mediaEquipeB} />
       </div>
 
       {/* Legenda */}
@@ -2909,7 +2984,7 @@ function PosJogoTab({
   match, actions, shootout, scoreA, scoreB, status, finishType,
   teamStats, activePeriod, setActivePeriod, activeShootoutTab, setActiveShootoutTab,
   showEndModal, setShowEndModal, endFinishType, setEndFinishType,
-  endAggregateWinnerId, setEndAggregateWinnerId, savingEnd, publishing, published,
+  endAggregateWinnerId, setEndAggregateWinnerId, savingEnd, publishing,
   addingAction, editingAction, setEditingAction, showActionModal, setShowActionModal,
   openActionType, setOpenActionType, motmAthleteId, setMotmAthleteId,
   halfDuration, getAthletes, getStaffMembers, staffLineups, lineups, handleChangeFouls, getFouls,
@@ -3577,27 +3652,23 @@ function PosJogoTab({
         display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 12, zIndex: 20,
       }}>
-        {published && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(191,242,5,0.45)", textTransform: "uppercase" }}>✓ Publicado</span>
-        )}
         <button type="button"
           onClick={async () => {
-            if (published) return;
-            await handlePublish();
-            setShowPublishModal(true);
+            const ok = await handlePublish();
+            if (ok) setShowPublishModal(true);
           }}
           disabled={publishing}
           style={{
             padding: "11px 32px", borderRadius: 9,
-            border: published ? "1px solid rgba(191,242,5,0.25)" : "none",
-            backgroundColor: published ? "rgba(191,242,5,0.05)" : "var(--color-brand)",
-            color: published ? "var(--color-brand)" : "var(--color-background)",
+            border: "none",
+            backgroundColor: "var(--color-brand)",
+            color: "var(--color-background)",
             fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
             letterSpacing: "0.1em", textTransform: "uppercase",
-            cursor: publishing || published ? "default" : "pointer",
+            cursor: publishing ? "wait" : "pointer",
             opacity: publishing ? 0.5 : 1, transition: "all 0.15s",
           }}>
-          {publishing ? "Publicando…" : published ? "✓ Publicado" : "Publicar resultado"}
+          {publishing ? "Publicando…" : "Publicar resultado"}
         </button>
       </div>
     </div>
