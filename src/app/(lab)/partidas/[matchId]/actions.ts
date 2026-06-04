@@ -216,7 +216,7 @@ export async function atualizarCampoPartida(
 
 export async function salvarFormacoes(
   matchId: string,
-  lineups: { athlete_id: string; is_present: boolean; is_captain: boolean; played_as_goalkeeper: boolean }[],
+  lineups: { athlete_id: string; is_present: boolean; is_captain: boolean; played_as_goalkeeper: boolean; edition_team_id?: string }[],
   staffLineups: { staff_member_id: string; is_present: boolean }[],
   ratings: Record<string, number | null>,
 ): Promise<{ success: true } | { error: string }> {
@@ -271,7 +271,7 @@ export async function salvarFormacoes(
   // ── Salvar match_lineups ──
   const records = lineups
     .map(l => {
-      const editionTeamId = athleteToEditionTeam[l.athlete_id];
+      const editionTeamId = l.edition_team_id ?? athleteToEditionTeam[l.athlete_id];
       if (!editionTeamId) return null;
       return {
         match_id: matchId,

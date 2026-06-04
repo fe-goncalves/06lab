@@ -32,6 +32,7 @@ const ATHLETE_CATEGORIES: {
   { key: "assistencias",         label: "Mais Assistências",        suffix: "assist.", icon: "🎯" },
   { key: "partidas",             label: "Mais Partidas Jogadas",    suffix: "jogos",   icon: "📋" },
   { key: "cartoes_amarelos",     label: "Mais Cartões Amarelos",    suffix: "amarelos",icon: "🟨" },
+  { key: "mais_finais",          label: "Mais Finais",              suffix: "finais",  icon: "🏟️" },
   { key: "motm",                 label: "Mais Prêmios MOTM",        suffix: "prêmios", icon: "⭐" },
   { key: "tots",                 label: "Mais Prêmios TOTS",        suffix: "prêmios", icon: "🏅" },
   { key: "totw",                 label: "Mais Prêmios TOTW",        suffix: "prêmios", icon: "📅" },

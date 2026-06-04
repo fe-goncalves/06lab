@@ -52,6 +52,7 @@ type LineupEntry = {
   is_present: boolean;
   is_captain: boolean;
   played_as_goalkeeper: boolean;
+  edition_team_id?: string;
 };
 
 type MatchReferee = {
@@ -368,6 +369,7 @@ export default function PartidaClient({
         is_present: l.is_present ?? false,
         is_captain: l.is_captain ?? false,
         played_as_goalkeeper: l.played_as_goalkeeper ?? false,
+        edition_team_id: l.edition_team_id,
       };
     });
     return map;
@@ -1499,13 +1501,50 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
 
   const athleteEditionTeamId = useMemo(() => {
     const map: Record<string, string> = {};
+    Object.entries(lineups).forEach(([athleteId, entry]) => {
+      if (entry.edition_team_id) map[athleteId] = entry.edition_team_id;
+    });
     editionTeamsWithAthletes.forEach(et => {
       et.athletes.forEach(a => {
-        map[a.id] = et.id;
+        if (!map[a.id]) map[a.id] = et.id;
       });
     });
     return map;
+  }, [lineups, editionTeamsWithAthletes]);
+
+  const athletesById = useMemo(() => {
+    const map = new Map<string, Athlete>();
+    editionTeamsWithAthletes.forEach(et => {
+      et.athletes.forEach(a => map.set(a.id, a));
+    });
+    return map;
   }, [editionTeamsWithAthletes]);
+
+  function getAthletesForMatchSide(teamId: string): Athlete[] {
+    const editionTeamId = editionTeamsWithAthletes.find(et => et.team_id === teamId)?.id;
+    if (!editionTeamId) return [];
+
+    const seen = new Set<string>();
+    const result: Athlete[] = [];
+
+    for (const athlete of editionTeamsWithAthletes.find(et => et.id === editionTeamId)?.athletes ?? []) {
+      const lineupEditionTeamId = lineups[athlete.id]?.edition_team_id;
+      if (lineupEditionTeamId && lineupEditionTeamId !== editionTeamId) continue;
+      seen.add(athlete.id);
+      result.push(athlete);
+    }
+
+    for (const [athleteId, entry] of Object.entries(lineups)) {
+      if (entry.edition_team_id !== editionTeamId || seen.has(athleteId)) continue;
+      const athlete = athletesById.get(athleteId);
+      if (athlete) {
+        seen.add(athleteId);
+        result.push(athlete);
+      }
+    }
+
+    return result;
+  }
 
   const ratingsRows = useMemo((): RatingComEquipe[] => {
     const rows: RatingComEquipe[] = [];
@@ -1574,7 +1613,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
   }
 
   function TeamPanel({ teamId, team, media }: { teamId: string; team: any; media: { media: number; avaliados: number } | null }) {
-    const allAthletes = getAthletes(teamId).sort((a, b) =>
+    const panelEditionTeamId = editionTeamsWithAthletes.find(et => et.team_id === teamId)?.id ?? "";
+    const allAthletes = getAthletesForMatchSide(teamId).sort((a, b) =>
       (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)
     );
 
@@ -1769,7 +1809,25 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
 
             {/* Toggle presença */}
             <button type="button"
-              onClick={() => toggleLineup(athlete.id, "is_present")}
+              onClick={() => {
+                setLineups(prev => {
+                  const current = prev[athlete.id] ?? {
+                    athlete_id: athlete.id,
+                    is_present: false,
+                    is_captain: false,
+                    played_as_goalkeeper: false,
+                  };
+                  const nextPresent = !current.is_present;
+                  return {
+                    ...prev,
+                    [athlete.id]: {
+                      ...current,
+                      is_present: nextPresent,
+                      ...(nextPresent && panelEditionTeamId ? { edition_team_id: panelEditionTeamId } : {}),
+                    },
+                  };
+                });
+              }}
               title={isPresent ? "Marcar ausência" : "Marcar presença"}
               style={{
                 width: 28, height: 28, borderRadius: 6, border: "1px solid",
