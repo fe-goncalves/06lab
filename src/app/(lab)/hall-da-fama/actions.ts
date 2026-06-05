@@ -594,11 +594,11 @@ export async function buscarHallDaFama(
     let tcQuery = supabase
       .from("team_career_stats")
       .select(`
-        team_id, total_titles, total_clean_sheets, total_runner_up, total_third_place,
-        total_totw_appearances,
+        team_id, total_clean_sheets, total_totw_appearances,
         teams!inner(full_name, logo_url, gender, organization_id)
       `)
-      .eq("teams.organization_id", orgId);
+      .eq("teams.organization_id", orgId)
+      .eq("teams.is_virtual", false);
     if (genderDb) tcQuery = tcQuery.eq("teams.gender", genderDb);
     if (filtros.teamId) tcQuery = tcQuery.eq("team_id", filtros.teamId);
 
@@ -613,15 +613,8 @@ export async function buscarHallDaFama(
     const sortTc = (field: string) =>
       [...tcRows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toTeamCareerEntry(r, r[field]));
 
-    titulos            = sortTc("total_titles");
     mais_cleansheets   = sortTc("total_clean_sheets");
-    runner_up          = sortTc("total_runner_up");
     totw_appearances   = sortTc("total_totw_appearances");
-    podios = [...tcRows]
-      .map((r) => ({ r, value: (r.total_titles ?? 0) + (r.total_runner_up ?? 0) + (r.total_third_place ?? 0) }))
-      .filter(({ value }) => value > 0)
-      .sort((a, b) => b.value - a.value)
-      .map(({ r, value }) => toTeamCareerEntry(r, value));
   }
 
   if (editionIdsEquipes.length > 0) {
@@ -642,57 +635,61 @@ export async function buscarHallDaFama(
     }
 
     const teamIds = Array.from(teamAgg.keys());
-    let teamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", teamIds).eq("organization_id", orgId);
+    let teamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", teamIds).eq("organization_id", orgId).eq("is_virtual", false);
     if (genderDb) teamsQuery = teamsQuery.eq("gender", genderDb);
     const { data: teamsData } = await teamsQuery;
     const teamsMap = new Map((teamsData ?? []).map((t: any) => [t.id, t]));
 
-    if (!usarCareerStats) {
-      const { data: awardsData } = await supabase
-        .from("edition_awards")
-        .select("award_type, winning_team_id")
-        .in("award_type", ["champion", "runner_up", "third_place"])
-        .in("edition_id", editionIdsEquipes)
-        .not("winning_team_id", "is", null)
-        .is("athlete_id", null)
-        .is("staff_member_id", null);
+    const { data: awardsData } = await supabase
+      .from("edition_awards")
+      .select("award_type, winning_team_id, athlete_id, staff_member_id")
+      .in("award_type", ["champion", "runner_up", "third_place"])
+      .in("edition_id", editionIdsEquipes)
+      .not("winning_team_id", "is", null);
 
-      let awardRows = (awardsData ?? []) as any[];
-      if (genderDb && awardRows.length > 0) {
-        const awardTeamIds = [...new Set(awardRows.map((a) => a.winning_team_id).filter(Boolean))];
-        const { data: genderTeams } = await supabase.from("teams").select("id").in("id", awardTeamIds).eq("gender", genderDb);
-        const validTeamIds = new Set((genderTeams ?? []).map((t: any) => t.id));
-        awardRows = awardRows.filter((a) => validTeamIds.has(a.winning_team_id));
-      }
-
-      const tituloCount = new Map<string, number>();
-      const runnerUpCount = new Map<string, number>();
-      const podioCount = new Map<string, number>();
-      for (const a of awardRows) {
-        if (!a.winning_team_id) continue;
-        if (a.award_type === "champion") {
-          tituloCount.set(a.winning_team_id, (tituloCount.get(a.winning_team_id) ?? 0) + 1);
-          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
-        }
-        if (a.award_type === "runner_up") {
-          runnerUpCount.set(a.winning_team_id, (runnerUpCount.get(a.winning_team_id) ?? 0) + 1);
-          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
-        }
-        if (a.award_type === "third_place") {
-          podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
-        }
-      }
-
-      const toAwardTeamEntry = (entries: [string, number][]): TeamEntry[] =>
-        entries.sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, count]) => {
-          const t = teamsMap.get(id);
-          return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
-        });
-
-      titulos   = toAwardTeamEntry([...tituloCount.entries()]);
-      runner_up = toAwardTeamEntry([...runnerUpCount.entries()]);
-      podios    = toAwardTeamEntry([...podioCount.entries()]);
+    let awardRows = (awardsData ?? []).filter(
+      (a) => a.athlete_id === null && a.staff_member_id === null,
+    ) as any[];
+    if (genderDb && awardRows.length > 0) {
+      const awardTeamIds = [...new Set(awardRows.map((a) => a.winning_team_id).filter(Boolean))];
+        const { data: genderTeams } = await supabase.from("teams").select("id").in("id", awardTeamIds).eq("gender", genderDb).eq("is_virtual", false);
+      const validTeamIds = new Set((genderTeams ?? []).map((t: any) => t.id));
+      awardRows = awardRows.filter((a) => validTeamIds.has(a.winning_team_id));
     }
+
+    const tituloCount = new Map<string, number>();
+    const runnerUpCount = new Map<string, number>();
+    const podioCount = new Map<string, number>();
+    for (const a of awardRows) {
+      if (!a.winning_team_id) continue;
+      if (a.award_type === "champion") {
+        tituloCount.set(a.winning_team_id, (tituloCount.get(a.winning_team_id) ?? 0) + 1);
+        podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+      }
+      if (a.award_type === "runner_up") {
+        runnerUpCount.set(a.winning_team_id, (runnerUpCount.get(a.winning_team_id) ?? 0) + 1);
+        podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+      }
+      if (a.award_type === "third_place") {
+        podioCount.set(a.winning_team_id, (podioCount.get(a.winning_team_id) ?? 0) + 1);
+      }
+    }
+
+    const awardTeamIdsForLookup = [...new Set(awardRows.map((a) => a.winning_team_id).filter(Boolean))];
+    const { data: awardTeamsData } = awardTeamIdsForLookup.length > 0
+      ? await supabase.from("teams").select("id, full_name, logo_url").in("id", awardTeamIdsForLookup).eq("organization_id", orgId).eq("is_virtual", false)
+      : { data: [] };
+    const awardTeamsMap = new Map((awardTeamsData ?? []).map((t: any) => [t.id, t]));
+
+    const toAwardTeamEntry = (entries: [string, number][]): TeamEntry[] =>
+      entries.sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, count]) => {
+        const t = awardTeamsMap.get(id);
+        return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
+      });
+
+    titulos   = toAwardTeamEntry([...tituloCount.entries()]);
+    runner_up = toAwardTeamEntry([...runnerUpCount.entries()]);
+    podios    = toAwardTeamEntry([...podioCount.entries()]);
 
     const aggArr = Array.from(teamAgg.entries())
       .filter(([id]) => teamsMap.has(id))
@@ -742,7 +739,7 @@ export async function buscarHallDaFama(
 
     const [teamsStreakRes, editionsStreakRes] = await Promise.all([
       streakTeamIds.length > 0
-        ? supabase.from("teams").select("id, full_name, logo_url").in("id", streakTeamIds)
+        ? supabase.from("teams").select("id, full_name, logo_url").in("id", streakTeamIds).eq("is_virtual", false)
         : Promise.resolve({ data: [] }),
       streakEditionIds.length > 0
         ? supabase.from("competition_editions").select("id, competitions(short_name, full_name), seasons(name)").in("id", streakEditionIds)
@@ -825,7 +822,7 @@ export async function buscarHallDaFama(
 
       const [goleadaTeamsRes, goleadaEditionsRes] = await Promise.all([
         goleadaTeamIds.length > 0
-          ? supabase.from("teams").select("id, full_name, logo_url").in("id", goleadaTeamIds)
+          ? supabase.from("teams").select("id, full_name, logo_url").in("id", goleadaTeamIds).eq("is_virtual", false)
           : Promise.resolve({ data: [] }),
         goleadaEditionIds.length > 0
           ? supabase.from("competition_editions").select("id, competitions(short_name, full_name), seasons(name)").in("id", goleadaEditionIds)
@@ -897,7 +894,7 @@ export async function buscarHallDaFama(
 
       if (sortedCs.length > 0) {
         const csTeamIds = sortedCs.map(([id]) => id);
-        let csTeamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", csTeamIds);
+        let csTeamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", csTeamIds).eq("is_virtual", false);
         if (genderDb) csTeamsQuery = csTeamsQuery.eq("gender", genderDb);
         const { data: csTeamsData } = await csTeamsQuery;
         const csTeamsMap = new Map((csTeamsData ?? []).map((t: any) => [t.id, t]));
@@ -1032,7 +1029,8 @@ export async function recalcularEstatisticas(): Promise<{ success: true } | { er
   const { data: teams } = await supabase
     .from("teams")
     .select("id")
-    .eq("organization_id", orgId);
+    .eq("organization_id", orgId)
+    .eq("is_virtual", false);
 
   for (const team of teams ?? []) {
     const { error } = await supabase.rpc("recalculate_team_career_stats", {
@@ -1099,7 +1097,7 @@ export async function buscarOpcoesFiltro(): Promise<FiltroOpcoes | { error: stri
   const [{ data: compsData }, { data: seasonsData }, { data: teamsData }] = await Promise.all([
     supabase.from("competitions").select("id, full_name, short_name").eq("organization_id", orgId).order("full_name"),
     supabase.from("seasons").select("id, name").eq("organization_id", orgId).order("name"),
-    supabase.from("teams").select("id, full_name, logo_url").eq("organization_id", orgId).order("full_name"),
+    supabase.from("teams").select("id, full_name, logo_url").eq("organization_id", orgId).eq("is_virtual", false).order("full_name"),
   ]);
   return {
     competitions: (compsData ?? []) as FiltroOpcoes["competitions"],
