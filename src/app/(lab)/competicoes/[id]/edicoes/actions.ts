@@ -106,6 +106,20 @@ export async function editarEdicao(
   return { success: true };
 }
 
+export async function atualizarVisibilidadeHome(
+  editionId: string,
+  show: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("competition_editions")
+    .update({ show_in_home: show })
+    .eq("id", editionId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function criarJanelaInscricao(
   edicaoId: string,
   formData: FormData,

@@ -791,7 +791,7 @@ export default function FaseClient({
         {activeTab === "rodadas" && (
           <div className="max-w-2xl space-y-4">
             <div className="flex justify-end">
-              <button type="button" onClick={() => setShowRoundForm(true)}
+              <button type="button" onClick={() => { setRoundOrder(String(rounds.length + 1)); setShowRoundForm(true); }}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
                 style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
                 <Plus size={14} /> {hasMatchups ? "Novo estágio" : "Nova rodada"}
@@ -819,12 +819,10 @@ export default function FaseClient({
                     </label>
                   )}
                 </div>
-                {hasMatchups && (
-                  <label className="flex flex-col gap-1">
-                    <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
-                    <input type="number" value={roundOrder} onChange={e => setRoundOrder(e.target.value)} className={inputClass} style={inputStyle} />
-                  </label>
-                )}
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Ordem" : "Ordem de exibição"}</span>
+                  <input type="number" min={1} value={roundOrder} onChange={e => setRoundOrder(e.target.value)} placeholder="Ordem de exibição" className={inputClass} style={inputStyle} />
+                </label>
                 {hasMatchups && (
                   <div className="flex items-center gap-6">
                     <label className="flex items-center gap-2 cursor-pointer">
@@ -881,12 +879,10 @@ export default function FaseClient({
                             </label>
                           )}
                         </div>
-                        {hasMatchups && (
-                          <label className="flex flex-col gap-1">
-                            <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Ordem</span>
-                            <input type="number" value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)} className={inputClass} style={inputStyle} />
-                          </label>
-                        )}
+                        <label className="flex flex-col gap-1">
+                          <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Ordem" : "Ordem de exibição"}</span>
+                          <input type="number" min={1} value={editRoundOrder} onChange={e => setEditRoundOrder(e.target.value)} className={inputClass} style={inputStyle} />
+                        </label>
                         {hasMatchups && (
                           <div className="flex items-center gap-6">
                             <label className="flex items-center gap-2 cursor-pointer">

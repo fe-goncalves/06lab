@@ -20,6 +20,7 @@ type Competition = {
   logo_url: string | null; primary_color: string | null; pinned_in_sidebar: boolean;
   category_id: string | null; division_above_ids: string | null;
   division_below_ids: string | null; division_same_ids: string | null;
+  home_priority: number | null;
 };
 
 type OtherCompetition = { id: string; full_name: string; short_name: string | null };
@@ -272,6 +273,7 @@ export default function ConfiguracoesCompeticaoClient({
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [previewLogo, setPreviewLogo] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState(competition.category_id ?? "");
+  const [homePriority, setHomePriority] = useState(competition.home_priority ?? 0);
   const [saving, setSaving] = useState(false);
 
   // Divisões
@@ -328,6 +330,7 @@ export default function ConfiguracoesCompeticaoClient({
     fd.append("division_above_ids", idsToString(divAbove));
     fd.append("division_below_ids", idsToString(divBelow));
     fd.append("division_same_ids", idsToString(divSame));
+    fd.append("home_priority", String(homePriority));
     if (pendingLogo) fd.append("logo", pendingLogo);
     const result = await editarCompeticao(competition.id, fd);
     setSaving(false);
@@ -535,6 +538,18 @@ export default function ConfiguracoesCompeticaoClient({
                   </div>
                   <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Fixar na sidebar</span>
                 </div>
+                <label className="flex flex-col gap-1">
+                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Prioridade na home (maior = primeiro)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={homePriority}
+                    onChange={e => setHomePriority(Number(e.target.value))}
+                    placeholder="0"
+                    className={inputClass}
+                    style={inputStyle}
+                  />
+                </label>
               </div>
             </div>
 

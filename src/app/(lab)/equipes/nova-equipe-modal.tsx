@@ -1,16 +1,15 @@
 "use client";
 
-import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import {
-  type ChangeEvent,
   type FormEvent,
-  useCallback,
   useEffect,
   useState,
 } from "react";
 import { criarEquipe, editarEquipe } from "./actions";
-import { Camera, X } from "lucide-react";
+import { X } from "lucide-react";
+import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
+import { parseSupabaseError } from "@/lib/error-messages";
 
 type Team = {
   id: string;
@@ -22,6 +21,7 @@ type Team = {
   primary_color: string | null;
   secondary_color: string | null;
   founded_year: number | null;
+  is_hidden?: boolean | null;
 };
 
 type NovaEquipeModalProps = {
@@ -46,6 +46,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [hexColors, setHexColors] = useState<string[]>([]);
   const [selectedColors, setSelectedColors] = useState<(string | null)[]>([null, null, null]);
+  const [isHidden, setIsHidden] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +65,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
         editingTeam.secondary_color ?? null,
         null,
       ]);
+      setIsHidden(!!editingTeam.is_hidden);
       setError(null);
       setLoading(false);
     } else {
@@ -73,6 +75,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
       setPreviewUrl(null);
       setHexColors([]);
       setSelectedColors([null, null, null]);
+      setIsHidden(false);
       setError(null);
       setLoading(false);
     }
@@ -136,16 +139,21 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
     return () => { img.onload = null; img.onerror = null; };
   }, [previewUrl, file]);
 
-  const handleFileChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
-    const next = e.target.files?.[0] ?? null;
-    setPreviewUrl((old) => {
-      // Só revoga se for uma URL de objeto local (não uma URL do Supabase)
-      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
-      return next ? URL.createObjectURL(next) : null;
-    });
+  function handleLogoChange(next: File | null) {
     setFile(next);
-    if (next?.type === "image/svg+xml") { setHexColors([]); setSelectedColors([null, null, null]); }
-  }, []);
+    setPreviewUrl((old) => {
+      if (old && old.startsWith("blob:")) URL.revokeObjectURL(old);
+      if (next) return URL.createObjectURL(next);
+      return editingTeam?.logo_url ?? null;
+    });
+    if (!next) {
+      setHexColors([]);
+      if (!editingTeam) setSelectedColors([null, null, null]);
+    } else if (next.type === "image/svg+xml") {
+      setHexColors([]);
+      setSelectedColors([null, null, null]);
+    }
+  }
 
   function toggleColorForSlot(hex: string, slotIndex: number) {
     setSelectedColors(prev => {
@@ -165,16 +173,17 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
       if (selectedColors[0]) formData.append("primary_color", selectedColors[0]);
       if (selectedColors[1]) formData.append("secondary_color", selectedColors[1]);
       if (selectedColors[2]) formData.append("tertiary_color", selectedColors[2]);
+      formData.append("is_hidden", isHidden ? "true" : "false");
 
       if (isEditing) {
         const result = await editarEquipe(editingTeam.id, formData);
-        if ("error" in result) { setError(result.error); return; }
+        if ("error" in result) { setError(parseSupabaseError(result.error)); return; }
         router.refresh();
         onClose();
       }
        else {
         const result = await criarEquipe(formData);
-        if (result.error) { setError(result.error); return; }
+        if (result.error) { setError(parseSupabaseError(result.error)); return; }
         if (!result.id) { setError("Não foi possível obter o ID da equipe criada."); return; }
         router.push(`/equipes/${result.id}`);
         onClose();
@@ -230,22 +239,13 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
 
               {/* Preview logo + upload */}
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                <label htmlFor="nova-equipe-logo" style={{ cursor: "pointer" }}>
-                  <div style={{ width: 88, height: 88, borderRadius: 18, border: previewUrl ? "2px solid rgba(191,242,5,0.3)" : "2px dashed rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", transition: "border-color 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = previewUrl ? "rgba(191,242,5,0.3)" : "rgba(255,255,255,0.1)"}>
-                    {previewUrl
-                      ? <img src={previewUrl} alt="" style={{ width: 76, height: 76, objectFit: "contain" }} />
-                      : <div style={{ textAlign: "center" as const }}>
-                          <Camera size={22} color="rgba(255,255,255,0.15)" />
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(255,255,255,0.2)", marginTop: 4, letterSpacing: "0.08em" }}>LOGO</p>
-                        </div>
-                    }
-                  </div>
-                </label>
-                <input id="nova-equipe-logo" type="file" accept="image/png,image/webp,image/svg+xml"
-                  onChange={handleFileChange} style={{ display: "none" }} />
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)" }}>PNG, WebP ou SVG</p>
+                <ImageCropUpload
+                  value={file}
+                  onChange={handleLogoChange}
+                  existingUrl={editingTeam?.logo_url ?? null}
+                  label="Logo"
+                  placeholder="Enviar logo"
+                />
               </div>
 
               {/* Cores — mostra paleta se novo arquivo foi carregado, ou mostra cores existentes em modo edição */}
@@ -338,6 +338,47 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Visibilidade pública */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 9, border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+                <div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-primary)", display: "block" }}>
+                    Ocultar no site público
+                  </span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginTop: 2 }}>
+                    A equipe não aparecerá no site público
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={isHidden}
+                  onClick={() => setIsHidden((v) => !v)}
+                  style={{
+                    width: 44,
+                    height: 24,
+                    borderRadius: 999,
+                    border: "none",
+                    padding: 2,
+                    cursor: "pointer",
+                    backgroundColor: isHidden ? "#BFF205" : "rgba(255,255,255,0.12)",
+                    transition: "background-color 0.15s",
+                    flexShrink: 0,
+                  }}
+                >
+                  <span
+                    style={{
+                      display: "block",
+                      width: 20,
+                      height: 20,
+                      borderRadius: "50%",
+                      backgroundColor: isHidden ? "#0a0a0a" : "#fff",
+                      transform: isHidden ? "translateX(20px)" : "translateX(0)",
+                      transition: "transform 0.15s",
+                    }}
+                  />
+                </button>
               </div>
 
               {/* Erro */}

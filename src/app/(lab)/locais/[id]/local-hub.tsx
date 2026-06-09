@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { editarLocal } from "../actions";
-import { ImagePlus } from "lucide-react";
+import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
 
 type Venue = {
   id: string;
@@ -29,24 +29,24 @@ function SectionHeader({ label }: { label: string }) {
 
 export default function LocalHub({ venue }: { venue: Venue }) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [fullName, setFullName] = useState(venue.full_name);
   const [shortName, setShortName] = useState(venue.short_name ?? "");
   const [address, setAddress] = useState(venue.address ?? "");
   const [displayOrder, setDisplayOrder] = useState(String(venue.display_order ?? 0));
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [headerLogoUrl, setHeaderLogoUrl] = useState<string | null>(venue.logo_url);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
-
-  function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setPendingLogo(f);
-    setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(f); });
-  }
+  useEffect(() => {
+    if (!pendingLogo) {
+      setHeaderLogoUrl(venue.logo_url);
+      return;
+    }
+    const url = URL.createObjectURL(pendingLogo);
+    setHeaderLogoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingLogo, venue.logo_url]);
 
   async function handleSave() {
     setSaving(true);
@@ -61,12 +61,11 @@ export default function LocalHub({ venue }: { venue: Venue }) {
       if ("error" in result) { toast("error", result.error); return; }
       toast("success", "Alterações salvas.");
       setPendingLogo(null);
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
       router.refresh();
     } finally { setSaving(false); }
   }
 
-  const displayLogo = previewUrl ?? venue.logo_url;
+  const displayLogo = headerLogoUrl;
 
   const fieldLabel: React.CSSProperties = {
     fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
@@ -148,38 +147,14 @@ export default function LocalHub({ venue }: { venue: Venue }) {
           <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", padding: 20 }}>
             <SectionHeader label="Logo" />
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-              <div
-                onClick={() => fileRef.current?.click()}
-                style={{
-                  width: 120, height: 120, borderRadius: 16,
-                  border: "1px dashed rgba(191,242,5,0.3)",
-                  backgroundColor: "rgba(255,255,255,0.03)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", overflow: "hidden",
-                  transition: "border-color 0.12s",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "#BFF205")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)")}
-              >
-                {displayLogo ? (
-                  <img src={displayLogo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                ) : (
-                  <ImagePlus size={24} strokeWidth={1.2} color="rgba(255,255,255,0.15)" />
-                )}
-              </div>
-              <input ref={fileRef} type="file" accept="image/png,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoChange} />
-              <div style={{ textAlign: "center" }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0 }}>
-                  {pendingLogo ? pendingLogo.name : "PNG, WebP ou SVG"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#BFF205", background: "none", border: "none", padding: 0, cursor: "pointer", marginTop: 4 }}
-                >
-                  {displayLogo ? "Trocar logo →" : "Escolher arquivo →"}
-                </button>
-              </div>
+              <ImageCropUpload
+                value={pendingLogo}
+                onChange={setPendingLogo}
+                existingUrl={venue.logo_url}
+                label=""
+                placeholder="Enviar logo"
+                accept="image/png,image/webp,image/jpeg"
+              />
             </div>
           </div>
 

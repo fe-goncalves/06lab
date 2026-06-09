@@ -2,18 +2,18 @@
 
 import { criarLocal } from "./actions";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useRef, useState } from "react";
-import { X, ImagePlus } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
+import { parseSupabaseError } from "@/lib/error-messages";
 
 export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [shortName, setShortName] = useState("");
   const [address, setAddress] = useState("");
   const [displayOrder, setDisplayOrder] = useState("0");
   const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -21,7 +21,6 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
     if (isOpen) return;
     setFullName(""); setShortName(""); setAddress(""); setDisplayOrder("0");
     setFile(null); setError(null); setLoading(false);
-    setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
   }, [isOpen]);
 
   useEffect(() => {
@@ -30,12 +29,6 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return f ? URL.createObjectURL(f) : null; });
-    setFile(f);
-  }
 
   async function handleSubmit(ev: FormEvent) {
     ev.preventDefault();
@@ -49,7 +42,7 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
       fd.append("display_order", displayOrder);
       if (file) fd.append("logo", file);
       const result = await criarLocal(fd);
-      if ("error" in result) { setError(result.error); return; }
+      if ("error" in result) { setError(parseSupabaseError(result.error)); return; }
       router.push(`/locais/${result.id}`);
       onClose();
     } finally { setLoading(false); }
@@ -131,47 +124,13 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
         <div style={{ overflowY: "auto", flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Logo */}
-          <div>
-            <span style={fieldLabel}>Logo</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-              <div
-                onClick={() => fileRef.current?.click()}
-                style={{
-                  width: 56, height: 56, borderRadius: 12,
-                  border: "1px dashed rgba(255,255,255,0.15)",
-                  backgroundColor: "rgba(255,255,255,0.03)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", overflow: "hidden", flexShrink: 0,
-                  transition: "border-color 0.12s",
-                }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "#BFF205")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)")}
-              >
-                {previewUrl ? (
-                  <img src={previewUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                ) : (
-                  <ImagePlus size={18} strokeWidth={1.5} color="rgba(255,255,255,0.2)" />
-                )}
-              </div>
-              <div>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0 }}>
-                  {file ? file.name : "Nenhuma logo selecionada"}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  style={{
-                    fontFamily: "var(--font-mono)", fontSize: 10, color: "#BFF205",
-                    background: "none", border: "none", padding: 0,
-                    cursor: "pointer", marginTop: 3,
-                  }}
-                >
-                  Escolher arquivo →
-                </button>
-              </div>
-            </div>
-            <input ref={fileRef} type="file" accept="image/png,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleFileChange} />
-          </div>
+          <ImageCropUpload
+            value={file}
+            onChange={setFile}
+            label="Logo"
+            placeholder="Enviar logo"
+            accept="image/png,image/webp,image/jpeg"
+          />
 
           {/* Nome completo */}
           <div>

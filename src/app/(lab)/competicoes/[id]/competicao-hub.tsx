@@ -7,18 +7,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import Link from "next/link";
 import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw } from "lucide-react";
-import { criarEdicao, editarEdicao, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
+import { criarEdicao, editarEdicao, atualizarVisibilidadeHome, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, buscarTOTS, criarOuAtualizarTOTS, deletarSquad, recalcularEstatisticasEdicao, salvarAjustesPontosClassificacao } from "./edicoes/actions";
 import { Star, Search, AlertTriangle } from "lucide-react";
 import { criarSuspensao, editarSuspensao, desativarSuspensao } from "@/app/(lab)/suspensoes/actions";
 
 type Competition = any;
-type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
+type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number; custom_name: string | null };
 type Season = { id: string; name: string; year_value: number };
-type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null };
+type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; is_virtual?: boolean };
 type Match = {
   id: string; match_date: string | null; match_time: string | null; status: string;
   score_a: number; score_b: number; matchup_id: string | null;
@@ -53,8 +54,147 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function editionLabel(edition: Edition): string {
+  return edition.custom_name ?? edition.season_name ?? "Edição sem nome";
+}
+
 function getMarkerForRank(markers: TableMarker[], rank: number): TableMarker | undefined {
   return markers.find(m => rank >= m.position_from && rank <= m.position_to);
+}
+
+function TableMarkerRow({
+  marker,
+  onUpdate,
+  onRemove,
+}: {
+  marker: TableMarker;
+  onUpdate: (updated: TableMarker) => void;
+  onRemove: () => void;
+}) {
+  const [localDescription, setLocalDescription] = useState(marker.description);
+  const [localColorHex, setLocalColorHex] = useState(marker.color_hex ?? "");
+  const [localFrom, setLocalFrom] = useState(String(marker.position_from));
+  const [localTo, setLocalTo] = useState(String(marker.position_to));
+
+  useEffect(() => {
+    setLocalDescription(marker.description);
+    setLocalColorHex(marker.color_hex ?? "");
+    setLocalFrom(String(marker.position_from));
+    setLocalTo(String(marker.position_to));
+  }, [marker.id]);
+
+  const inputStyle = { padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none" } as const;
+  const inputStyleSm = { ...inputStyle, fontSize: 10, padding: "7px 8px" } as const;
+  const inputStyleNum = { ...inputStyle, textAlign: "center" as const };
+
+  function commitField(partial: Partial<TableMarker>) {
+    onUpdate({ ...marker, ...partial });
+  }
+
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, alignItems: "center" }}>
+      <input
+        type="text"
+        placeholder="Título (ex: Classificados)"
+        value={localDescription}
+        onChange={e => setLocalDescription(e.target.value)}
+        onBlur={() => commitField({ description: localDescription })}
+        style={inputStyle}
+      />
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <input
+          type="color"
+          value={localColorHex?.startsWith("#") ? localColorHex : "#BFF205"}
+          onChange={e => {
+            setLocalColorHex(e.target.value);
+            commitField({ color_hex: e.target.value });
+          }}
+          style={{ width: 32, height: 32, padding: 0, border: "none", borderRadius: 6, cursor: "pointer", background: "none" }}
+        />
+        <input
+          type="text"
+          value={localColorHex}
+          onChange={e => setLocalColorHex(e.target.value)}
+          onBlur={() => commitField({ color_hex: localColorHex })}
+          style={{ ...inputStyleSm, flex: 1 }}
+        />
+      </div>
+      <input
+        type="number" min={1} title="Posição inicial"
+        value={localFrom}
+        onChange={e => setLocalFrom(e.target.value)}
+        onBlur={() => commitField({ position_from: Number(localFrom) || 1 })}
+        style={inputStyleNum}
+      />
+      <input
+        type="number" min={1} title="Posição final"
+        value={localTo}
+        onChange={e => setLocalTo(e.target.value)}
+        onBlur={() => commitField({ position_to: Number(localTo) || 1 })}
+        style={inputStyleNum}
+      />
+      <button
+        type="button"
+        title="Remover marcação"
+        onClick={onRemove}
+        style={{ width: 32, height: 32, borderRadius: 7, border: "1px solid rgba(255,68,68,0.3)", background: "rgba(255,68,68,0.08)", color: "var(--color-danger)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function StandingsMarkersEditor({
+  visible,
+  markers,
+  onChange,
+}: {
+  visible: boolean;
+  markers: TableMarker[];
+  onChange: React.Dispatch<React.SetStateAction<TableMarker[]>>;
+}) {
+  if (!visible) return null;
+  return (
+    <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.45)", margin: "0 0 12px" }}>
+        Marcações na tabela
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, marginBottom: 6, paddingRight: 0 }}>
+        {["Título", "Cor", "Do º", "Até º", ""].map((label, i) => (
+          <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>{label}</span>
+        ))}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {markers.map((m, idx) => (
+          <TableMarkerRow
+            key={m.id}
+            marker={m}
+            onUpdate={updated => onChange(prev => prev.map((x, i) => i === idx ? updated : x))}
+            onRemove={() => onChange(prev => prev.filter((_, i) => i !== idx))}
+          />
+        ))}
+      </div>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", margin: "10px 0 0", lineHeight: 1.5 }}>
+        Defina faixas de posição (ex.: 1º–4º classificados, 5º–8º repescagem). As cores aparecem na tabela e na legenda abaixo.
+      </p>
+      <button
+        type="button"
+        onClick={() => onChange(prev => [...prev, {
+          id: `new-${Date.now()}-${prev.length}`,
+          description: "",
+          color_hex: "#A6A6A6",
+          show_background: true,
+          position_from: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 1) : 1,
+          position_to: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 2) : 2,
+          display_order: prev.length,
+        }])}
+        style={{ marginTop: 10, padding: "6px 12px", borderRadius: 7, border: "1px dashed rgba(255,255,255,0.15)", background: "none", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+      >
+        + Adicionar marcação
+      </button>
+    </div>
+  );
 }
 
 const STATUS_LABEL: Record<string, string> = { scheduled: "AG", ongoing: "AO VIVO", finished: "FT", postponed: "AD" };
@@ -77,8 +217,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<"jogos" | "classificacao" | "estatisticas" | "competicao" | "configuracoes" | "suspensoes">(
-    (searchParams.get("aba") as any) ?? "jogos"
+  const abaParam = searchParams.get("aba");
+  const configParam = searchParams.get("config");
+
+  const [activeTab, setActiveTab] = useState<"jogos" | "classificacao" | "estatisticas" | "competicao" | "configuracoes">(
+    abaParam === "suspensoes" ? "configuracoes" : ((abaParam as any) ?? "jogos")
   );
 
   // Suspensões
@@ -109,8 +252,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [activeCompTab, setActiveCompTab] = useState<"equipes" | "fases">(
     (searchParams.get("comp") as any) ?? "equipes"
   );
-  const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking">(
-    (searchParams.get("config") as any) ?? "gerais"
+  const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking" | "suspensoes" | "detalhes">(
+    abaParam === "suspensoes" ? "suspensoes" : ((configParam as any) ?? "gerais")
   );
   const [selectedEditionId, setSelectedEditionId] = useState<string>(searchParams.get("edicao") ?? editions[0]?.id ?? "");
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
@@ -751,87 +894,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       );
     }
 
-    function StandingsMarkersEditor() {
-      if (standingsMode !== "edit_markers") return null;
-      return (
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.45)", margin: "0 0 12px" }}>
-            Marcações na tabela
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, marginBottom: 6, paddingRight: 0 }}>
-            {["Título", "Cor", "Do º", "Até º", ""].map((label, i) => (
-              <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>{label}</span>
-            ))}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {editingMarkers.map((m, idx) => (
-              <div key={m.id} style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, alignItems: "center" }}>
-                <input
-                  type="text"
-                  placeholder="Título (ex: Classificados)"
-                  value={m.description}
-                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))}
-                  style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none" }}
-                />
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <input
-                    type="color"
-                    value={m.color_hex?.startsWith("#") ? m.color_hex : "#BFF205"}
-                    onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, color_hex: e.target.value } : x))}
-                    style={{ width: 32, height: 32, padding: 0, border: "none", borderRadius: 6, cursor: "pointer", background: "none" }}
-                  />
-                  <input
-                    type="text"
-                    value={m.color_hex ?? ""}
-                    onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, color_hex: e.target.value } : x))}
-                    style={{ flex: 1, padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-primary)", outline: "none" }}
-                  />
-                </div>
-                <input
-                  type="number" min={1} title="Posição inicial"
-                  value={m.position_from}
-                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, position_from: Number(e.target.value) } : x))}
-                  style={{ padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", textAlign: "center" as const }}
-                />
-                <input
-                  type="number" min={1} title="Posição final"
-                  value={m.position_to}
-                  onChange={e => setEditingMarkers(prev => prev.map((x, i) => i === idx ? { ...x, position_to: Number(e.target.value) } : x))}
-                  style={{ padding: "7px 8px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", textAlign: "center" as const }}
-                />
-                <button
-                  type="button"
-                  title="Remover marcação"
-                  onClick={() => setEditingMarkers(prev => prev.filter((_, i) => i !== idx))}
-                  style={{ width: 32, height: 32, borderRadius: 7, border: "1px solid rgba(255,68,68,0.3)", background: "rgba(255,68,68,0.08)", color: "var(--color-danger)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", margin: "10px 0 0", lineHeight: 1.5 }}>
-            Defina faixas de posição (ex.: 1º–4º classificados, 5º–8º repescagem). As cores aparecem na tabela e na legenda abaixo.
-          </p>
-          <button
-            type="button"
-            onClick={() => setEditingMarkers(prev => [...prev, {
-              id: `new-${Date.now()}-${prev.length}`,
-              description: "",
-              color_hex: "#A6A6A6",
-              show_background: true,
-              position_from: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 1) : 1,
-              position_to: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 2) : 2,
-              display_order: prev.length,
-            }])}
-            style={{ marginTop: 10, padding: "6px 12px", borderRadius: 7, border: "1px dashed rgba(255,255,255,0.15)", background: "none", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
-          >
-            + Adicionar marcação
-          </button>
-        </div>
-      );
-    }
-
     // ── Tabela base ────────────────────────────────────────────────────────
     function StandingsTable({ rows, highlightTop = 4, showActions = false }: {
       rows: any[]; highlightTop?: number; showActions?: boolean;
@@ -1114,7 +1176,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   </p>
                   <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                     <StandingsHeader rows={groupRows} />
-                    <StandingsMarkersEditor />
+                    <StandingsMarkersEditor visible={standingsMode === "edit_markers"} markers={editingMarkers} onChange={setEditingMarkers} />
                     {groupRows.length === 0
                       ? <p className="px-5 py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Sem dados de classificação.</p>
                       : <StandingsTable rows={groupRows} highlightTop={2} />}
@@ -1136,7 +1198,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           {standingsConfirmRecalc && <RecalcConfirmModal />}
           <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
             <StandingsHeader rows={rows} />
-            <StandingsMarkersEditor />
+            <StandingsMarkersEditor visible={standingsMode === "edit_markers"} markers={editingMarkers} onChange={setEditingMarkers} />
             {rows.length === 0
               ? <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum dado de classificação disponível.</p>
               : <StandingsTable rows={
@@ -1209,7 +1271,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", cursor: "pointer", letterSpacing: "0.06em", transition: "all 0.12s" }}
                   onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
                   onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}>
-                  {selectedEdition?.season_name ?? "Selecionar edição"}
+                  {selectedEdition ? editionLabel(selectedEdition) : "Selecionar edição"}
                   <ChevronDown size={11} />
                 </button>
 
@@ -1224,18 +1286,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "9px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: e.id === selectedEditionId ? "#BFF205" : "var(--color-text-primary)", backgroundColor: e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent", border: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
                         onMouseEnter={ev => { if (e.id !== selectedEditionId) ev.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
                         onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent"; }}>
-                        {e.season_name}
+                        {editionLabel(e)}
                         {e.id === selectedEditionId && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </button>
                     ))}
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-                      <button type="button" onClick={() => { setShowEditionDropdown(false); setShowNewEdition(true); }}
-                        style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "9px 14px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#BFF205", backgroundColor: "transparent", border: "none", cursor: "pointer", transition: "background 0.1s" }}
-                        onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"}
-                        onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                        <Plus size={12} /> Nova edição
-                      </button>
-                    </div>
                   </div>
                 )}
               </div>
@@ -1260,7 +1314,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               { key: "estatisticas", label: "ESTATÍSTICAS" },
               { key: "competicao", label: "COMPETIÇÃO" },
               { key: "configuracoes", label: "CONFIGURAÇÕES" },
-              { key: "suspensoes", label: "SUSPENSÕES" },
             ].map(tab => (
               <button key={tab.key} type="button"
                 onClick={() => { setActiveTab(tab.key as any); updateTab("aba", tab.key); }}
@@ -1541,10 +1594,12 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             <h2 className="mb-4 font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Nova edição</h2>
             <label className="flex flex-col gap-1 mb-4">
               <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Temporada</span>
-              <select value={newEditionSeasonId} onChange={e => setNewEditionSeasonId(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">Selecione…</option>
-                {seasons.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <LabSelect
+                value={newEditionSeasonId}
+                onChange={setNewEditionSeasonId}
+                placeholder="Selecione…"
+                options={seasons.map((s) => ({ value: s.id, label: s.name }))}
+              />
             </label>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setShowNewEdition(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
@@ -2089,6 +2144,8 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 { key: "premiacoes", label: "PREMIAÇÕES" },
                 { key: "inscricoes", label: "INSCRIÇÕES" },
                 { key: "ranking", label: "RANKING" },
+                { key: "suspensoes", label: "SUSPENSÕES" },
+                { key: "detalhes", label: "DETALHES" },
               ].map(sub => (
                 <button key={sub.key} type="button" onClick={() => { setActiveConfigTab(sub.key as any); updateTab("config", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
@@ -2098,7 +2155,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               ))}
             </div>
             {activeConfigTab === "gerais" && (
-              <EdicaoConfigTab selectedEditionId={selectedEditionId} selectedEditionName={selectedEdition?.season_name ?? ""} inputClass={inputClass} inputStyle={inputStyle} />
+              <EdicaoConfigTab selectedEditionId={selectedEditionId} selectedEditionName={selectedEdition ? editionLabel(selectedEdition) : ""} inputClass={inputClass} inputStyle={inputStyle} />
             )}
             {activeConfigTab === "premiacoes" && (
               <PremiacoesTab
@@ -2127,9 +2184,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 inputStyle={inputStyle}
               />
             )}
-          </div>
-        )}
-      {activeTab === "suspensoes" && (
+            {activeConfigTab === "suspensoes" && (
           <div>
             {/* Alertas de acúmulo de amarelos */}
             {!loadingAlerts && yellowAlerts.filter(a => !dismissedAlerts.has(a.athleteId)).length > 0 && (
@@ -2427,16 +2482,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       {/* Equipe */}
                       <label className="flex flex-col gap-1">
                         <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>EQUIPE *</span>
-                        <select value={suspTeamId}
-                          onChange={e => { setSuspTeamId(e.target.value); setSuspAthleteId(""); setSuspStaffId(""); }}
-                          className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
-                          <option value="">Selecione…</option>
-                          {teamsInEdition.map((et: any) => (
-                            <option key={et.team_id} value={et.team_id}>
-                              {et.teams?.full_name ?? "—"}
-                            </option>
-                          ))}
-                        </select>
+                        <LabSelect
+                          value={suspTeamId}
+                          onChange={(v) => { setSuspTeamId(v); setSuspAthleteId(""); setSuspStaffId(""); }}
+                          placeholder="Selecione…"
+                          options={teamsInEdition.map((et: any) => ({
+                            value: et.team_id,
+                            label: et.teams?.full_name ?? "—",
+                          }))}
+                        />
                       </label>
 
                       {/* Membro */}
@@ -2445,46 +2499,41 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                           <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>
                             {suspMemberType === "athlete" ? "ATLETA *" : "MEMBRO *"}
                           </span>
-                          <select
+                          <LabSelect
                             value={suspMemberType === "athlete" ? suspAthleteId : suspStaffId}
-                            onChange={e => suspMemberType === "athlete" ? setSuspAthleteId(e.target.value) : setSuspStaffId(e.target.value)}
-                            className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
-                            <option value="">Selecione…</option>
-                            {membersForTeam.length === 0
-                              ? <option disabled value="">Nenhum cadastrado</option>
-                              : suspMemberType === "athlete"
-                                ? membersForTeam.map((a: any) => (
-                                    <option key={a.athlete_id} value={a.athlete_id}>
-                                      {a.athletes?.surname ?? a.athletes?.full_name ?? "—"}
-                                    </option>
-                                  ))
-                                : membersForTeam.map((s: any) => (
-                                    <option key={s.staff_member_id} value={s.staff_member_id}>
-                                      {s.staff_members?.surname ?? s.staff_members?.full_name ?? "—"}
-                                    </option>
-                                  ))
+                            onChange={(v) => suspMemberType === "athlete" ? setSuspAthleteId(v) : setSuspStaffId(v)}
+                            placeholder="Selecione…"
+                            options={
+                              membersForTeam.length === 0
+                                ? [{ value: "", label: "Nenhum cadastrado", disabled: true }]
+                                : suspMemberType === "athlete"
+                                  ? membersForTeam.map((a: any) => ({
+                                      value: a.athlete_id,
+                                      label: a.athletes?.surname ?? a.athletes?.full_name ?? "—",
+                                    }))
+                                  : membersForTeam.map((s: any) => ({
+                                      value: s.staff_member_id,
+                                      label: s.staff_members?.surname ?? s.staff_members?.full_name ?? "—",
+                                    }))
                             }
-                          </select>
+                          />
                         </label>
                       )}
 
                       {/* Partida de origem */}
                       <label className="flex flex-col gap-1">
                         <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>PARTIDA DE ORIGEM</span>
-                        <select value={suspOriginMatchId} onChange={e => setSuspOriginMatchId(e.target.value)}
-                          className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }}>
-                          <option value="">Nenhuma / Manual</option>
-                          {matchesForEdition.map((m: any) => {
+                        <LabSelect
+                          value={suspOriginMatchId}
+                          onChange={setSuspOriginMatchId}
+                          placeholder="Nenhuma / Manual"
+                          options={matchesForEdition.map((m: any) => {
                             const teamA = m.teams_a?.abbreviation ?? m.teams_a?.full_name ?? "?";
                             const teamB = m.teams_b?.abbreviation ?? m.teams_b?.full_name ?? "?";
                             const date = m.match_date ? new Date(m.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "s/data";
-                            return (
-                              <option key={m.id} value={m.id}>
-                                {date} · {teamA} × {teamB}
-                              </option>
-                            );
+                            return { value: m.id, label: `${date} · ${teamA} × ${teamB}` };
                           })}
-                        </select>
+                        />
                       </label>
 
                       {/* Jogos + Data */}
@@ -2548,6 +2597,16 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 </div>
               );
             })()}
+          </div>
+            )}
+            {activeConfigTab === "detalhes" && selectedEdition && (
+              <DetalhesConfigTab
+                competition={competition}
+                edition={selectedEdition}
+                editionTeams={editionTeams}
+                phases={phases}
+              />
+            )}
           </div>
         )}
 
@@ -2614,6 +2673,7 @@ function AddTeamModal({
   const enrolledIds = new Set(editionTeams.map(et => et.team_id));
   const q = query.toLowerCase();
   const available = allTeams.filter(t =>
+    !t.is_virtual &&
     !enrolledIds.has(t.id) &&
     (!q || t.full_name.toLowerCase().includes(q) || (t.abbreviation ?? "").toLowerCase().includes(q))
   );
@@ -3576,10 +3636,11 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
           <div style={{ display: "flex", alignItems: "center", gap: 20, flexWrap: "wrap" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Rodada</span>
-              <select value={selectedRoundId} onChange={e => setSelectedRoundId(e.target.value)}
-                style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)", fontSize: 12, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer" }}>
-                {rounds.map((r: any) => <option key={r.id} value={r.id}>{r.custom_label ?? r.name}</option>)}
-              </select>
+              <LabSelect
+                value={selectedRoundId}
+                onChange={setSelectedRoundId}
+                options={rounds.map((r: any) => ({ value: r.id, label: r.custom_label ?? r.name }))}
+              />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>Formação</span>
@@ -5198,19 +5259,13 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
             </div>
             {/* Filters */}
             <div className="flex flex-wrap gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
-              <select value={filterTeamId} onChange={e => setFilterTeamId(e.target.value)} style={selectStyle}>
-                <option value="">Todas as equipes</option>
-                {teamOptions.map((t: any) => <option key={t.id} value={t.id}>{t.label}</option>)}
-              </select>
-              <select value={filterPhaseId} onChange={e => { setFilterPhaseId(e.target.value); setFilterRoundId(""); }} style={selectStyle}>
-                <option value="">Todas as fases</option>
-                {phaseOptions.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
-              </select>
+              <LabSelect value={filterTeamId} onChange={setFilterTeamId} placeholder="Todas as equipes"
+                options={teamOptions.map((t: any) => ({ value: t.id, label: t.label }))} />
+              <LabSelect value={filterPhaseId} onChange={(v) => { setFilterPhaseId(v); setFilterRoundId(""); }} placeholder="Todas as fases"
+                options={phaseOptions.map((p: any) => ({ value: p.id, label: p.label }))} />
               {filterPhaseId && (
-                <select value={filterRoundId} onChange={e => setFilterRoundId(e.target.value)} style={selectStyle}>
-                  <option value="">Todas as rodadas</option>
-                  {roundOptions.map((r: any) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
+                <LabSelect value={filterRoundId} onChange={setFilterRoundId} placeholder="Todas as rodadas"
+                  options={roundOptions.map((r: any) => ({ value: r.id, label: r.label }))} />
               )}
               {(filterTeamId || filterPhaseId || filterRoundId) && (
                 <button type="button" onClick={() => { setFilterTeamId(""); setFilterPhaseId(""); setFilterRoundId(""); }}
@@ -5371,6 +5426,84 @@ function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelet
   );
 }
 
+// ─── DetalhesConfigTab ───────────────────────────────────────────────────────
+
+const EDITION_STATUS_LABEL: Record<string, string> = {
+  planned: "Planejada",
+  ongoing: "Em andamento",
+  closed: "Encerrada",
+};
+
+function DetalhesConfigTab({
+  competition,
+  edition,
+  editionTeams,
+  phases,
+}: {
+  competition: Competition;
+  edition: Edition;
+  editionTeams: EditionTeam[];
+  phases: Phase[];
+}) {
+  const [startsAt, setStartsAt] = useState<string | null>(null);
+  const [endsAt, setEndsAt] = useState<string | null>(null);
+  const [loadingDates, setLoadingDates] = useState(true);
+
+  useEffect(() => {
+    if (!edition.id) return;
+    async function load() {
+      setLoadingDates(true);
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("competition_editions")
+        .select("starts_at, ends_at, seasons(starts_at, ends_at)")
+        .eq("id", edition.id)
+        .maybeSingle();
+      const row = data as { starts_at?: string | null; ends_at?: string | null; seasons?: { starts_at?: string | null; ends_at?: string | null } | null } | null;
+      setStartsAt(row?.starts_at ?? row?.seasons?.starts_at ?? null);
+      setEndsAt(row?.ends_at ?? row?.seasons?.ends_at ?? null);
+      setLoadingDates(false);
+    }
+    void load();
+  }, [edition.id]);
+
+  function fmtDate(value: string | null): string {
+    if (!value) return "—";
+    const d = value.includes("T") ? value : `${value}T00:00:00`;
+    return new Date(d).toLocaleDateString("pt-BR");
+  }
+
+  const teamCount = editionTeams.filter(et => !et.is_free_agent_pool).length;
+  const rows = [
+    { label: "Nome da edição", value: editionLabel(edition) },
+    { label: "Status", value: EDITION_STATUS_LABEL[edition.status] ?? edition.status },
+    { label: "Competição", value: competition.full_name ?? "—" },
+    { label: "Temporada", value: edition.season_name ?? "—" },
+    { label: "Início", value: loadingDates ? "…" : fmtDate(startsAt) },
+    { label: "Fim", value: loadingDates ? "…" : fmtDate(endsAt) },
+    { label: "Equipes inscritas", value: String(teamCount) },
+    { label: "Fases", value: String(phases.length) },
+  ];
+
+  return (
+    <div className="max-w-xl">
+      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+        {rows.map((row, idx) => (
+          <div key={row.label} className="flex items-center justify-between gap-4 px-5 py-3"
+            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+            <span className="font-mono text-xs uppercase tracking-widest shrink-0" style={{ color: "var(--color-text-secondary)" }}>
+              {row.label}
+            </span>
+            <span className="font-mono text-sm font-medium text-right" style={{ color: "var(--color-text-primary)" }}>
+              {row.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── EdicaoConfigTab ─────────────────────────────────────────────────────────
 
 function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, inputStyle }: {
@@ -5378,25 +5511,40 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
 }) {
   const [editionStatus, setEditionStatus] = useState("planned");
   const [isPublic, setIsPublic] = useState(false);
+  const [showInHome, setShowInHome] = useState(false);
   const [yellowThreshold, setYellowThreshold] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [updatingShowInHome, setUpdatingShowInHome] = useState(false);
 
   useEffect(() => {
     if (!selectedEditionId) return;
     async function load() {
       const supabase = createClient();
       const [{ data: ed }, { data: settings }] = await Promise.all([
-        supabase.from("competition_editions").select("status").eq("id", selectedEditionId).maybeSingle(),
+        supabase.from("competition_editions").select("status, show_in_home").eq("id", selectedEditionId).maybeSingle(),
         supabase.from("edition_settings").select("*").eq("edition_id", selectedEditionId).maybeSingle(),
       ]);
       setEditionStatus(ed?.status ?? "planned");
+      setShowInHome(ed?.show_in_home ?? false);
       setIsPublic(settings?.is_public ?? false);
       setYellowThreshold(String(settings?.yellow_card_suspension_threshold ?? ""));
       setLoaded(true);
     }
     void load();
   }, [selectedEditionId]);
+
+  async function handleShowInHomeChange(checked: boolean) {
+    const previous = showInHome;
+    setShowInHome(checked);
+    setUpdatingShowInHome(true);
+    const result = await atualizarVisibilidadeHome(selectedEditionId, checked);
+    setUpdatingShowInHome(false);
+    if ("error" in result) {
+      setShowInHome(previous);
+      toast("error", result.error);
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -5432,6 +5580,13 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
     { v: "closed", l: "Encerrada", desc: "Competição encerrada" },
   ];
 
+  const homeVisibilityHint = (() => {
+    if (!showInHome) return { text: "Não exibida na home", gray: false };
+    if (editionStatus === "ongoing") return { text: "Será exibida na home", gray: false };
+    if (editionStatus === "closed") return { text: "Encerrada — não exibida na home", gray: true };
+    return { text: "Não exibida na home", gray: false };
+  })();
+
   return (
     <div style={{ maxWidth: 640, display: "flex", flexDirection: "column", gap: 20 }}>
       <SectionHeader title="Status da edição" subtitle={selectedEditionName} />
@@ -5462,8 +5617,8 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
       <SectionHeader title="Visibilidade" />
 
       {/* Visibilidade */}
-      <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px" }}>
           <div>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Visível no 06.score</p>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>Dados públicos disponíveis para o site</p>
@@ -5472,6 +5627,18 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
             style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: isPublic ? "#BFF205" : "rgba(255,255,255,0.1)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0 }}>
             <div style={{ position: "absolute", top: 3, left: isPublic ? 23 : 3, width: 18, height: 18, borderRadius: "50%", backgroundColor: isPublic ? "#0a0a0a" : "#555", transition: "left 0.15s" }} />
           </button>
+        </div>
+        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Exibir na home</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: homeVisibilityHint.gray ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>{homeVisibilityHint.text}</p>
+            </div>
+            <button type="button" disabled={updatingShowInHome} onClick={() => void handleShowInHomeChange(!showInHome)}
+              style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: updatingShowInHome ? "wait" : "pointer", backgroundColor: showInHome ? "#BFF205" : "rgba(255,255,255,0.1)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0, opacity: updatingShowInHome ? 0.6 : 1 }}>
+              <div style={{ position: "absolute", top: 3, left: showInHome ? 23 : 3, width: 18, height: 18, borderRadius: "50%", backgroundColor: showInHome ? "#0a0a0a" : "#555", transition: "left 0.15s" }} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -6479,6 +6646,11 @@ function MatchupEditModal({
       .filter(et => !et.is_free_agent_pool && et.teams && phaseTeamIds.includes(et.team_id))
       .map(et => et.teams as Team),
   ];
+
+  const teamsForMatchup = teamsForPhase.filter(t =>
+    !t._tbd &&
+    (t.id === matchup.team_a_id || t.id === matchup.team_b_id)
+  );
  
   async function handleSaveTeams() {
     setSaving(true); setError(null);
@@ -6563,23 +6735,27 @@ function MatchupEditModal({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Time A</span>
-                <select value={teamAId} onChange={e => setTeamAId(e.target.value)} className={inputClass} style={inputStyle as any}>
-                  {teamsForPhase.map(t => (
-                    <option key={t.id} value={t.id} disabled={t.id === teamBId && t.id !== "tbd"}>
-                      {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
-                    </option>
-                  ))}
-                </select>
+                <LabSelect
+                  value={teamAId}
+                  onChange={setTeamAId}
+                  options={teamsForPhase.map((t) => ({
+                    value: t.id,
+                    label: t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`,
+                    disabled: t.id === teamBId && t.id !== "tbd",
+                  }))}
+                />
               </label>
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 11, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Time B</span>
-                <select value={teamBId} onChange={e => setTeamBId(e.target.value)} className={inputClass} style={inputStyle as any}>
-                  {teamsForPhase.map(t => (
-                    <option key={t.id} value={t.id} disabled={t.id === teamAId && t.id !== "tbd"}>
-                      {t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`}
-                    </option>
-                  ))}
-                </select>
+                <LabSelect
+                  value={teamBId}
+                  onChange={setTeamBId}
+                  options={teamsForPhase.map((t) => ({
+                    value: t.id,
+                    label: t._tbd ? "A definir" : `${t.abbreviation ?? ""} — ${t.full_name}`,
+                    disabled: t.id === teamAId && t.id !== "tbd",
+                  }))}
+                />
               </label>
             </div>
             {error && <p style={{ fontSize: 12, color: "var(--color-danger)", marginBottom: 8 }}>{error}</p>}
@@ -6627,25 +6803,21 @@ function MatchupEditModal({
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                           <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                             <span style={{ fontSize: 10, color: "#BFF205", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Mandante</span>
-                            <select defaultValue={m.team_a_id ?? ""}
-                              onChange={e => handleUpdateMatch(m.id, "team_a_id", e.target.value)}
-                              style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", cursor: "pointer", colorScheme: "dark" as any }}>
-                              <option value="">A definir</option>
-                              {teamsForPhase.filter(t => !t._tbd).map(t => (
-                                <option key={t.id} value={t.id}>{t.abbreviation ?? t.full_name}</option>
-                              ))}
-                            </select>
+                            <LabSelect
+                              value={m.team_a_id ?? ""}
+                              onChange={(v) => handleUpdateMatch(m.id, "team_a_id", v)}
+                              placeholder="A definir"
+                              options={teamsForMatchup.map((t) => ({ value: t.id, label: t.abbreviation ?? t.full_name }))}
+                            />
                           </label>
                           <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                             <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Visitante</span>
-                            <select defaultValue={m.team_b_id ?? ""}
-                              onChange={e => handleUpdateMatch(m.id, "team_b_id", e.target.value)}
-                              style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", cursor: "pointer", colorScheme: "dark" as any }}>
-                              <option value="">A definir</option>
-                              {teamsForPhase.filter(t => !t._tbd).map(t => (
-                                <option key={t.id} value={t.id}>{t.abbreviation ?? t.full_name}</option>
-                              ))}
-                            </select>
+                            <LabSelect
+                              value={m.team_b_id ?? ""}
+                              onChange={(v) => handleUpdateMatch(m.id, "team_b_id", v)}
+                              placeholder="A definir"
+                              options={teamsForMatchup.map((t) => ({ value: t.id, label: t.abbreviation ?? t.full_name }))}
+                            />
                           </label>
                         </div>
                       )}
@@ -6662,11 +6834,12 @@ function MatchupEditModal({
                         </label>
                         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Local</span>
-                          <select defaultValue={m.venue_id ?? ""} onChange={e => handleUpdateMatch(m.id, "venue_id", e.target.value)}
-                            style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", cursor: "pointer", colorScheme: "dark" as any, width: "100%" }}>
-                            <option value="">—</option>
-                            {venues.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
-                          </select>
+                          <LabSelect
+                            value={m.venue_id ?? ""}
+                            onChange={(v) => handleUpdateMatch(m.id, "venue_id", v)}
+                            placeholder="—"
+                            options={venues.map((v) => ({ value: v.id, label: v.full_name }))}
+                          />
                         </label>
                       </div>
                     </div>

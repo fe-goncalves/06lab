@@ -9,11 +9,12 @@ import {
   FormEvent,
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import Link from "next/link";
-import { ChevronRight, Camera } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type TeamRow = Record<string, unknown> & {
   id: string;
@@ -29,6 +30,7 @@ type TeamRow = Record<string, unknown> & {
   founded_year: number | null;
   home_venue_id: string | null;
   parent_team_id?: string | null;
+  is_hidden?: boolean | null;
 };
 
 type VenueOption = { id: string; full_name: string };
@@ -109,7 +111,6 @@ export default function EquipeHubPage() {
   const params = useParams();
   const router = useRouter();
   const id = typeof params.id === "string" ? params.id : "";
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"informacao" | "elenco" | "jogos">("informacao");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -125,6 +126,7 @@ export default function EquipeHubPage() {
   const [gender, setGender] = useState<"male" | "female">("male");
   const [homeVenueId, setHomeVenueId] = useState<string>("");
   const [parentTeamId, setParentTeamId] = useState<string>("");
+  const [isHidden, setIsHidden] = useState(false);
   const [primaryColor, setPrimaryColor] = useState("#000000");
   const [secondaryColor, setSecondaryColor] = useState("#000000");
   const [tertiaryColor, setTertiaryColor] = useState("#000000");
@@ -167,6 +169,7 @@ export default function EquipeHubPage() {
     setGender(gRaw === "female" || gRaw === "f" || gRaw === "feminino" ? "female" : "male");
     setHomeVenueId(team.home_venue_id ?? "");
     setParentTeamId(typeof team.parent_team_id === "string" ? team.parent_team_id : "");
+    setIsHidden(!!team.is_hidden);
     setPrimaryColor(colorInputValue(team.primary_color));
     setSecondaryColor(colorInputValue(team.secondary_color));
     setTertiaryColor(colorInputValue(team.tertiary_color));
@@ -212,12 +215,12 @@ export default function EquipeHubPage() {
   }, [gender, parentTeamId, siblingTeams]);
   useEffect(() => { return () => { if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl); }; }, [previewObjectUrl]);
 
-  function handleLogoFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    setPreviewObjectUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null; });
-    if (!f) { setPendingLogoFile(null); return; }
-    setPendingLogoFile(f);
-    setPreviewObjectUrl(URL.createObjectURL(f));
+  function handleLogoChange(file: File | null) {
+    setPendingLogoFile(file);
+    setPreviewObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
   }
 
   async function handleSubmit(ev: FormEvent) {
@@ -231,6 +234,7 @@ export default function EquipeHubPage() {
       fd.append("gender", gender);
       fd.append("home_venue_id", homeVenueId);
       fd.append("parent_team_id", parentTeamId);
+      fd.append("is_hidden", isHidden ? "true" : "false");
       fd.append("primary_color", primaryColor);
       fd.append("secondary_color", secondaryColor);
       fd.append("tertiary_color", tertiaryColor);
@@ -317,12 +321,6 @@ export default function EquipeHubPage() {
                     </span>
                 }
               </div>
-              {/* Botão trocar logo — ícone sobreposto */}
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                style={{ position: "absolute", bottom: -4, right: -4, width: 22, height: 22, borderRadius: "50%", backgroundColor: "#BFF205", border: "2px solid var(--color-background)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <Camera size={10} strokeWidth={2.5} color="#0a0a0a" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/png,image/webp,image/svg+xml" style={{ display: "none" }} onChange={handleLogoFileChange} />
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -398,26 +396,16 @@ export default function EquipeHubPage() {
               <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
                 <SectionHeader title="Identidade visual" />
 
-                {/* Preview logo grande */}
+                {/* Logo cropável */}
                 <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ width: 100, height: 100, borderRadius: 18, border: `2px dashed ${teamColor ? teamColor + "55" : "rgba(255,255,255,0.12)"}`, backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "border-color 0.15s", overflow: "hidden" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = teamColor ? teamColor + "99" : "rgba(191,242,5,0.4)"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = teamColor ? teamColor + "55" : "rgba(255,255,255,0.12)"}>
-                    {headerLogoSrc
-                      ? <img src={headerLogoSrc} alt="" style={{ width: 88, height: 88, objectFit: "contain" }} />
-                      : <div style={{ textAlign: "center" as const }}>
-                          <Camera size={20} color="rgba(255,255,255,0.2)" />
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 4 }}>Trocar logo</p>
-                        </div>
-                    }
-                  </div>
+                  <ImageCropUpload
+                    value={pendingLogoFile}
+                    onChange={handleLogoChange}
+                    existingUrl={displayLogoUrl}
+                    label=""
+                    placeholder="Enviar logo"
+                  />
                 </div>
-
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", textAlign: "center" as const, marginBottom: 20 }}>
-                  PNG, WebP ou SVG
-                </p>
 
                 {/* Cores */}
                 <SectionHeader title="Cores do time" />
@@ -498,22 +486,65 @@ export default function EquipeHubPage() {
                     </div>
                     <div>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Estádio / local</span>
-                      <select value={homeVenueId} onChange={e => setHomeVenueId(e.target.value)}
-                        style={{ ...inputBaseStyle, cursor: "pointer", colorScheme: "dark" as any }}>
-                        <option value="">—</option>
-                        {venues.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
-                      </select>
+                      <LabSelect
+                        value={homeVenueId}
+                        onChange={setHomeVenueId}
+                        placeholder="—"
+                        options={venues.map((v) => ({ value: v.id, label: v.full_name }))}
+                      />
                     </div>
                   </div>
 
                   {/* Time pai */}
                   <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Seção de</span>
-                    <select value={parentTeamId} onChange={e => setParentTeamId(e.target.value)}
-                      style={{ ...inputBaseStyle, cursor: "pointer", colorScheme: "dark" as any }}>
-                      <option value="">Nenhum</option>
-                      {parentOptions.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                    </select>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Time pai</span>
+                    <LabSelect
+                      value={parentTeamId}
+                      onChange={setParentTeamId}
+                      placeholder="Nenhum"
+                      options={parentOptions.map((t) => ({ value: t.id, label: t.full_name }))}
+                    />
+                  </div>
+
+                  {/* Visibilidade pública */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 9, border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+                    <div>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-primary)", display: "block" }}>
+                        Ocultar no site público
+                      </span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginTop: 2 }}>
+                        A equipe não aparecerá no site público
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isHidden}
+                      onClick={() => setIsHidden((v) => !v)}
+                      style={{
+                        width: 44,
+                        height: 24,
+                        borderRadius: 999,
+                        border: "none",
+                        padding: 2,
+                        cursor: "pointer",
+                        backgroundColor: isHidden ? "#BFF205" : "rgba(255,255,255,0.12)",
+                        transition: "background-color 0.15s",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "block",
+                          width: 20,
+                          height: 20,
+                          borderRadius: "50%",
+                          backgroundColor: isHidden ? "#0a0a0a" : "#fff",
+                          transform: isHidden ? "translateX(20px)" : "translateX(0)",
+                          transition: "transform 0.15s",
+                        }}
+                      />
+                    </button>
                   </div>
                 </div>
               </div>

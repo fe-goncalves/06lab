@@ -742,11 +742,6 @@ export default function PartidaClient({
               <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {teamA?.short_name ?? teamA?.full_name ?? "A definir"}
                 </p>
-                {teamA?.short_name && teamA?.full_name && (
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {teamA.full_name}
-                  </p>
-                )}
               </div>
               <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {teamA?.logo_url
@@ -809,11 +804,6 @@ export default function PartidaClient({
               <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 20, fontWeight: 700, color: "var(--color-text-primary)", lineHeight: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                   {teamB?.short_name ?? teamB?.full_name ?? "A definir"}
                 </p>
-                {teamB?.short_name && teamB?.full_name && (
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {teamB.full_name}
-                  </p>
-                )}
               </div>
             </div>
 

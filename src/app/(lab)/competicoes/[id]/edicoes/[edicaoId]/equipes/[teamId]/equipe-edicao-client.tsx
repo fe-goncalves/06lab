@@ -2,7 +2,7 @@
 
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
@@ -11,7 +11,6 @@ import {
   transferirAtletaNaEdicao, inscreverAtletaQualquer, editarStint, editarStintStaff,
 } from "@/app/(lab)/competicoes/[id]/edicoes/actions";
 
-import { criarAtleta } from "@/app/(lab)/atletas/actions";
 import { Plus, Check, X, ArrowRightLeft, Search, Ban, RotateCcw, Trash2, History } from "lucide-react";
 
 type RosterEntry = {
@@ -255,20 +254,6 @@ export default function EquipeEdicaoClient({
   const [searching, setSearching] = useState(false);
   const [availableStaff, setAvailableStaff] = useState<Staff[]>(initialStaff);
 
-  // Modal criar atleta
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [createFullName, setCreateFullName] = useState("");
-  const [createSurname, setCreateSurname] = useState("");
-  const [createGender, setCreateGender] = useState("male");
-  const [createPositionId, setCreatePositionId] = useState("");
-  const [createBirthDate, setCreateBirthDate] = useState("");
-  const [createRg, setCreateRg] = useState("");
-  const [createFile, setCreateFile] = useState<File | null>(null);
-  const [createPreview, setCreatePreview] = useState<string | null>(null);
-  const [createLoading, setCreateLoading] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-
   // Modal transferir
   const [transferEntryId, setTransferEntryId] = useState<string | null>(null);
   const [transferTargetId, setTransferTargetId] = useState("");
@@ -363,12 +348,6 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
       }
     }
   }, [showSearchModal, activeTab]);
-
-  function resetCreateForm() {
-    setCreateFullName(""); setCreateSurname(""); setCreateGender("male");
-    setCreatePositionId(""); setCreateBirthDate(""); setCreateRg("");
-    setCreateFile(null); setCreatePreview(null); setCreateError(null);
-  }
 
   async function handleAprovar(entryId: string) {
     if (!approveStartDate) return;
@@ -576,55 +555,6 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
     }]);
     setAvailableStaff(prev => prev.filter(s => s.id !== member.id));
     setStaffSearchResults(prev => prev.filter(s => s.id !== member.id));
-  }
-
-  async function handleCriarAtleta() {
-    if (!createFullName.trim()) { setCreateError("Nome completo é obrigatório."); return; }
-    setCreateLoading(true); setCreateError(null);
-    const fd = new FormData();
-    fd.append("full_name", createFullName.trim());
-    if (createSurname) fd.append("surname", createSurname.trim());
-    fd.append("gender", createGender);
-    if (createPositionId) fd.append("position_id", createPositionId);
-    if (createBirthDate) fd.append("birth_date", createBirthDate);
-    if (createRg) fd.append("rg", createRg);
-    if (createFile) fd.append("photo", createFile);
-
-    const result = await criarAtleta(fd);
-    if ("error" in result) { setCreateError(result.error); setCreateLoading(false); return; }
-
-    // Inscreve na edição automaticamente
-    const inscResult = await inscreverAtletaQualquer(editionTeam.id, result.id, createPositionId || null);
-    setCreateLoading(false);
-
-    if ("error" in inscResult) {
-      toast("error", `Atleta criado mas erro ao inscrever: ${inscResult.error}`);
-    } else {
-      toast("success", "Atleta criado e submetido para aprovação.");
-      const newAthlete: Athlete = {
-        id: result.id,
-        full_name: createFullName.trim(),
-        surname: createSurname.trim() || null,
-        photo_url: null,
-        player_positions: positions.find(p => p.id === createPositionId) ? {
-          full_name: positions.find(p => p.id === createPositionId)!.full_name,
-          abbreviation: positions.find(p => p.id === createPositionId)!.abbreviation,
-        } : null,
-      };
-      setEntries(prev => [...prev, {
-        id: (inscResult as any).id ?? crypto.randomUUID(),
-        member_type: "athlete",
-        status: "pending",
-        athlete_id: result.id,
-        staff_member_id: null,
-        position_label_at_inscription: newAthlete.player_positions?.full_name ?? null,
-        athletes: newAthlete as any,
-        staff_members: null,
-      }]);
-    }
-    setShowCreateModal(false);
-    setShowSearchModal(false);
-    resetCreateForm();
   }
 
   const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
@@ -1005,7 +935,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
       )}
 
       {/* ── MODAL DE BUSCA ── */}
-      {showSearchModal && !showCreateModal && !isFreeAgentPool && (
+      {showSearchModal && !isFreeAgentPool && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
           <div className="w-full max-w-md rounded-xl border shadow-xl flex flex-col"
             style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "75vh" }}>
@@ -1114,123 +1044,6 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 ))
               )
             )}
-            </div>
-
-            {/* Rodapé — criar novo */}
-            <div className="border-t px-6 py-4 shrink-0" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button"
-                onClick={() => setShowCreateModal(true)}
-                className="w-full rounded-lg border py-3 text-sm font-medium transition-colors hover:bg-[rgba(255,255,255,0.04)]"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                Não encontrou? <span style={{ color: teamColor }}>Criar novo atleta</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── MODAL CRIAR ATLETA ── */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)", maxHeight: "90vh" }}>
-            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0"
-              style={{ borderColor: "var(--color-border)" }}>
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => setShowCreateModal(false)}
-                  className="font-mono text-xs"
-                  style={{ color: "var(--color-text-secondary)" }}>
-                  ← Voltar
-                </button>
-                <h2 className="font-display text-lg" style={{ color: "var(--color-text-primary)" }}>Novo atleta</h2>
-              </div>
-              <button type="button" onClick={() => { setShowCreateModal(false); setShowSearchModal(false); resetCreateForm(); }}
-                style={{ color: "var(--color-text-secondary)" }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="overflow-y-auto flex-1 px-6 py-5 space-y-4">
-              {/* Foto */}
-              <div className="flex flex-col items-center gap-3 pb-2">
-                <button type="button" onClick={() => fileRef.current?.click()}
-                  className="relative flex h-20 w-20 items-center justify-center rounded-full border-2 overflow-hidden transition-opacity hover:opacity-80"
-                  style={{ borderColor: teamColor, backgroundColor: `${teamColor}11` }}>
-                  {createPreview ? (
-                    <img src={createPreview} alt="" className="h-full w-full object-cover" />
-                  ) : (
-                    <span className="text-2xl">📷</span>
-                  )}
-                </button>
-                <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden"
-                  onChange={e => {
-                    const f = e.target.files?.[0] ?? null;
-                    setCreateFile(f);
-                    setCreatePreview(f ? URL.createObjectURL(f) : null);
-                  }} />
-                <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Foto (opcional)</p>
-              </div>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo *</span>
-                <input type="text" value={createFullName} onChange={e => setCreateFullName(e.target.value)}
-                  className={inputClass} style={inputStyle} placeholder="Ex: João da Silva" />
-              </label>
-
-              <label className="flex flex-col gap-1">
-                <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Apelido</span>
-                <input type="text" value={createSurname} onChange={e => setCreateSurname(e.target.value)}
-                  className={inputClass} style={inputStyle} placeholder="Ex: Joãozinho" />
-              </label>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Gênero</span>
-                  <select value={createGender} onChange={e => setCreateGender(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="male">Masculino</option>
-                    <option value="female">Feminino</option>
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Posição</span>
-                  <select value={createPositionId} onChange={e => setCreatePositionId(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="">Selecione…</option>
-                    {positions.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                  </select>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Data de nascimento</span>
-                  <input type="text" placeholder="DD/MM/AAAA" value={createBirthDate} maxLength={10}
-                    onChange={e => setCreateBirthDate(applyDateMask(e.target.value))}
-                    className={inputClass} style={inputStyle} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>RG</span>
-                  <input type="text" value={createRg}
-                    onChange={e => setCreateRg(e.target.value.replace(/[^\d.\-]/g, ""))}
-                    className={inputClass} style={inputStyle} placeholder="000.000.000-0" />
-                </label>
-              </div>
-
-              {createError && (
-                <p className="text-sm" style={{ color: "var(--color-danger)" }}>{createError}</p>
-              )}
-            </div>
-
-            <div className="flex gap-3 border-t px-6 py-4 justify-end shrink-0" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button" onClick={() => setShowCreateModal(false)}
-                className="rounded-lg border px-4 py-2 text-sm"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                Cancelar
-              </button>
-              <button type="button" onClick={handleCriarAtleta} disabled={createLoading || !createFullName.trim()}
-                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
-                {createLoading ? "Criando…" : "Criar e inscrever"}
-              </button>
             </div>
           </div>
         </div>

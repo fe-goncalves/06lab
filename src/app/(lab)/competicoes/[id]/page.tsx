@@ -27,7 +27,7 @@ export default async function CompeticaoPage({
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competition_editions")
-      .select("id, season_id, status, seasons(name, years(value))")
+      .select("id, season_id, status, custom_name, seasons(name, years(value))")
       .eq("competition_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("seasons")
@@ -35,7 +35,7 @@ export default async function CompeticaoPage({
       .eq("organization_id", orgId)
       .order("display_order"),
     supabase.from("teams")
-      .select("id, full_name, abbreviation, logo_url")
+      .select("id, full_name, abbreviation, logo_url, is_virtual")
       .eq("organization_id", orgId).order("full_name"),
   ]);
 
@@ -57,6 +57,7 @@ export default async function CompeticaoPage({
     status: e.status,
     season_name: e.seasons?.name ?? "—",
     year_value: e.seasons?.years?.value ?? 0,
+    custom_name: e.custom_name ?? null,
   }));
 
   const seasonsList = (seasons ?? []).map((s: any) => ({

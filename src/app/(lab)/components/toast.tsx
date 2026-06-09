@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, X } from "lucide-react";
+import { parseSupabaseError } from "@/lib/error-messages";
 
 type Toast = {
   id: string;
@@ -17,8 +18,9 @@ function notify() {
 }
 
 export function toast(type: "success" | "error", message: string) {
+  const displayMessage = type === "error" ? parseSupabaseError(message) : message;
   const id = Math.random().toString(36).slice(2);
-  toasts = [...toasts, { id, type, message }];
+  toasts = [...toasts, { id, type, message: displayMessage }];
   notify();
   setTimeout(() => {
     toasts = toasts.filter(t => t.id !== id);

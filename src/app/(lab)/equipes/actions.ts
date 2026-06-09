@@ -5,6 +5,7 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
 import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
+import { parseSupabaseError } from "@/lib/error-messages";
 
 function normalizeHex(value: FormDataEntryValue | null): string | null {
   if (value === null || value === "") return null;
@@ -18,6 +19,11 @@ function normalizeGenderValue(value: string | null): "male" | "female" {
   const g = String(value ?? "").toLowerCase();
   if (g === "female" || g === "f" || g === "feminino") return "female";
   return "male";
+}
+
+function parseHiddenFlag(formData: FormData): boolean {
+  const raw = formData.get("is_hidden");
+  return raw === "true" || raw === "on" || raw === "1";
 }
 
 export async function criarEquipe(formData: FormData) {
@@ -44,6 +50,7 @@ export async function criarEquipe(formData: FormData) {
   const primary_color = (formData.get("primary_color") as string) || null;
   const secondary_color = (formData.get("secondary_color") as string) || null;
   const tertiary_color = (formData.get("tertiary_color") as string) || null;
+  const is_hidden = parseHiddenFlag(formData);
   const file = formData.get("logo") as File | null;
 
   let logo_url: string | null = null;
@@ -67,7 +74,7 @@ export async function criarEquipe(formData: FormData) {
       });
 
     if (uploadError) {
-      return { error: uploadError.message };
+      return { error: parseSupabaseError(uploadError.message) };
     }
 
     const { data: publicData } = supabase.storage
@@ -86,13 +93,14 @@ export async function criarEquipe(formData: FormData) {
       primary_color,
       secondary_color,
       tertiary_color,
+      is_hidden,
       organization_id: profile.organization_id,
     })
     .select("id")
     .single();
 
   if (error) {
-    return { error: error.message };
+    return { error: parseSupabaseError(error.message) };
   }
 
   return { id: inserted.id };
@@ -203,6 +211,7 @@ export async function editarEquipe(
   const primary_color = normalizeHex(formData.get("primary_color"));
   const secondary_color = normalizeHex(formData.get("secondary_color"));
   const tertiary_color = normalizeHex(formData.get("tertiary_color"));
+  const is_hidden = parseHiddenFlag(formData);
 
   let logo_url: string | null = existing.logo_url;
 
@@ -226,7 +235,7 @@ export async function editarEquipe(
       });
 
     if (uploadError) {
-      return { error: uploadError.message };
+      return { error: parseSupabaseError(uploadError.message) };
     }
 
     const { data: publicData } = supabase.storage
@@ -249,13 +258,14 @@ export async function editarEquipe(
       primary_color,
       secondary_color,
       tertiary_color,
+      is_hidden,
       logo_url,
     })
     .eq("id", id)
     .eq("organization_id", orgId);
 
   if (updateError) {
-    return { error: updateError.message };
+    return { error: parseSupabaseError(updateError.message) };
   }
 
   return { success: true };

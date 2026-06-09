@@ -50,8 +50,6 @@ export default function NovaFasePage() {
   const [phaseType, setPhaseType] = useState("round_robin");
   const [displayOrder, setDisplayOrder] = useState("0");
   const [halfDuration, setHalfDuration] = useState("25");
-  const [legs, setLegs] = useState(false);
-  const [aggregateScore, setAggregateScore] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
   const [tiebreakerType, setTiebreakerType] = useState("penalties");
   const [pointsWin, setPointsWin] = useState("3");
@@ -84,7 +82,6 @@ export default function NovaFasePage() {
     setCustomLabel(template.custom_label ?? "");
     setPhaseType(template.phase_type);
     setHalfDuration(String(template.half_duration_minutes ?? 25));
-    setLegs(template.legs ?? false);
     setThirdPlace(template.third_place_match ?? false);
     setPointsWin(String(template.points_win ?? 3));
     setPointsDraw(String(template.points_draw ?? 1));
@@ -156,8 +153,6 @@ export default function NovaFasePage() {
       fd.append("display_order", displayOrder);
       fd.append("half_duration_minutes", halfDuration);
       if (isKnockout) {
-        fd.append("legs", String(legs));
-        fd.append("aggregate_score", String(aggregateScore));
         fd.append("third_place_match", String(thirdPlace));
         fd.append("penalty_tiebreaker_type", tiebreakerType);
       }
@@ -343,16 +338,6 @@ export default function NovaFasePage() {
           <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
             <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Configurações eliminatórias</h2>
             <div className="space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" checked={legs} onChange={e => setLegs(e.target.checked)} className="h-4 w-4" />
-                <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Jogos de ida e volta</span>
-              </label>
-              {legs && (
-                <label className="flex items-center gap-3 cursor-pointer ml-7">
-                  <input type="checkbox" checked={aggregateScore} onChange={e => setAggregateScore(e.target.checked)} className="h-4 w-4" />
-                  <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Placar agregado</span>
-                </label>
-              )}
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={thirdPlace} onChange={e => setThirdPlace(e.target.checked)} className="h-4 w-4" />
                 <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Disputa de terceiro lugar</span>

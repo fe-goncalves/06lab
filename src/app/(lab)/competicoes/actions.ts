@@ -90,6 +90,7 @@ export async function editarCompeticao(
   const division_above_ids = String(formData.get("division_above_ids") ?? "").trim() || null;
   const division_below_ids = String(formData.get("division_below_ids") ?? "").trim() || null;
   const division_same_ids = String(formData.get("division_same_ids") ?? "").trim() || null;
+  const home_priority = Math.max(0, Number(formData.get("home_priority") ?? 0) || 0);
 
   const file = formData.get("logo") as File | null;
   let logo_url = existing.logo_url;
@@ -117,6 +118,7 @@ export async function editarCompeticao(
       full_name, short_name, gender, pinned_in_sidebar,
       primary_color, category_id,
       division_above_ids, division_below_ids, division_same_ids,
+      home_priority,
       logo_url,
     })
     .eq("id", id);
@@ -126,6 +128,21 @@ export async function editarCompeticao(
   revalidatePath("/competicoes");
   revalidatePath("/competicoes/" + id);
   revalidatePath("/competicoes/" + id + "/configuracoes");
+  return { success: true };
+}
+
+export async function atualizarPrioridadeHome(
+  competitionId: string,
+  priority: number,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("competitions")
+    .update({ home_priority: Math.max(0, priority) })
+    .eq("id", competitionId);
+
+  if (error) return { error: error.message };
+  revalidatePath("/competicoes/" + competitionId);
   return { success: true };
 }
 
