@@ -21,7 +21,8 @@ export default async function TemporadasPage() {
     supabase.from("seasons")
       .select("id, name, year_id, display_order, starts_at, ends_at, is_current")
       .eq("organization_id", orgId)
-      .order("display_order"),
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true }),
   ]);
 
   return <TemporadasClient years={years ?? []} seasons={seasons ?? []} />;

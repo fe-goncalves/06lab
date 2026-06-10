@@ -1096,7 +1096,7 @@ export async function buscarOpcoesFiltro(): Promise<FiltroOpcoes | { error: stri
   const orgId = profile.organization_id;
   const [{ data: compsData }, { data: seasonsData }, { data: teamsData }] = await Promise.all([
     supabase.from("competitions").select("id, full_name, short_name").eq("organization_id", orgId).order("full_name"),
-    supabase.from("seasons").select("id, name").eq("organization_id", orgId).order("name"),
+    supabase.from("seasons").select("id, name, display_order").eq("organization_id", orgId).order("display_order", { ascending: true }).order("name", { ascending: true }),
     supabase.from("teams").select("id, full_name, logo_url").eq("organization_id", orgId).eq("is_virtual", false).order("full_name"),
   ]);
   return {

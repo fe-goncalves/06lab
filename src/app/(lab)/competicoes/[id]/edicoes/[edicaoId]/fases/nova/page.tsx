@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { Trash2 } from "lucide-react";
 
 type Template = {
@@ -316,12 +317,12 @@ export default function NovaFasePage() {
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo de fase</span>
-              <select value={phaseType} onChange={e => setPhaseType(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="round_robin">Pontos Corridos</option>
-                <option value="group_stage">Fase de Grupos</option>
-                <option value="knockout">Mata-mata</option>
-                <option value="conference">Conferência</option>
-              </select>
+              <LabSelect value={phaseType} onChange={setPhaseType} options={[
+                { value: "round_robin", label: "Pontos Corridos" },
+                { value: "group_stage", label: "Fase de Grupos" },
+                { value: "knockout", label: "Mata-mata" },
+                { value: "conference", label: "Conferência" },
+              ]} />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Ordem de exibição</span>
@@ -344,10 +345,10 @@ export default function NovaFasePage() {
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo de desempate</span>
-                <select value={tiebreakerType} onChange={e => setTiebreakerType(e.target.value)} className={inputClass} style={inputStyle}>
-                  <option value="penalties">Pênaltis</option>
-                  <option value="shootouts">Shoot-outs</option>
-                </select>
+                <LabSelect value={tiebreakerType} onChange={setTiebreakerType} options={[
+                  { value: "penalties", label: "Pênaltis" },
+                  { value: "shootouts", label: "Shoot-outs" },
+                ]} />
               </label>
             </div>
           </div>

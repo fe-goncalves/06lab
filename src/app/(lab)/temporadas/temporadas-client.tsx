@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { criarAno, editarAno, criarTemporada, editarTemporada, deletarTemporada } from "./actions";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { compareSeasons } from "@/lib/seasons-order";
 import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
 
 type Year = { id: string; value: number };
@@ -146,25 +148,36 @@ function EditYearModal({ year, onClose, onSave }: { year: Year; onClose: () => v
 
 // ─── Modal de Temporada ────────────────────────────────────────────────────────
 
-function SeasonModal({ mode, years, initial, onClose, onSave }: {
+function SeasonModal({ mode, years, seasons, initial, onClose, onSave }: {
   mode: "create" | "edit";
   years: Year[];
+  seasons: Season[];
   initial?: Season;
   onClose: () => void;
-  onSave: (data: { name: string; yearId: string; startsAt: string; endsAt: string; isCurrent: boolean }) => Promise<void>;
+  onSave: (data: { name: string; yearId: string; displayOrder: number; startsAt: string; endsAt: string; isCurrent: boolean }) => Promise<void>;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [yearId, setYearId] = useState(initial?.year_id ?? years[0]?.id ?? "");
+  const [displayOrder, setDisplayOrder] = useState(String(initial?.display_order ?? 0));
   const [startsAt, setStartsAt] = useState(initial?.starts_at ?? "");
   const [endsAt, setEndsAt] = useState(initial?.ends_at ?? "");
   const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    if (mode !== "create" || initial) return;
+    const inYear = seasons.filter((s) => s.year_id === yearId);
+    const next = inYear.length === 0 ? 1 : Math.max(...inYear.map((s) => s.display_order)) + 1;
+    setDisplayOrder(String(next));
+  }, [mode, initial, yearId, seasons]);
+
   async function handleSubmit() {
     if (!name.trim()) { toast("error", "Nome é obrigatório."); return; }
     if (!yearId) { toast("error", "Ano é obrigatório."); return; }
+    const order = Number(displayOrder);
+    if (!Number.isFinite(order)) { toast("error", "Ordem de exibição inválida."); return; }
     setSaving(true);
-    await onSave({ name, yearId, startsAt, endsAt, isCurrent });
+    await onSave({ name, yearId, displayOrder: Math.round(order), startsAt, endsAt, isCurrent });
     setSaving(false);
   }
 
@@ -187,10 +200,22 @@ function SeasonModal({ mode, years, initial, onClose, onSave }: {
             Nenhum ano cadastrado — adicione um ano primeiro.
           </p>
         ) : (
-          <select value={yearId} onChange={e => setYearId(e.target.value)} style={{ ...inputStyle, appearance: "none" as const }} onFocus={focusBrand} onBlur={blurBrand}>
-            {years.map(y => <option key={y.id} value={y.id} style={{ backgroundColor: "#0e0e0e" }}>{y.value}</option>)}
-          </select>
+          <LabSelect value={yearId} onChange={setYearId}
+            options={years.map((y) => ({ value: y.id, label: String(y.value) }))} />
         )}
+      </div>
+
+      <div>
+        <span style={fieldLabel}>Ordem de exibição</span>
+        <input
+          type="number"
+          value={displayOrder}
+          onChange={(e) => setDisplayOrder(e.target.value)}
+          min={0}
+          style={{ ...inputStyle, width: 120 }}
+          onFocus={focusBrand}
+          onBlur={blurBrand}
+        />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -240,7 +265,7 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
       year,
       seasons: seasons
         .filter(s => s.year_id === year.id)
-        .sort((a, b) => a.display_order - b.display_order || b.name.localeCompare(a.name)),
+        .sort(compareSeasons),
     }));
 
   async function handleAddYear(value: number) {
@@ -259,40 +284,40 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
     toast("success", "Ano atualizado.");
   }
 
-  async function handleCreateSeason(data: { name: string; yearId: string; startsAt: string; endsAt: string; isCurrent: boolean }) {
+  async function handleCreateSeason(data: { name: string; yearId: string; displayOrder: number; startsAt: string; endsAt: string; isCurrent: boolean }) {
     const fd = new FormData();
     fd.append("name", data.name.trim());
     fd.append("year_id", data.yearId);
-    fd.append("display_order", "0");
+    fd.append("display_order", String(data.displayOrder));
     fd.append("starts_at", data.startsAt);
     fd.append("ends_at", data.endsAt);
     fd.append("is_current", String(data.isCurrent));
     const result = await criarTemporada(fd);
     if ("error" in result) { toast("error", result.error); return; }
-    const newSeason: Season = { id: result.id, name: data.name.trim(), year_id: data.yearId, display_order: 0, starts_at: data.startsAt || null, ends_at: data.endsAt || null, is_current: data.isCurrent };
+    const newSeason: Season = { id: result.id, name: data.name.trim(), year_id: data.yearId, display_order: data.displayOrder, starts_at: data.startsAt || null, ends_at: data.endsAt || null, is_current: data.isCurrent };
     setSeasons(prev => {
       const updated = data.isCurrent ? prev.map(s => ({ ...s, is_current: false })) : prev;
-      return [...updated, newSeason];
+      return [...updated, newSeason].sort(compareSeasons);
     });
     setShowCreateModal(false);
     toast("success", "Temporada criada.");
   }
 
-  async function handleEditSeason(data: { name: string; yearId: string; startsAt: string; endsAt: string; isCurrent: boolean }) {
+  async function handleEditSeason(data: { name: string; yearId: string; displayOrder: number; startsAt: string; endsAt: string; isCurrent: boolean }) {
     if (!editingSeason) return;
     const fd = new FormData();
     fd.append("name", data.name.trim());
-    fd.append("display_order", String(editingSeason.display_order));
+    fd.append("display_order", String(data.displayOrder));
     fd.append("starts_at", data.startsAt);
     fd.append("ends_at", data.endsAt);
     fd.append("is_current", String(data.isCurrent));
     const result = await editarTemporada(editingSeason.id, fd);
     if ("error" in result) { toast("error", result.error); return; }
     setSeasons(prev => prev.map(s => {
-      if (s.id === editingSeason.id) return { ...s, name: data.name.trim(), starts_at: data.startsAt || null, ends_at: data.endsAt || null, is_current: data.isCurrent };
+      if (s.id === editingSeason.id) return { ...s, name: data.name.trim(), display_order: data.displayOrder, starts_at: data.startsAt || null, ends_at: data.endsAt || null, is_current: data.isCurrent };
       if (data.isCurrent) return { ...s, is_current: false };
       return s;
-    }));
+    }).sort(compareSeasons));
     setEditingSeason(null);
     toast("success", "Temporada atualizada.");
   }
@@ -429,8 +454,8 @@ export default function TemporadasClient({ years: initialYears, seasons: initial
       {/* Modais */}
       {showYearModal && <YearModal onClose={() => setShowYearModal(false)} onSave={handleAddYear} />}
       {editingYear && <EditYearModal year={editingYear} onClose={() => setEditingYear(null)} onSave={handleEditYear} />}
-      {showCreateModal && <SeasonModal mode="create" years={years} onClose={() => setShowCreateModal(false)} onSave={handleCreateSeason} />}
-      {editingSeason && <SeasonModal mode="edit" years={years} initial={editingSeason} onClose={() => setEditingSeason(null)} onSave={handleEditSeason} />}
+      {showCreateModal && <SeasonModal mode="create" years={years} seasons={seasons} onClose={() => setShowCreateModal(false)} onSave={handleCreateSeason} />}
+      {editingSeason && <SeasonModal mode="edit" years={years} seasons={seasons} initial={editingSeason} onClose={() => setEditingSeason(null)} onSave={handleEditSeason} />}
     </div>
   );
 }

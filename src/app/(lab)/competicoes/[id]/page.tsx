@@ -33,7 +33,8 @@ export default async function CompeticaoPage({
     supabase.from("seasons")
       .select("id, name, years(value)")
       .eq("organization_id", orgId)
-      .order("display_order"),
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true }),
     supabase.from("teams")
       .select("id, full_name, abbreviation, logo_url, is_virtual")
       .eq("organization_id", orgId).order("full_name"),

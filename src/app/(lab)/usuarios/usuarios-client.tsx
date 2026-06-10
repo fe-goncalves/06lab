@@ -2,6 +2,7 @@
 
 import { criarUsuario, alterarStatusUsuario } from "./actions";
 import { useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type UserProfile = {
   id: string;
@@ -91,10 +92,10 @@ export default function UsuariosClient({
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Perfil</span>
-              <select value={role} onChange={e => setRole(e.target.value)} className={ic} style={is}>
-                {currentRole === "main" && <option value="supporter">Supporter</option>}
-                <option value="relator">Relator</option>
-              </select>
+              <LabSelect value={role} onChange={setRole} options={[
+                ...(currentRole === "main" ? [{ value: "supporter", label: "Supporter" }] : []),
+                { value: "relator", label: "Relator" },
+              ]} />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Email *</span>

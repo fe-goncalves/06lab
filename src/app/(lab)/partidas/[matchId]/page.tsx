@@ -80,6 +80,13 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
 
     const editionTeamIds = (editionTeamsBasic ?? []).map((et: any) => et.id);
 
+    const alreadySaved = new Set((lineups ?? []).map((l: any) => l.athlete_id));
+    const savedEditionTeamByAthlete = new Map(
+      (lineups ?? [])
+        .filter((l: any) => l.athlete_id && l.edition_team_id)
+        .map((l: any) => [l.athlete_id, l.edition_team_id] as const),
+    );
+
     const [
       { data: rosterAthletes },
       { data: staffEntries },
@@ -94,7 +101,8 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
               status,
               athletes (
                 id, full_name, surname, photo_url,
-                player_positions ( full_name, abbreviation, is_goalkeeper )
+                player_positions ( full_name, abbreviation, is_goalkeeper ),
+                athlete_team_stints ( started_at, ended_at, team_id, is_current )
               )
             `)
             .in("edition_team_id", editionTeamIds)
@@ -118,21 +126,62 @@ export default async function PartidaPage({ params }: { params: Promise<{ matchI
       grouped[et.id] = { id: et.id, team_id: et.team_id, athletes: [], staffMembers: [] };
     });
 
-    // Popula atletas
-    (rosterAthletes ?? []).forEach((entry: any) => {
+    function isEligibleOnMatchDate(entry: any): boolean {
+      if (!match.match_date) return true;
+      const stints = entry.athletes?.athlete_team_stints ?? [];
+      const matchDate = new Date(match.match_date);
+      return stints.some((stint: any) => {
+        if (!stint.started_at) return false;
+        const start = new Date(stint.started_at);
+        const end = stint.ended_at ? new Date(stint.ended_at) : null;
+        return start <= matchDate && (end === null || end >= matchDate);
+      });
+    }
+
+    const filteredRoster = (rosterAthletes ?? []).filter((entry: any) => {
+      if (alreadySaved.has(entry.athlete_id)) return true;
+      if (!match.match_date) return true;
+      return isEligibleOnMatchDate(entry);
+    });
+
+    // Popula atletas elegíveis (ou já salvos no lineup)
+    filteredRoster.forEach((entry: any) => {
       if (!entry.athletes) return;
-      const bucket = grouped[entry.edition_team_id];
+      const editionTeamId = savedEditionTeamByAthlete.get(entry.athlete_id) ?? entry.edition_team_id;
+      const bucket = grouped[editionTeamId];
       if (!bucket) return;
       const a = entry.athletes;
+      const athleteId = a.id ?? entry.athlete_id;
+      if (bucket.athletes.some((existing: any) => existing.id === athleteId)) return;
       const pos = a.player_positions;
       bucket.athletes.push({
-        id: a.id ?? entry.athlete_id,
+        id: athleteId,
         full_name: a.full_name,
         surname: a.surname,
         photo_url: a.photo_url,
         player_positions: pos ? {
           full_name: pos.full_name,
           abbreviation: pos.abbreviation,
+        } : null,
+      });
+    });
+
+    // Garante atletas já salvos no lineup mesmo se ausentes do elenco filtrado
+    (lineups ?? []).forEach((l: any) => {
+      if (!l.athlete_id || !l.edition_team_id || !l.athletes) return;
+      const bucket = grouped[l.edition_team_id];
+      if (!bucket) return;
+      if (bucket.athletes.some((existing: any) => existing.id === l.athlete_id)) return;
+      const a = l.athletes;
+      const pos = a.player_positions;
+      bucket.athletes.push({
+        id: l.athlete_id,
+        full_name: a.full_name,
+        surname: a.surname,
+        photo_url: a.photo_url ?? null,
+        player_positions: pos ? {
+          full_name: pos.full_name ?? null,
+          abbreviation: pos.abbreviation ?? null,
         } : null,
       });
     });

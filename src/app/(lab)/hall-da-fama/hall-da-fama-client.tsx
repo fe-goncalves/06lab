@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { RefreshCw, X } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import {
   buscarHallDaFama,
   recalcularEstatisticas,
@@ -534,32 +535,19 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
           Filtros
         </p>
 
-        <select value={filtros.competitionId ?? ""} onChange={(e) => handleFiltroChange("competitionId", e.target.value)} style={selectStyle}>
-          <option value="">Todas as competições</option>
-          {opcoesFiltro.competitions.map((c) => (
-            <option key={c.id} value={c.id}>{c.short_name ?? c.full_name}</option>
-          ))}
-        </select>
+        <LabSelect value={filtros.competitionId ?? ""} onChange={(v) => handleFiltroChange("competitionId", v)} placeholder="Todas as competições"
+          options={opcoesFiltro.competitions.map((c) => ({ value: c.id, label: c.short_name ?? c.full_name }))} />
 
-        <select value={filtros.seasonId ?? ""} onChange={(e) => handleFiltroChange("seasonId", e.target.value)} style={selectStyle}>
-          <option value="">Todas as temporadas</option>
-          {opcoesFiltro.seasons.map((s) => (
-            <option key={s.id} value={s.id}>{s.name}</option>
-          ))}
-        </select>
+        <LabSelect value={filtros.seasonId ?? ""} onChange={(v) => handleFiltroChange("seasonId", v)} placeholder="Todas as temporadas"
+          options={opcoesFiltro.seasons.map((s) => ({ value: s.id, label: s.name }))} />
 
-        <select value={filtros.teamId ?? ""} onChange={(e) => handleFiltroChange("teamId", e.target.value)} style={selectStyle}>
-          <option value="">Todas as equipes</option>
-          {opcoesFiltro.teams.map((t) => (
-            <option key={t.id} value={t.id}>{t.full_name}</option>
-          ))}
-        </select>
+        <LabSelect value={filtros.teamId ?? ""} onChange={(v) => handleFiltroChange("teamId", v)} placeholder="Todas as equipes"
+          options={opcoesFiltro.teams.map((t) => ({ value: t.id, label: t.full_name }))} />
 
-        <select value={filtros.gender ?? ""} onChange={(e) => handleFiltroChange("gender", e.target.value)} style={selectStyle}>
-          <option value="">Todos os gêneros</option>
-          <option value="male">Masculino</option>
-          <option value="female">Feminino</option>
-        </select>
+        <LabSelect value={filtros.gender ?? ""} onChange={(v) => handleFiltroChange("gender", v)} placeholder="Todos os gêneros" options={[
+          { value: "male", label: "Masculino" },
+          { value: "female", label: "Feminino" },
+        ]} />
 
         {temFiltroAtivo && (
           <button

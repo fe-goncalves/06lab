@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { X } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type StaffRole = { id: string; full_name: string };
 
@@ -167,10 +168,8 @@ export function NovoMembroModal({
           {/* Função */}
           <div>
             <span style={labelStyle}>Função</span>
-            <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} style={inputStyle}>
-              <option value="">Selecione…</option>
-              {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
-            </select>
+            <LabSelect value={staffRoleId} onChange={setStaffRoleId} placeholder="Selecione…"
+              options={roles.map((r) => ({ value: r.id, label: r.full_name }))} />
           </div>
 
           {/* Nome completo */}

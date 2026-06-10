@@ -18,6 +18,7 @@ type LabSelectProps = {
   name?: string;
   style?: React.CSSProperties;
   className?: string;
+  autoFocus?: boolean;
 };
 
 export function LabSelect({
@@ -30,6 +31,7 @@ export function LabSelect({
   name,
   style,
   className,
+  autoFocus,
 }: LabSelectProps) {
   return (
     <div className={className} style={{ position: "relative", width: "100%", ...style }}>
@@ -38,6 +40,7 @@ export function LabSelect({
         name={name}
         value={value}
         disabled={disabled}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         style={{
           width: "100%",

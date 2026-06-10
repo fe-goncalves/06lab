@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
@@ -12,6 +12,8 @@ import {
   deletarEdicao,
 } from "../../actions";
 import { Plus, Trash2, X, Pencil } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -23,7 +25,7 @@ type Competition = {
   home_priority: number | null;
 };
 
-type OtherCompetition = { id: string; full_name: string; short_name: string | null };
+type OtherCompetition = { id: string; full_name: string; short_name: string | null; logo_url: string | null };
 type GlobalCategory = { id: string; label: string; display_order: number };
 type Edition = {
   id: string; status: string; season_id: string;
@@ -40,14 +42,210 @@ type Props = {
   seasons: Season[];
 };
 
+// ─── Estilos compartilhados ───────────────────────────────────────────────────
+
+const fieldLabel: React.CSSProperties = {
+  fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
+  letterSpacing: "0.12em", textTransform: "uppercase",
+  color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 6,
+};
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", padding: "9px 12px", borderRadius: 9,
+  border: "1px solid rgba(255,255,255,0.08)",
+  backgroundColor: "rgba(255,255,255,0.04)",
+  color: "var(--color-text-primary)",
+  fontFamily: "var(--font-mono)", fontSize: 12,
+  outline: "none", boxSizing: "border-box",
+  transition: "border-color 0.12s",
+};
+
+const cardStyle: React.CSSProperties = {
+  borderRadius: 16,
+  border: "1px solid rgba(255,255,255,0.06)",
+  backgroundColor: "rgba(255,255,255,0.03)",
+  padding: 20,
+};
+
+function focusBrand(e: React.FocusEvent<HTMLInputElement>) {
+  e.currentTarget.style.borderColor = "#BFF205";
+}
+
+function blurBrand(e: React.FocusEvent<HTMLInputElement>) {
+  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205" }}>
+        {label}
+      </span>
+      <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.25), transparent)" }} />
+    </div>
+  );
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseIds(raw: string | null): string[] {
   if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
+  } catch {
+    // legado: UUIDs separados por vírgula
+  }
   return raw.split(",").map(s => s.trim()).filter(Boolean);
 }
 
-function idsToString(ids: string[]): string { return ids.join(","); }
+function idsToJson(ids: string[]): string {
+  return JSON.stringify(ids);
+}
+
+type DivLinkType = "above" | "below" | "same";
+
+function CompetitionAvatar({ comp }: { comp: OtherCompetition }) {
+  const label = comp.short_name ?? comp.full_name;
+  return (
+    <div style={{
+      width: 32, height: 32, borderRadius: 8, overflow: "hidden", flexShrink: 0,
+      border: "1px solid rgba(255,255,255,0.08)",
+      backgroundColor: "rgba(255,255,255,0.04)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+    }}>
+      {comp.logo_url ? (
+        <img src={comp.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
+      ) : (
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)" }}>
+          {label.slice(0, 2).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function DivisionLinkSection({
+  label,
+  desc,
+  linkedIds,
+  allCompetitions,
+  excludedIds,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  desc: string;
+  linkedIds: string[];
+  allCompetitions: OtherCompetition[];
+  excludedIds: Set<string>;
+  onAdd: (id: string) => void;
+  onRemove: (id: string) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickId, setPickId] = useState("");
+
+  const compById = new Map(allCompetitions.map(c => [c.id, c]));
+  const available = allCompetitions.filter(c => !excludedIds.has(c.id));
+
+  function handleAdd() {
+    if (!pickId) return;
+    onAdd(pickId);
+    setPickId("");
+    setShowPicker(false);
+  }
+
+  return (
+    <div style={cardStyle}>
+      <SectionHeader label={label} />
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 14, marginTop: -8 }}>{desc}</p>
+
+      {linkedIds.length === 0 ? (
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", marginBottom: 12 }}>
+          Nenhuma competição vinculada.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+          {linkedIds.map(id => {
+            const comp = compById.get(id);
+            const displayName = comp?.short_name ?? comp?.full_name ?? id.slice(0, 8);
+            return (
+              <div key={id} style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 10px", borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.06)",
+                backgroundColor: "rgba(255,255,255,0.02)",
+              }}>
+                {comp ? <CompetitionAvatar comp={comp} /> : (
+                  <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.04)", flexShrink: 0 }} />
+                )}
+                <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {displayName}
+                </span>
+                <button type="button" onClick={() => onRemove(id)} title="Remover vínculo" style={{
+                  padding: 6, borderRadius: 8, cursor: "pointer", flexShrink: 0,
+                  border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
+                  color: "rgba(255,255,255,0.35)",
+                }}>
+                  <X size={13} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!showPicker ? (
+        <button type="button" onClick={() => setShowPicker(true)} disabled={available.length === 0}
+          style={{
+            display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "7px 14px", borderRadius: 9, cursor: available.length === 0 ? "not-allowed" : "pointer",
+            border: "1px solid rgba(191,242,5,0.35)", backgroundColor: "rgba(191,242,5,0.06)",
+            color: available.length === 0 ? "rgba(191,242,5,0.3)" : "#BFF205",
+            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            opacity: available.length === 0 ? 0.6 : 1,
+          }}>
+          <Plus size={12} />
+          Vincular
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={fieldLabel}>Selecionar competição</span>
+          <LabSelect
+            value={pickId}
+            onChange={setPickId}
+            placeholder="Escolha uma competição…"
+            options={available.map(c => ({
+              value: c.id,
+              label: c.short_name ?? c.full_name,
+            }))}
+          />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" onClick={() => { setShowPicker(false); setPickId(""); }} style={{
+              flex: 1, padding: "8px 12px", borderRadius: 9, cursor: "pointer",
+              border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+              color: "rgba(255,255,255,0.4)",
+              fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+              letterSpacing: "0.06em", textTransform: "uppercase",
+            }}>
+              Cancelar
+            </button>
+            <button type="button" onClick={handleAdd} disabled={!pickId} style={{
+              flex: 2, padding: "8px 12px", borderRadius: 9, border: "none",
+              backgroundColor: !pickId ? "rgba(191,242,5,0.3)" : "#BFF205",
+              color: "#0a0a0a", cursor: !pickId ? "not-allowed" : "pointer",
+              fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+              letterSpacing: "0.06em", textTransform: "uppercase",
+            }}>
+              Adicionar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 async function extractDominantColors(file: File): Promise<string[]> {
   return new Promise((resolve) => {
@@ -128,9 +326,6 @@ function EdicaoModal({
   const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
   const [saving, setSaving] = useState(false);
 
-  const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-
   const selectedSeason = seasons.find(s => s.id === seasonId);
   const displayName = customName.trim() || (selectedSeason ? selectedSeason.name + (selectedSeason.year_value ? " " + selectedSeason.year_value : "") : "");
 
@@ -140,109 +335,143 @@ function EdicaoModal({
     setSaving(false);
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="w-full max-w-md rounded-xl border shadow-xl"
-        style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
+  const canSubmit = !(mode === "create" && availableSeasons.length === 0);
 
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <h2 className="font-display text-base font-semibold" style={{ color: "var(--color-text-primary)" }}>
-            {mode === "create" ? "Nova edição" : "Editar edição"}
-          </h2>
-          <button type="button" onClick={onClose} style={{ color: "var(--color-text-secondary)" }}>
-            <X size={18} />
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        backgroundColor: "rgba(0,0,0,0.75)",
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          width: "100%", maxWidth: 440, borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.08)",
+          backgroundColor: "#0e0e0e", overflow: "hidden",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+          maxHeight: "92vh", display: "flex", flexDirection: "column",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{
+          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0,
+        }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+              {mode === "create" ? "Nova edição" : "Editar edição"}
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+              {mode === "create" ? "Vincule uma temporada a esta competição" : "Atualize os dados da edição"}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "rgba(255,255,255,0.4)",
+          }}>
+            <X size={14} strokeWidth={2} />
           </button>
         </div>
 
-        {/* Corpo */}
-        <div className="px-5 py-5 flex flex-col gap-4">
-
-          {/* Temporada */}
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Temporada</span>
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div>
+            <span style={fieldLabel}>Temporada</span>
             {mode === "create" && availableSeasons.length === 0 ? (
-              <p className="text-sm rounded-lg border px-3 py-2" style={{ borderColor: "var(--color-border)", color: "#A6A6A6" }}>
+              <p style={{ ...inputStyle, color: "#A6A6A6", margin: 0 }}>
                 Todas as temporadas já têm edição criada.
               </p>
             ) : (
-              <select
+              <LabSelect
                 value={seasonId}
-                onChange={e => setSeasonId(e.target.value)}
+                onChange={setSeasonId}
                 disabled={mode === "edit"}
-                className={inputClass}
-                style={{ ...inputStyle, opacity: mode === "edit" ? 0.6 : 1 }}>
-                {(mode === "create" ? availableSeasons : seasons).map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}{s.year_value ? " \u2014 " + String(s.year_value) : ""}
-                  </option>
-                ))}
-              </select>
+                style={{ opacity: mode === "edit" ? 0.6 : 1 }}
+                options={(mode === "create" ? availableSeasons : seasons).map((s) => ({
+                  value: s.id,
+                  label: `${s.name}${s.year_value ? ` — ${String(s.year_value)}` : ""}`,
+                }))}
+              />
             )}
-          </label>
+          </div>
 
-          {/* Nome customizado */}
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+          <div>
+            <span style={fieldLabel}>
               Nome da edição
-              <span className="ml-1 font-normal text-xs" style={{ color: "#666" }}>(opcional)</span>
+              <span style={{ fontWeight: 400, letterSpacing: "0.06em", color: "rgba(255,255,255,0.25)", marginLeft: 6 }}>(opcional)</span>
             </span>
             <input
               type="text"
               value={customName}
               onChange={e => setCustomName(e.target.value)}
               placeholder={selectedSeason ? selectedSeason.name + (selectedSeason.year_value ? " " + selectedSeason.year_value : "") : "Ex: 2026 I"}
-              className={inputClass}
               style={inputStyle}
+              onFocus={focusBrand}
+              onBlur={blurBrand}
             />
             {displayName && (
-              <p className="text-xs mt-0.5" style={{ color: "#666" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 6, marginBottom: 0 }}>
                 Será exibido como: <strong style={{ color: "var(--color-text-primary)" }}>{displayName}</strong>
               </p>
             )}
-          </label>
+          </div>
 
-          {/* Status */}
-          <label className="flex flex-col gap-1">
-            <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Status</span>
-            <select value={status} onChange={e => setStatus(e.target.value)} className={inputClass} style={inputStyle}>
-              {EDITION_STATUS_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-          </label>
+          <div>
+            <span style={fieldLabel}>Status</span>
+            <LabSelect value={status} onChange={setStatus}
+              options={EDITION_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
+          </div>
 
-          {/* É atual */}
-          <div className="flex items-start gap-3 rounded-lg border p-3 cursor-pointer"
-            style={{ borderColor: isCurrent ? "var(--color-brand)" : "var(--color-border)", backgroundColor: isCurrent ? "rgba(191,242,5,0.05)" : "transparent" }}
-            onClick={() => setIsCurrent(v => !v)}>
-            <div className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 flex items-center justify-center"
-              style={{ borderColor: isCurrent ? "var(--color-brand)" : "var(--color-border)", backgroundColor: isCurrent ? "var(--color-brand)" : "transparent" }}>
-              {isCurrent && <span style={{ fontSize: 10, color: "var(--color-background)", fontWeight: 900 }}>✓</span>}
+          <div
+            style={{
+              display: "flex", alignItems: "flex-start", gap: 12, padding: 12, borderRadius: 10, cursor: "pointer",
+              border: `1px solid ${isCurrent ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`,
+              backgroundColor: isCurrent ? "rgba(191,242,5,0.05)" : "transparent",
+            }}
+            onClick={() => setIsCurrent(v => !v)}
+          >
+            <div style={{
+              marginTop: 2, width: 16, height: 16, flexShrink: 0, borderRadius: 4,
+              border: `2px solid ${isCurrent ? "#BFF205" : "rgba(255,255,255,0.15)"}`,
+              backgroundColor: isCurrent ? "#BFF205" : "transparent",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              {isCurrent && <span style={{ fontSize: 10, color: "#0a0a0a", fontWeight: 900 }}>✓</span>}
             </div>
             <div>
-              <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Edição atual</p>
-              <p className="text-xs mt-0.5" style={{ color: "#666" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Edição atual</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4, marginBottom: 0 }}>
                 Marca esta como a edição em vigor desta competição. Apenas uma pode ser a atual por vez.
               </p>
             </div>
           </div>
-
         </div>
 
-        {/* Footer */}
-        <div className="flex justify-end gap-2 border-t px-5 py-4" style={{ borderColor: "var(--color-border)" }}>
-          <button type="button" onClick={onClose}
-            className="rounded-lg border px-4 py-2 text-sm"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <button type="button" onClick={onClose} style={{
+            flex: 1, padding: 10, borderRadius: 9,
+            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+            color: "rgba(255,255,255,0.4)",
+            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+            letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer",
+          }}>
             Cancelar
           </button>
-          <button type="button" onClick={handleSubmit}
-            disabled={saving || (mode === "create" && availableSeasons.length === 0)}
-            className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+          <button type="button" onClick={handleSubmit} disabled={saving || !canSubmit} style={{
+            flex: 2, padding: 10, borderRadius: 9, border: "none",
+            backgroundColor: saving || !canSubmit ? "rgba(191,242,5,0.3)" : "#BFF205",
+            color: "#0a0a0a",
+            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+            letterSpacing: "0.08em", textTransform: "uppercase",
+            cursor: saving || !canSubmit ? "not-allowed" : "pointer",
+          }}>
             {saving ? (mode === "create" ? "Criando…" : "Salvando…") : (mode === "create" ? "Criar edição" : "Salvar")}
           </button>
         </div>
@@ -257,7 +486,6 @@ export default function ConfiguracoesCompeticaoClient({
   competition, allCompetitions, globalCategories, editions: initialEditions, seasons,
 }: Props) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<"geral" | "divisoes" | "temporadas">("geral");
 
@@ -271,15 +499,15 @@ export default function ConfiguracoesCompeticaoClient({
   const [extractingColors, setExtractingColors] = useState(false);
   const [logoUrl] = useState(competition.logo_url ?? null);
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
-  const [previewLogo, setPreviewLogo] = useState<string | null>(null);
+  const [headerLogoUrl, setHeaderLogoUrl] = useState<string | null>(competition.logo_url ?? null);
   const [categoryId, setCategoryId] = useState(competition.category_id ?? "");
   const [homePriority, setHomePriority] = useState(competition.home_priority ?? 0);
   const [saving, setSaving] = useState(false);
 
   // Divisões
-  const [divAbove, setDivAbove] = useState<string[]>(parseIds(competition.division_above_ids));
-  const [divBelow, setDivBelow] = useState<string[]>(parseIds(competition.division_below_ids));
-  const [divSame, setDivSame] = useState<string[]>(parseIds(competition.division_same_ids));
+  const [aboveIds, setAboveIds] = useState<string[]>(() => parseIds(competition.division_above_ids));
+  const [belowIds, setBelowIds] = useState<string[]>(() => parseIds(competition.division_below_ids));
+  const [sameIds, setSameIds] = useState<string[]>(() => parseIds(competition.division_same_ids));
 
   // Edições
   const [editions, setEditions] = useState<Edition[]>(initialEditions);
@@ -287,13 +515,19 @@ export default function ConfiguracoesCompeticaoClient({
   const [editingEdition, setEditingEdition] = useState<Edition | null>(null);
   const [deletingEditionId, setDeletingEditionId] = useState<string | null>(null);
 
-  const inputClass = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const inputStyle = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
-  const displayLogo = previewLogo ?? logoUrl;
+  const displayLogo = headerLogoUrl;
   const usedSeasonIds = new Set(editions.map(e => e.season_id));
-  const availableSeasons = seasons.filter(s => !usedSeasonIds.has(s.id));
 
-  // Ordenação: ano desc, depois nome desc
+  useEffect(() => {
+    if (!pendingLogo) {
+      setHeaderLogoUrl(logoUrl);
+      return;
+    }
+    const url = URL.createObjectURL(pendingLogo);
+    setHeaderLogoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [pendingLogo, logoUrl]);
+
   const sortedEditions = [...editions].sort((a, b) => {
     if (b.year_value !== a.year_value) return b.year_value - a.year_value;
     const nameA = a.custom_name ?? a.season_name;
@@ -301,21 +535,33 @@ export default function ConfiguracoesCompeticaoClient({
     return nameB.localeCompare(nameA);
   });
 
-  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setPendingLogo(f);
-    setPreviewLogo(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(f); });
+  async function handlePendingLogoChange(file: File | null) {
+    setPendingLogo(file);
+    if (!file) {
+      setSuggestedColors([]);
+      return;
+    }
     setExtractingColors(true);
     setSuggestedColors([]);
-    const colors = await extractDominantColors(f);
+    const colors = await extractDominantColors(file);
     setSuggestedColors(colors);
     setExtractingColors(false);
     if (colors.length > 0 && !primaryColor) setPrimaryColor(colors[0]);
   }
 
-  function toggleDiv(_list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>, id: string) {
-    setList(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const allLinkedIds = new Set([...aboveIds, ...belowIds, ...sameIds]);
+
+  function addLink(type: DivLinkType, id: string) {
+    if (allLinkedIds.has(id)) return;
+    if (type === "above") setAboveIds(prev => [...prev, id]);
+    if (type === "below") setBelowIds(prev => [...prev, id]);
+    if (type === "same") setSameIds(prev => [...prev, id]);
+  }
+
+  function removeLink(type: DivLinkType, id: string) {
+    if (type === "above") setAboveIds(prev => prev.filter(i => i !== id));
+    if (type === "below") setBelowIds(prev => prev.filter(i => i !== id));
+    if (type === "same") setSameIds(prev => prev.filter(i => i !== id));
   }
 
   async function handleSave() {
@@ -327,15 +573,16 @@ export default function ConfiguracoesCompeticaoClient({
     fd.append("pinned_in_sidebar", String(pinned));
     fd.append("primary_color", primaryColor.trim());
     fd.append("category_id", categoryId);
-    fd.append("division_above_ids", idsToString(divAbove));
-    fd.append("division_below_ids", idsToString(divBelow));
-    fd.append("division_same_ids", idsToString(divSame));
+    fd.append("division_above_ids", idsToJson(aboveIds));
+    fd.append("division_below_ids", idsToJson(belowIds));
+    fd.append("division_same_ids", idsToJson(sameIds));
     fd.append("home_priority", String(homePriority));
     if (pendingLogo) fd.append("logo", pendingLogo);
     const result = await editarCompeticao(competition.id, fd);
     setSaving(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Competição salva.");
+    setPendingLogo(null);
     router.refresh();
   }
 
@@ -386,44 +633,73 @@ export default function ConfiguracoesCompeticaoClient({
   ];
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#0e0e0e" }}>
 
       {/* Header */}
-      <div className="border-b" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <div className="px-8 pt-6 pb-0">
+      <div style={{ backgroundColor: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ padding: "20px 32px 0" }}>
           <Breadcrumb items={[
             { label: "Competições", href: "/competicoes" },
             { label: competition.full_name ?? "Competição", href: "/competicoes/" + competition.id },
             { label: "Configurações" },
           ]} />
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 16, marginBottom: 16 }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 12, overflow: "hidden",
+              border: "2px solid rgba(191,242,5,0.3)",
+              backgroundColor: "rgba(255,255,255,0.04)",
+              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+            }}>
               {displayLogo ? (
-                <img src={displayLogo} alt="" className="h-10 w-10 rounded-lg object-contain border" style={{ borderColor: "var(--color-border)" }} />
+                <img src={displayLogo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg border text-sm font-bold"
-                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)", color: "var(--color-text-primary)" }}>
-                  {fullName.slice(0, 2).toUpperCase()}
-                </div>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
+                  {(shortName || fullName).slice(0, 2).toUpperCase()}
+                </span>
               )}
-              <div>
-                <h1 className="font-display text-xl font-semibold" style={{ color: "var(--color-text-primary)" }}>{fullName || "Competição"}</h1>
-                <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{gender === "male" ? "Masculino" : "Feminino"}</p>
-              </div>
             </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 900, color: "var(--color-text-primary)", margin: 0, lineHeight: 1.1 }}>
+                {(fullName || "Competição").toUpperCase()}
+              </h1>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 3, display: "block" }}>
+                {gender === "male" ? "MASCULINO" : "FEMININO"} · CONFIGURAÇÕES
+              </span>
+            </div>
+
             {(activeTab === "geral" || activeTab === "divisoes") && (
-              <button type="button" onClick={handleSave} disabled={saving}
-                className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !fullName.trim()}
+                style={{
+                  padding: "9px 18px", borderRadius: 9, border: "none", flexShrink: 0,
+                  backgroundColor: saving || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205",
+                  color: "#0a0a0a",
+                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                  letterSpacing: "0.08em", textTransform: "uppercase",
+                  cursor: saving || !fullName.trim() ? "not-allowed" : "pointer",
+                  transition: "all 0.12s",
+                }}
+              >
                 {saving ? "Salvando…" : "Salvar alterações"}
               </button>
             )}
           </div>
-          <div className="flex gap-6">
+
+          <div style={{ display: "flex", gap: 24 }}>
             {tabs.map(tab => (
               <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-                className="border-b-2 pb-3 font-mono text-xs transition-colors"
-                style={{ borderColor: activeTab === tab.key ? "var(--color-brand)" : "transparent", color: activeTab === tab.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                style={{
+                  padding: "0 0 12px", border: "none", background: "none", cursor: "pointer",
+                  borderBottom: `2px solid ${activeTab === tab.key ? "#BFF205" : "transparent"}`,
+                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                  letterSpacing: "0.12em", textTransform: "uppercase",
+                  color: activeTab === tab.key ? "#BFF205" : "rgba(255,255,255,0.3)",
+                  transition: "color 0.12s",
+                }}>
                 {tab.label}
               </button>
             ))}
@@ -431,66 +707,76 @@ export default function ConfiguracoesCompeticaoClient({
         </div>
       </div>
 
-      <div className="flex-1 px-8 py-8">
+      <div style={{ flex: 1, padding: "24px 32px" }}>
 
         {/* ══ GERAL ══ */}
         {activeTab === "geral" && (
-          <div className="grid gap-6 lg:grid-cols-2 max-w-4xl">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, alignItems: "start", maxWidth: 960 }}>
 
             {/* Identidade Visual */}
-            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Identidade Visual</h2>
-              <div className="mb-4 flex justify-center">
-                {displayLogo ? (
-                  <img src={displayLogo} alt="" className="h-28 w-28 rounded-xl border object-contain" style={{ borderColor: "var(--color-border)" }} />
-                ) : (
-                  <div className="flex h-28 w-28 items-center justify-center rounded-xl border text-2xl font-bold"
-                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" }}>
-                    {fullName.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
+            <div style={cardStyle}>
+              <SectionHeader label="Logo" />
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 20 }}>
+                <ImageCropUpload
+                  value={pendingLogo}
+                  onChange={handlePendingLogoChange}
+                  existingUrl={logoUrl}
+                  label=""
+                  placeholder="Enviar logo"
+                  aspect={1}
+                  accept="image/png,image/webp,image/jpeg"
+                />
               </div>
-              <input ref={fileRef} type="file" accept="image/png,image/webp,image/svg+xml,image/jpeg" className="hidden" onChange={handleLogoChange} />
-              <button type="button" onClick={() => fileRef.current?.click()}
-                className="w-full rounded-lg border px-3 py-2 text-sm font-medium mb-5"
-                style={{ borderColor: "var(--color-border)", color: "var(--color-text-primary)" }}>
-                Trocar logo
-              </button>
 
-              <p className="mb-2 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Cor principal</p>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="h-9 w-9 rounded-lg border-2 shrink-0 transition-colors"
-                  style={{ borderColor: primaryColor || "var(--color-border)", backgroundColor: primaryColor || "var(--color-background)" }} />
+              <SectionHeader label="Cor principal" />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                  border: `2px solid ${primaryColor || "rgba(255,255,255,0.08)"}`,
+                  backgroundColor: primaryColor || "rgba(255,255,255,0.04)",
+                }} />
                 <input type="text" value={primaryColor}
                   onChange={e => setPrimaryColor(e.target.value)}
-                  onBlur={e => { let v = e.target.value.trim(); if (v && !v.startsWith("#")) v = "#" + v; setPrimaryColor(v); }}
+                  onFocus={focusBrand}
+                  onBlur={e => {
+                    blurBrand(e);
+                    let v = e.target.value.trim();
+                    if (v && !v.startsWith("#")) v = "#" + v;
+                    setPrimaryColor(v);
+                  }}
                   placeholder="#RRGGBB" maxLength={7}
-                  className={inputClass + " flex-1 font-mono text-sm"} style={inputStyle} />
+                  style={{ ...inputStyle, flex: 1 }}
+                />
                 <input type="color"
                   value={primaryColor && /^#[0-9a-fA-F]{6}$/.test(primaryColor) ? primaryColor : "#000000"}
                   onChange={e => setPrimaryColor(e.target.value)}
-                  className="h-9 w-9 shrink-0 cursor-pointer rounded-lg border p-0.5"
-                  style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }} />
+                  style={{ width: 36, height: 36, flexShrink: 0, cursor: "pointer", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", padding: 2, backgroundColor: "rgba(255,255,255,0.04)" }}
+                />
                 {primaryColor && (
                   <button type="button" onClick={() => { setPrimaryColor(""); setSuggestedColors([]); }}
-                    className="shrink-0 rounded-lg border p-2"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                    style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     <X size={14} />
                   </button>
                 )}
               </div>
-              {extractingColors && <p className="font-mono text-xs mb-2" style={{ color: "#666" }}>Analisando cores da logo…</p>}
+              {extractingColors && (
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>Analisando cores da logo…</p>
+              )}
               {suggestedColors.length > 0 && (
                 <div>
-                  <p className="mb-2 font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Cores detectadas — clique para selecionar:</p>
-                  <div className="flex gap-2 flex-wrap">
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
+                    Cores detectadas
+                  </p>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     {suggestedColors.map(c => (
                       <button key={c} type="button" onClick={() => setPrimaryColor(c)} title={c}
-                        className="relative h-8 w-8 rounded-lg transition-transform hover:scale-110"
-                        style={{ backgroundColor: c, boxShadow: primaryColor === c ? "0 0 0 2px var(--color-brand), 0 0 0 4px var(--color-background)" : "0 0 0 1px rgba(255,255,255,0.15)" }}>
+                        style={{
+                          position: "relative", width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                          backgroundColor: c,
+                          boxShadow: primaryColor === c ? "0 0 0 2px #BFF205, 0 0 0 4px #0e0e0e" : "0 0 0 1px rgba(255,255,255,0.15)",
+                        }}>
                         {primaryColor === c && (
-                          <span className="absolute inset-0 flex items-center justify-center font-bold"
-                            style={{ fontSize: 12, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>✓</span>
+                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>✓</span>
                         )}
                       </button>
                     ))}
@@ -500,56 +786,65 @@ export default function ConfiguracoesCompeticaoClient({
             </div>
 
             {/* Dados */}
-            <div className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-              <h2 className="mb-4 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Dados</h2>
-              <div className="flex flex-col gap-4">
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome completo</span>
-                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} className={inputClass} style={inputStyle} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Nome curto</span>
-                  <input type="text" value={shortName} onChange={e => setShortName(e.target.value)} className={inputClass} style={inputStyle} />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Gênero</span>
-                  <select value={gender} onChange={e => setGender(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="male">Masculino</option>
-                    <option value="female">Feminino</option>
-                  </select>
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Categoria</span>
-                  <select value={categoryId} onChange={e => setCategoryId(e.target.value)} className={inputClass} style={inputStyle}>
-                    <option value="">Sem categoria</option>
-                    {globalCategories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.label}</option>
-                    ))}
-                  </select>
-                  {globalCategories.length === 0 && (
-                    <p className="text-xs mt-1" style={{ color: "#666" }}>Nenhuma categoria cadastrada. Crie em Configurações do sistema.</p>
-                  )}
-                </label>
-                <div className="flex items-center gap-3 cursor-pointer pt-1" onClick={() => setPinned(v => !v)}>
-                  <div className="relative h-5 w-9 rounded-full transition-colors shrink-0"
-                    style={{ backgroundColor: pinned ? "var(--color-brand)" : "var(--color-border)" }}>
-                    <div className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform"
-                      style={{ transform: pinned ? "translateX(16px)" : "translateX(2px)" }} />
-                  </div>
-                  <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Fixar na sidebar</span>
+            <div style={cardStyle}>
+              <SectionHeader label="Dados" />
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div>
+                  <span style={fieldLabel}>Nome completo</span>
+                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
                 </div>
-                <label className="flex flex-col gap-1">
-                  <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Prioridade na home (maior = primeiro)</span>
+                <div>
+                  <span style={fieldLabel}>Nome curto</span>
+                  <input type="text" value={shortName} onChange={e => setShortName(e.target.value)} style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
+                </div>
+                <div>
+                  <span style={fieldLabel}>Gênero</span>
+                  <LabSelect value={gender} onChange={setGender} options={[
+                    { value: "male", label: "Masculino" },
+                    { value: "female", label: "Feminino" },
+                  ]} />
+                </div>
+                <div>
+                  <span style={fieldLabel}>Categoria</span>
+                  <LabSelect value={categoryId} onChange={setCategoryId} placeholder="Sem categoria"
+                    options={globalCategories.map((cat) => ({ value: cat.id, label: cat.label }))} />
+                  {globalCategories.length === 0 && (
+                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>
+                      Nenhuma categoria cadastrada. Crie em Configurações do sistema.
+                    </p>
+                  )}
+                </div>
+                <div
+                  style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", paddingTop: 4 }}
+                  onClick={() => setPinned(v => !v)}
+                >
+                  <div style={{
+                    position: "relative", width: 36, height: 20, borderRadius: 10, flexShrink: 0,
+                    backgroundColor: pinned ? "#BFF205" : "rgba(255,255,255,0.1)",
+                    transition: "background-color 0.12s",
+                  }}>
+                    <div style={{
+                      position: "absolute", top: 2, width: 16, height: 16, borderRadius: "50%", backgroundColor: "#fff",
+                      transition: "transform 0.12s",
+                      transform: pinned ? "translateX(18px)" : "translateX(2px)",
+                    }} />
+                  </div>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }}>Fixar na sidebar</span>
+                </div>
+                <div style={{ maxWidth: 160 }}>
+                  <span style={fieldLabel}>Prioridade na home</span>
                   <input
                     type="number"
                     min={0}
                     value={homePriority}
                     onChange={e => setHomePriority(Number(e.target.value))}
                     placeholder="0"
-                    className={inputClass}
                     style={inputStyle}
+                    onFocus={focusBrand}
+                    onBlur={blurBrand}
                   />
-                </label>
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 4 }}>Maior = primeiro</p>
+                </div>
               </div>
             </div>
 
@@ -558,51 +853,48 @@ export default function ConfiguracoesCompeticaoClient({
 
         {/* ══ DIVISÕES ══ */}
         {activeTab === "divisoes" && (
-          <div className="max-w-2xl">
-            <p className="mb-6 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 20 }}>
               Defina quais outras competições se relacionam com esta por divisão.
             </p>
             {allCompetitions.length === 0 ? (
-              <div className="rounded-xl border p-8 text-center" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                <p className="text-sm font-medium mb-1" style={{ color: "var(--color-text-primary)" }}>Nenhuma outra competição disponível</p>
-                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Para vincular divisões, cadastre pelo menos uma outra competição nesta organização.</p>
+              <div style={{ ...cardStyle, textAlign: "center", padding: "32px 20px" }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 6 }}>
+                  Nenhuma outra competição disponível
+                </p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
+                  Para vincular divisões, cadastre pelo menos uma outra competição nesta organização.
+                </p>
               </div>
             ) : (
-              <div className="flex flex-col gap-4">
-                {[
-                  { label: "DIVISÃO SUPERIOR", desc: "Competições de nível acima desta.", list: divAbove, setList: setDivAbove },
-                  { label: "MESMA DIVISÃO", desc: "Competições no mesmo nível.", list: divSame, setList: setDivSame },
-                  { label: "DIVISÃO INFERIOR", desc: "Competições de nível abaixo desta.", list: divBelow, setList: setDivBelow },
-                ].map(div => (
-                  <div key={div.label} className="rounded-xl border p-5" style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-                    <p className="font-mono text-xs uppercase tracking-widest mb-1" style={{ color: "var(--color-text-secondary)" }}>{div.label}</p>
-                    <p className="text-xs mb-4" style={{ color: "#666" }}>{div.desc}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {allCompetitions.map(c => {
-                        const active = div.list.includes(c.id);
-                        return (
-                          <button key={c.id} type="button"
-                            onClick={() => toggleDiv(div.list, div.setList, c.id)}
-                            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-mono transition-all"
-                            style={{
-                              borderColor: active ? "var(--color-brand)" : "var(--color-border)",
-                              backgroundColor: active ? "rgba(191,242,5,0.12)" : "transparent",
-                              color: active ? "var(--color-brand)" : "var(--color-text-secondary)",
-                              fontWeight: active ? 700 : 400,
-                            }}>
-                            {active && <span style={{ fontSize: 10 }}>✓</span>}
-                            {c.short_name ?? c.full_name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {div.list.length > 0 && (
-                      <p className="mt-3 text-xs" style={{ color: "var(--color-brand)" }}>
-                        {div.list.length} selecionada{div.list.length > 1 ? "s" : ""}
-                      </p>
-                    )}
-                  </div>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <DivisionLinkSection
+                  label="Acima"
+                  desc="Competições de nível superior a esta."
+                  linkedIds={aboveIds}
+                  allCompetitions={allCompetitions}
+                  excludedIds={allLinkedIds}
+                  onAdd={(id) => addLink("above", id)}
+                  onRemove={(id) => removeLink("above", id)}
+                />
+                <DivisionLinkSection
+                  label="Mesmo nível"
+                  desc="Competições equivalentes nesta hierarquia."
+                  linkedIds={sameIds}
+                  allCompetitions={allCompetitions}
+                  excludedIds={allLinkedIds}
+                  onAdd={(id) => addLink("same", id)}
+                  onRemove={(id) => removeLink("same", id)}
+                />
+                <DivisionLinkSection
+                  label="Abaixo"
+                  desc="Competições de nível inferior a esta."
+                  linkedIds={belowIds}
+                  allCompetitions={allCompetitions}
+                  excludedIds={allLinkedIds}
+                  onAdd={(id) => addLink("below", id)}
+                  onRemove={(id) => removeLink("below", id)}
+                />
               </div>
             )}
           </div>
@@ -610,75 +902,96 @@ export default function ConfiguracoesCompeticaoClient({
 
         {/* ══ EDIÇÕES ══ */}
         {activeTab === "temporadas" && (
-          <div className="max-w-xl">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
+          <div style={{ maxWidth: 560 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", margin: 0 }}>
                 Cada edição representa esta competição em uma temporada específica.
               </p>
               <button type="button" onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-mono shrink-0"
-                style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+                  padding: "8px 14px", borderRadius: 9, cursor: "pointer",
+                  border: "1px solid rgba(191,242,5,0.4)", backgroundColor: "rgba(191,242,5,0.08)",
+                  color: "#BFF205",
+                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
+                  letterSpacing: "0.08em", textTransform: "uppercase",
+                }}>
                 <Plus size={13} />
                 Nova edição
               </button>
             </div>
 
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
+            <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.03)", overflow: "hidden" }}>
               {sortedEditions.length === 0 && (
-                <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                <p style={{ padding: "32px 20px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0 }}>
                   Nenhuma edição cadastrada para esta competição.
                 </p>
               )}
               {sortedEditions.map((ed, idx) => {
-                const displayName = ed.custom_name ?? (ed.season_name + (ed.year_value ? " " + ed.year_value : ""));
+                const edDisplayName = ed.custom_name ?? (ed.season_name + (ed.year_value ? " " + ed.year_value : ""));
                 return (
                   <Link
                     key={ed.id}
                     href={"/competicoes/" + competition.id + "?edicao=" + ed.id}
-                    className="group flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
-                    style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", textDecoration: "none" }}>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                          {displayName}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+                      padding: "16px 20px", textDecoration: "none",
+                      borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                      transition: "background-color 0.12s",
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)")}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
+                  >
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                          {edDisplayName}
                         </p>
                         {ed.is_current && (
-                          <span className="font-mono text-xs rounded px-1.5 py-0.5"
-                            style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>
-                            atual
+                          <span style={{
+                            fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+                            padding: "2px 8px", borderRadius: 20,
+                            backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
+                            border: "1px solid rgba(191,242,5,0.2)",
+                          }}>
+                            ATUAL
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="font-mono text-xs rounded px-2 py-0.5"
-                          style={{
-                            backgroundColor: ed.status === "ongoing" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                            color: STATUS_COLOR[ed.status] ?? "#A6A6A6",
-                          }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                        <span style={{
+                          fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
+                          padding: "2px 8px", borderRadius: 6,
+                          backgroundColor: ed.status === "ongoing" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.06)",
+                          color: STATUS_COLOR[ed.status] ?? "#A6A6A6",
+                        }}>
                           {EDITION_STATUS_OPTIONS.find(o => o.value === ed.status)?.label ?? ed.status}
                         </span>
                         {ed.year_value > 0 && (
-                          <span className="font-mono text-xs" style={{ color: "#555" }}>{ed.year_value}</span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{ed.year_value}</span>
                         )}
                       </div>
                     </div>
 
-                    {/* Ações */}
-                    <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}
                       onClick={e => e.preventDefault()}>
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingEdition(ed); }}
-                        className="rounded border p-1.5"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
+                        style={{
+                          padding: 6, borderRadius: 8, cursor: "pointer",
+                          border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
+                          color: "rgba(255,255,255,0.4)",
+                        }}>
                         <Pencil size={13} />
                       </button>
                       <button type="button"
                         onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteEdition(ed.id); }}
                         disabled={deletingEditionId === ed.id}
-                        className="rounded border p-1.5 disabled:opacity-40"
-                        style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
+                        style={{
+                          padding: 6, borderRadius: 8, cursor: deletingEditionId === ed.id ? "not-allowed" : "pointer",
+                          border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
+                          color: "#FF4444", opacity: deletingEditionId === ed.id ? 0.4 : 1,
+                        }}>
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -691,7 +1004,6 @@ export default function ConfiguracoesCompeticaoClient({
 
       </div>
 
-      {/* Modal — Criar edição */}
       {showCreateModal && (
         <EdicaoModal
           mode="create"
@@ -702,7 +1014,6 @@ export default function ConfiguracoesCompeticaoClient({
         />
       )}
 
-      {/* Modal — Editar edição */}
       {editingEdition && (
         <EdicaoModal
           mode="edit"

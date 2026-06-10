@@ -9,6 +9,7 @@ import {
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
@@ -522,10 +523,8 @@ export default function MembroPage() {
                   </div>
                   <div>
                     <span style={labelStyle}>Função</span>
-                    <select value={staffRoleId} onChange={e => setStaffRoleId(e.target.value)} style={inputStyle}>
-                      <option value="">Selecione…</option>
-                      {roles.map(r => <option key={r.id} value={r.id}>{r.full_name}</option>)}
-                    </select>
+                    <LabSelect value={staffRoleId} onChange={setStaffRoleId} placeholder="Selecione…"
+                      options={roles.map((r) => ({ value: r.id, label: r.full_name }))} />
                   </div>
                   <div>
                     <span style={labelStyle}>RG</span>
@@ -599,10 +598,9 @@ export default function MembroPage() {
                       </button>
                     ) : (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        <select value={transferTeamId} onChange={e => setTransferTeamId(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
-                          <option value="">Selecione a equipe…</option>
-                          {teams.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                        </select>
+                        <LabSelect value={transferTeamId} onChange={setTransferTeamId} placeholder="Selecione a equipe…"
+                          style={{ flex: 1 }}
+                          options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
                         <button type="button" onClick={handleVincular} disabled={!transferTeamId || transferring} style={{
                           padding: "9px 16px", borderRadius: 9, border: "none",
                           backgroundColor: transferring ? "rgba(191,242,5,0.3)" : accentColor,
@@ -659,16 +657,13 @@ export default function MembroPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
                     <div>
                       <span style={labelStyle}>Equipe *</span>
-                      <select value={addStintTeamId} onChange={e => setAddStintTeamId(e.target.value)} style={inputStyle}>
-                        <option value="">Selecione…</option>
-                        {teams.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                      </select>
+                      <LabSelect value={addStintTeamId} onChange={setAddStintTeamId} placeholder="Selecione…"
+                        options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
                     </div>
                     <div>
                       <span style={labelStyle}>Tipo</span>
-                      <select value={addStintMovement} onChange={e => setAddStintMovement(e.target.value)} style={inputStyle}>
-                        {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
+                      <LabSelect value={addStintMovement} onChange={setAddStintMovement}
+                        options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
                     </div>
                     <div>
                       <span style={labelStyle}>Início *</span>
@@ -725,9 +720,8 @@ export default function MembroPage() {
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
                           <div>
                             <span style={labelStyle}>Tipo</span>
-                            <select value={editStintMovement} onChange={e => setEditStintMovement(e.target.value)} style={inputStyle}>
-                              {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                            </select>
+                            <LabSelect value={editStintMovement} onChange={setEditStintMovement}
+                              options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
                           </div>
                           <div>
                             <span style={labelStyle}>Início</span>

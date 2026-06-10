@@ -3,6 +3,7 @@
 import { editarCompeticao } from "../actions";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type Competition = {
   id: string;
@@ -136,24 +137,20 @@ export default function CompeticaoEditForm({ competition, allCompetitions }: Pro
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Gênero</span>
-                <select value={gender} onChange={e => setGender(e.target.value)} className={inputClass} style={inputStyle}>
-                  <option value="male">Masculino</option>
-                  <option value="female">Feminino</option>
-                </select>
+                <LabSelect value={gender} onChange={setGender} options={[
+                  { value: "male", label: "Masculino" },
+                  { value: "female", label: "Feminino" },
+                ]} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Divisão superior</span>
-                <select value={divisionAboveId} onChange={e => setDivisionAboveId(e.target.value)} className={inputClass} style={inputStyle}>
-                  <option value="">Nenhuma</option>
-                  {allCompetitions.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
+                <LabSelect value={divisionAboveId} onChange={setDivisionAboveId} placeholder="Nenhuma"
+                  options={allCompetitions.map((c) => ({ value: c.id, label: c.full_name }))} />
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Divisão inferior</span>
-                <select value={divisionBelowId} onChange={e => setDivisionBelowId(e.target.value)} className={inputClass} style={inputStyle}>
-                  <option value="">Nenhuma</option>
-                  {allCompetitions.map(c => <option key={c.id} value={c.id}>{c.full_name}</option>)}
-                </select>
+                <LabSelect value={divisionBelowId} onChange={setDivisionBelowId} placeholder="Nenhuma"
+                  options={allCompetitions.map((c) => ({ value: c.id, label: c.full_name }))} />
               </label>
               <label className="flex items-center gap-3 cursor-pointer">
                 <input type="checkbox" checked={pinnedInSidebar} onChange={e => setPinnedInSidebar(e.target.checked)} className="h-4 w-4" />

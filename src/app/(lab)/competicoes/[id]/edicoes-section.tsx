@@ -4,6 +4,7 @@ import { criarEdicao } from "./edicoes/actions";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type Season = { id: string; name: string; year_value: number };
 type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number };
@@ -58,11 +59,11 @@ export default function EdicoesSection({ competitionId, seasons, editions: initi
           style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
           <label className="flex flex-col gap-1">
             <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Temporada</span>
-            <select value={seasonId} onChange={e => setSeasonId(e.target.value)} className={inputClass} style={inputStyle}>
-              {seasons.map(s => (
-                <option key={s.id} value={s.id}>{s.year_value} — {s.name}</option>
-              ))}
-            </select>
+            <LabSelect
+              value={seasonId}
+              onChange={setSeasonId}
+              options={seasons.map((s) => ({ value: s.id, label: `${s.year_value} — ${s.name}` }))}
+            />
           </label>
           <button type="button" onClick={handleCreate} disabled={loading || !seasonId}
             className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"

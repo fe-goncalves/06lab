@@ -5,6 +5,7 @@
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint, toggleStintAtivo } from "../actions";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -616,11 +617,8 @@ export default function AtletaPage() {
                   </button>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <select value={transferTeamId} onChange={e => setTransferTeamId(e.target.value)}
-                      style={{ ...inputBaseStyle, cursor: "pointer" }}>
-                      <option value="">Selecione a equipe…</option>
-                      {teams.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                    </select>
+                    <LabSelect value={transferTeamId} onChange={setTransferTeamId} placeholder="Selecione a equipe…"
+                      options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
                     <div style={{ display: "flex", gap: 8 }}>
                       <button type="button" onClick={handleVincular} disabled={!transferTeamId || transferring}
                         style={{ flex: 2, padding: "8px", borderRadius: 8, border: "none", backgroundColor: !transferTeamId || transferring ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: !transferTeamId || transferring ? "not-allowed" : "pointer" }}>
@@ -672,11 +670,8 @@ export default function AtletaPage() {
                   {/* Posição */}
                   <div>
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Posição</span>
-                    <select value={positionId} onChange={e => setPositionId(e.target.value)}
-                      style={{ ...inputBaseStyle, cursor: "pointer" }}>
-                      <option value="">—</option>
-                      {positions.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                    </select>
+                    <LabSelect value={positionId} onChange={setPositionId} placeholder="—"
+                      options={positions.map((p) => ({ value: p.id, label: p.full_name }))} />
                   </div>
 
                   {/* Data de nascimento */}
@@ -734,18 +729,13 @@ export default function AtletaPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Equipe *</span>
-                      <select value={addStintTeamId} onChange={e => setAddStintTeamId(e.target.value)}
-                        style={{ ...inputBaseStyle, cursor: "pointer" }}>
-                        <option value="">Selecione…</option>
-                        {teams.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-                      </select>
+                      <LabSelect value={addStintTeamId} onChange={setAddStintTeamId} placeholder="Selecione…"
+                        options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
                     </div>
                     <div>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Tipo</span>
-                      <select value={addStintMovement} onChange={e => setAddStintMovement(e.target.value)}
-                        style={{ ...inputBaseStyle, cursor: "pointer" }}>
-                        {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                      </select>
+                      <LabSelect value={addStintMovement} onChange={setAddStintMovement}
+                        options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
                     </div>
                     <div>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Início *</span>
@@ -794,10 +784,8 @@ export default function AtletaPage() {
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
                           <div>
                             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Tipo</span>
-                            <select value={editStintMovement} onChange={e => setEditStintMovement(e.target.value)}
-                              style={{ ...inputBaseStyle, cursor: "pointer" }}>
-                              {Object.entries(MOVEMENT_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                            </select>
+                            <LabSelect value={editStintMovement} onChange={setEditStintMovement}
+                              options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
                           </div>
                           <div>
                             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Início</span>
@@ -986,16 +974,8 @@ export default function AtletaPage() {
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
                           Clube
                         </span>
-                        <select
-                          value={filterTeamId}
-                          onChange={e => setFilterTeamId(e.target.value)}
-                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterTeamId ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
-                        >
-                          <option value="">Todos</option>
-                          {statsTeamOptions.map(t => (
-                            <option key={t.id} value={t.id}>{t.name}</option>
-                          ))}
-                        </select>
+                        <LabSelect value={filterTeamId} onChange={setFilterTeamId} placeholder="Todos"
+                          options={statsTeamOptions.map((t) => ({ value: t.id, label: t.name }))} />
                       </div>
 
                       {/* Filtro — Ano */}
@@ -1003,16 +983,8 @@ export default function AtletaPage() {
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
                           Ano
                         </span>
-                        <select
-                          value={filterYear}
-                          onChange={e => setFilterYear(e.target.value)}
-                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterYear ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
-                        >
-                          <option value="">Todos</option>
-                          {statsYearOptions.map(y => (
-                            <option key={y} value={String(y)}>{y}</option>
-                          ))}
-                        </select>
+                        <LabSelect value={filterYear} onChange={setFilterYear} placeholder="Todos"
+                          options={statsYearOptions.map((y) => ({ value: String(y), label: String(y) }))} />
                       </div>
 
                       {/* Filtro — Temporada */}
@@ -1020,16 +992,8 @@ export default function AtletaPage() {
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
                           Temporada
                         </span>
-                        <select
-                          value={filterSeason}
-                          onChange={e => setFilterSeason(e.target.value)}
-                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterSeason ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
-                        >
-                          <option value="">Todas</option>
-                          {statsSeasonOptions.map(s => (
-                            <option key={s} value={s}>{s}</option>
-                          ))}
-                        </select>
+                        <LabSelect value={filterSeason} onChange={setFilterSeason} placeholder="Todas"
+                          options={statsSeasonOptions.map((s) => ({ value: s, label: s }))} />
                       </div>
 
                       {/* Filtro — Competição */}
@@ -1037,16 +1001,8 @@ export default function AtletaPage() {
                         <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
                           Competição
                         </span>
-                        <select
-                          value={filterCompetition}
-                          onChange={e => setFilterCompetition(e.target.value)}
-                          style={{ ...inputBaseStyle, cursor: "pointer", padding: "7px 10px", borderColor: filterCompetition ? `${accentColor}55` : "rgba(255,255,255,0.08)" }}
-                        >
-                          <option value="">Todas</option>
-                          {statsCompetitionOptions.map(c => (
-                            <option key={c.full} value={c.full}>{c.short}</option>
-                          ))}
-                        </select>
+                        <LabSelect value={filterCompetition} onChange={setFilterCompetition} placeholder="Todas"
+                          options={statsCompetitionOptions.map((c) => ({ value: c.full, label: c.short }))} />
                       </div>
 
                     </div>

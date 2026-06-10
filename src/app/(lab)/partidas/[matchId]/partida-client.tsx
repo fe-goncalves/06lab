@@ -4,21 +4,9 @@
 
 import { adicionarAcao, editarAcao, deletarAcao, editarPartida, salvarFormacoes, publicarResultado, salvarArbitrosPartida, salvarFaltas, adicionarShootout, deletarShootout, encerrarPartida, salvarVisibilidadeNotas } from "./actions";
 
-// CSS global para forçar dark mode em todos os selects nativos
-if (typeof document !== "undefined") {
-  const styleId = "partida-select-dark";
-  if (!document.getElementById(styleId)) {
-    const style = document.createElement("style");
-    style.id = styleId;
-    style.textContent = `
-      select option { background-color: #181818 !important; color: #E0E0E0 !important; }
-      select { color-scheme: dark; }
-    `;
-    document.head.appendChild(style);
-  }
-}
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
@@ -1361,11 +1349,9 @@ function InfoTab({
 
             {/* Função + botão adicionar */}
             <div style={{ display: "flex", gap: 8 }}>
-              <select value={addRefereeRoleId} onChange={e => setAddRefereeRoleId(e.target.value)}
-                style={{ flex: 1, padding: "10px 13px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9, fontFamily: "var(--font-mono)", fontSize: 12, color: addRefereeRoleId ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", outline: "none", cursor: "pointer", colorScheme: "dark" as any }}>
-                <option value="">Função do árbitro…</option>
-                {REFEREE_ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
-              </select>
+              <LabSelect value={addRefereeRoleId} onChange={setAddRefereeRoleId} placeholder="Função do árbitro…"
+                style={{ flex: 1 }}
+                options={REFEREE_ROLES.map((r) => ({ value: r.id, label: r.label }))} />
 
               <button type="button" onClick={handleAddReferee}
                 style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.12s" }}
@@ -2828,19 +2814,10 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
           {isCard && targetType === "staff" && (
             <div style={fieldStyle}>
               <span style={labelStyle}>Membro da comissão</span>
-              <select
-                value={staffId}
-                onChange={e => setStaffId(e.target.value)}
-                style={{ ...selectStyle, marginTop: 4 }}
-              >
-                <option value="">Selecione…</option>
-                {presentStaff
+              <LabSelect value={staffId} onChange={setStaffId} placeholder="Selecione…"
+                options={presentStaff
                   .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
-                  .map(s => (
-                    <option key={s.id} value={s.id}>{s.surname ?? s.full_name}</option>
-                  ))
-                }
-              </select>
+                  .map((s) => ({ value: s.id, label: s.surname ?? s.full_name }))} />
               {presentStaff.length === 0 && (
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "#555", marginTop: 4 }}>
                   {hasAnyStaffLineup ? "Nenhum membro presente nesta partida." : "Formações da comissão não salvas."}
@@ -2868,10 +2845,8 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
           {needsMiss && (
             <div style={fieldStyle}>
               <span style={labelStyle}>Resultado</span>
-              <select value={missResult} onChange={e => setMissResult(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                <option value="">Selecione…</option>
-                {Object.entries(MISS_RESULTS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
+              <LabSelect value={missResult} onChange={setMissResult} placeholder="Selecione…"
+                options={Object.entries(MISS_RESULTS).map(([k, v]) => ({ value: k, label: v }))} />
             </div>
           )}
           {needsMiss && missResult === "goalkeeper_save" && (
@@ -2987,22 +2962,20 @@ function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShoot
           </div>
           <div style={fieldStyle}>
             <span style={labelStyle}>Cobrador</span>
-            <select value={athleteId} onChange={e => setAthleteId(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-              <option value="">Selecione…</option>
-              {athletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
-                <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-              ))}
-            </select>
+            <LabSelect value={athleteId} onChange={setAthleteId} placeholder="Selecione…"
+              options={athletes.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map((a) => ({
+                value: a.id,
+                label: a.surname ?? a.full_name,
+              }))} />
           </div>
           {result === "goalkeeper_save" && (
             <div style={fieldStyle}>
               <span style={labelStyle}>Goleiro que defendeu (opcional)</span>
-              <select value={goalkeeperIdVal} onChange={e => setGoalkeeperIdVal(e.target.value)} style={{ ...selectStyle, marginTop: 4 }}>
-                <option value="">Selecione…</option>
-                {goalkeepersForSelect.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map(a => (
-                  <option key={a.id} value={a.id}>{a.surname ?? a.full_name}</option>
-                ))}
-              </select>
+              <LabSelect value={goalkeeperIdVal} onChange={setGoalkeeperIdVal} placeholder="Selecione…"
+                options={goalkeepersForSelect.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map((a) => ({
+                  value: a.id,
+                  label: a.surname ?? a.full_name,
+                }))} />
             </div>
           )}
         </div>

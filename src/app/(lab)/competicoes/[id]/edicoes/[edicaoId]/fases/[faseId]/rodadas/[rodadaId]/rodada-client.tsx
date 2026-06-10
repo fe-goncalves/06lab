@@ -5,6 +5,7 @@ import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type Props = {
   round: any;
@@ -107,17 +108,13 @@ export default function RodadaClient({
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe A (mandante)</span>
-              <select value={teamAId} onChange={e => setTeamAId(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">A definir</option>
-                {teams.map((t: any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-              </select>
+              <LabSelect value={teamAId} onChange={setTeamAId} placeholder="A definir"
+                options={teams.map((t: any) => ({ value: t.id, label: t.full_name }))} />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe B (visitante)</span>
-              <select value={teamBId} onChange={e => setTeamBId(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">A definir</option>
-                {teams.map((t: any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-              </select>
+              <LabSelect value={teamBId} onChange={setTeamBId} placeholder="A definir"
+                options={teams.map((t: any) => ({ value: t.id, label: t.full_name }))} />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Data</span>
@@ -129,10 +126,8 @@ export default function RodadaClient({
             </label>
             <label className="flex flex-col gap-1 sm:col-span-2">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Local</span>
-              <select value={venueId} onChange={e => setVenueId(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">Não definido</option>
-                {venues.map((v: any) => <option key={v.id} value={v.id}>{v.full_name}</option>)}
-              </select>
+              <LabSelect value={venueId} onChange={setVenueId} placeholder="Não definido"
+                options={venues.map((v: any) => ({ value: v.id, label: v.full_name }))} />
             </label>
             {error && <p className="sm:col-span-2 text-sm" style={{ color: "var(--color-danger)" }}>{error}</p>}
             <div className="sm:col-span-2">

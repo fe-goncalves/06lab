@@ -11,6 +11,7 @@ import { toast } from "@/app/(lab)/components/toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type Props = {
   edition: any;
@@ -194,11 +195,11 @@ export default function EdicaoClient({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Status</span>
-            <select value={status} onChange={e => setStatus(e.target.value)} className={inputClass} style={inputStyle}>
-              <option value="planned">Planejada</option>
-              <option value="ongoing">Em andamento</option>
-              <option value="closed">Encerrada</option>
-            </select>
+            <LabSelect value={status} onChange={setStatus} options={[
+              { value: "planned", label: "Planejada" },
+              { value: "ongoing", label: "Em andamento" },
+              { value: "closed", label: "Encerrada" },
+            ]} />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Mín. atletas por elenco</span>
@@ -307,20 +308,17 @@ export default function EdicaoClient({
             style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)" }}>
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Equipe</span>
-              <select value={selectedTeamId} onChange={e => setSelectedTeamId(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">Selecione…</option>
-                {availableTeams.map((t: any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
-              </select>
+              <LabSelect value={selectedTeamId} onChange={setSelectedTeamId} placeholder="Selecione…"
+                options={availableTeams.map((t: any) => ({ value: t.id, label: t.full_name }))} />
             </label>
             <label className="flex flex-col gap-1">
               <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Origem</span>
-              <select value={arrivalOrigin} onChange={e => setArrivalOrigin(e.target.value)} className={inputClass} style={inputStyle}>
-                <option value="">—</option>
-                <option value="promoted">Promovida</option>
-                <option value="relegated">Rebaixada</option>
-                <option value="invited">Convidada</option>
-                <option value="qualifier">Classificatória</option>
-              </select>
+              <LabSelect value={arrivalOrigin} onChange={setArrivalOrigin} placeholder="—" options={[
+                { value: "promoted", label: "Promovida" },
+                { value: "relegated", label: "Rebaixada" },
+                { value: "invited", label: "Convidada" },
+                { value: "qualifier", label: "Classificatória" },
+              ]} />
             </label>
             <button type="button" onClick={handleAddTeam} disabled={addingTeam || !selectedTeamId}
               className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"

@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import {
   removerAtletaEdicao, aprovarInscricao, desativarInscricao, reativarInscricao,
   transferirAtletaNaEdicao, inscreverAtletaQualquer, editarStint, editarStintStaff,
@@ -1058,16 +1059,14 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
       <div className="space-y-3 mb-4">
         <label className="flex flex-col gap-1">
           <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Destino</span>
-          <select value={transferTargetId} onChange={e => setTransferTargetId(e.target.value)}
-            className={inputClass} style={inputStyle}>
-            <option value="">Selecione…</option>
-            {freeAgentPoolId && (
-              <option value={freeAgentPoolId}>⚪ Sem clube (free agent)</option>
-            )}
-            {allEditionTeams.map(et => (
-              <option key={et.id} value={et.id}>{et.teams?.full_name ?? "—"}</option>
-            ))}
-          </select>
+          <LabSelect value={transferTargetId} onChange={setTransferTargetId} placeholder="Selecione…"
+            options={[
+              ...(freeAgentPoolId ? [{ value: freeAgentPoolId, label: "⚪ Sem clube (free agent)" }] : []),
+              ...allEditionTeams.map((et) => ({
+                value: et.id,
+                label: et.teams?.full_name ?? "—",
+              })),
+            ]} />
         </label>
         <label className="flex flex-col gap-1">
           <span className="text-sm" style={{ color: "var(--color-text-secondary)" }}>

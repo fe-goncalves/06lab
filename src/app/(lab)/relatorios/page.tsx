@@ -12,6 +12,7 @@ import {
   type CompetitionOption, type EditionOption, type PhaseOption, type TeamOption,
 } from "./actions";
 import { exportarCSV, exportarPDF } from "@/lib/exportacao";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type ReportId = "r1" | "r2" | "r3" | "r4" | "r5" | "r6";
 
@@ -91,68 +92,55 @@ function Filters({
       {/* Competição */}
       <div>
         <Label>COMPETIÇÃO</Label>
-        <select
-          className={selectClass} style={selectStyle}
+        <LabSelect
           value={state.competitionId}
-          onChange={(e) => onChange({
-            competitionId: e.target.value,
+          onChange={(v) => onChange({
+            competitionId: v,
             editionId: "", phaseId: "", teamId: "",
             editions: [], phases: [], teams: [],
           })}
-        >
-          <option value="">Selecione...</option>
-          {competitions.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-        </select>
+          placeholder="Selecione..."
+          options={competitions.map((c) => ({ value: c.id, label: c.nome }))}
+        />
       </div>
 
-      {/* Edição — opcional, aparece depois que competição é escolhida */}
       {state.competitionId && (
         <div>
           <Label>EDIÇÃO <span style={{ fontWeight: 400 }}>(opcional)</span></Label>
-          <select
-            className={selectClass} style={selectStyle}
+          <LabSelect
             value={state.editionId}
-            disabled={state.editions.length === 0}
-            onChange={(e) => onChange({
-              editionId: e.target.value,
+            onChange={(v) => onChange({
+              editionId: v,
               phaseId: "", teamId: "", phases: [], teams: [],
             })}
-          >
-            <option value="">
-              {state.editions.length === 0 ? "Carregando..." : "Todas as edições"}
-            </option>
-            {state.editions.map((e) => <option key={e.id} value={e.id}>{e.nome}</option>)}
-          </select>
+            disabled={state.editions.length === 0}
+            placeholder={state.editions.length === 0 ? "Carregando..." : "Todas as edições"}
+            options={state.editions.map((e) => ({ value: e.id, label: e.nome }))}
+          />
         </div>
       )}
 
-      {/* Fase — só aparece com edição selecionada */}
       {showPhase && state.editionId && (
         <div>
           <Label>FASE <span style={{ fontWeight: 400 }}>(opcional)</span></Label>
-          <select
-            className={selectClass} style={selectStyle}
+          <LabSelect
             value={state.phaseId}
-            onChange={(e) => onChange({ phaseId: e.target.value })}
-          >
-            <option value="">Todas as fases</option>
-            {state.phases.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-          </select>
+            onChange={(v) => onChange({ phaseId: v })}
+            placeholder="Todas as fases"
+            options={state.phases.map((p) => ({ value: p.id, label: p.nome }))}
+          />
         </div>
       )}
 
-      {/* Equipe — só aparece com edição selecionada */}
       {showTeam && state.editionId && (
         <div>
           <Label>EQUIPE <span style={{ fontWeight: 400 }}>(opcional)</span></Label>
-          <select
-            className={selectClass} style={selectStyle}
+          <LabSelect
             value={state.teamId}
-            onChange={(e) => onChange({ teamId: e.target.value })}
-          >
-            <option value="">Todas as equipes</option>
-            {state.teams.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
-          </select>
+            onChange={(v) => onChange({ teamId: v })}
+            placeholder="Todas as equipes"
+            options={state.teams.map((t) => ({ value: t.id, label: t.nome }))}
+          />
         </div>
       )}
     </div>

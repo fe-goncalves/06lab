@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { NovoAtletaModal } from "./novo-atleta-modal";
 import { Plus, SquarePen, Eye, Users } from "lucide-react";
 
@@ -181,24 +182,16 @@ export default function AtletasClient({
             style={is}
           />
           <div className="flex flex-wrap items-center gap-3">
-            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} className={ic} style={is}>
-              <option value="">Todas as equipes</option>
-              {teamsForFilter.map(team => (
-                <option key={team.id} value={team.id}>{team.label}</option>
-              ))}
-            </select>
-            <select value={positionFilter} onChange={e => setPositionFilter(e.target.value)} className={ic} style={is}>
-              <option value="">Todas as posições</option>
-              {positions.map(position => (
-                <option key={position.id} value={position.id}>{position.full_name}</option>
-              ))}
-            </select>
-            <select value={sortBy} onChange={e => setSortBy(e.target.value as SortBy)} className={ic} style={is}>
-              <option value="name">Ordenar: Nome (A-Z)</option>
-              <option value="age_asc">Ordenar: Idade (menor para maior)</option>
-              <option value="age_desc">Ordenar: Idade (maior para menor)</option>
-              <option value="position">Ordenar: Posição (A-Z)</option>
-            </select>
+            <LabSelect value={teamFilter} onChange={setTeamFilter} placeholder="Todas as equipes"
+              options={teamsForFilter.map((team) => ({ value: team.id, label: team.label }))} />
+            <LabSelect value={positionFilter} onChange={setPositionFilter} placeholder="Todas as posições"
+              options={positions.map((position) => ({ value: position.id, label: position.full_name }))} />
+            <LabSelect value={sortBy} onChange={(v) => setSortBy(v as SortBy)} options={[
+              { value: "name", label: "Ordenar: Nome (A-Z)" },
+              { value: "age_asc", label: "Ordenar: Idade (menor para maior)" },
+              { value: "age_desc", label: "Ordenar: Idade (maior para menor)" },
+              { value: "position", label: "Ordenar: Posição (A-Z)" },
+            ]} />
           </div>
           <button
             type="button"

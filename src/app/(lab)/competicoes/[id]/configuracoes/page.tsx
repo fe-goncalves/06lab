@@ -28,8 +28,11 @@ export default async function ConfiguracoesCompeticaoPage({
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competitions")
-      .select("id, full_name, short_name")
-      .eq("organization_id", orgId).neq("id", id).order("full_name"),
+      .select("id, full_name, short_name, logo_url")
+      .eq("organization_id", orgId)
+      .eq("is_virtual", false)
+      .neq("id", id)
+      .order("full_name"),
     supabase.from("categories")
       .select("id, label, display_order")
       .eq("organization_id", orgId).order("display_order"),
@@ -38,9 +41,10 @@ export default async function ConfiguracoesCompeticaoPage({
       .eq("competition_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("seasons")
-      .select("id, name, year_id, years(value)")
+      .select("id, name, year_id, display_order, years(value)")
       .eq("organization_id", orgId)
-      .order("display_order"),
+      .order("display_order", { ascending: true })
+      .order("name", { ascending: true }),
   ]);
 
   if (error || !comp) redirect("/competicoes");

@@ -13,6 +13,7 @@ import {
 } from "../actions";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
@@ -131,6 +132,7 @@ export default function FaseClient({
   // ── Seleção múltipla ────────────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [groupAddSelect, setGroupAddSelect] = useState<Record<string, string>>({});
 
   async function loadPartidas() {
     setLoadingPartidas(true);
@@ -624,10 +626,10 @@ export default function FaseClient({
                   <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Configurações de ida/volta e placar agregado são definidas por rodada.</p>
                   <label className="flex flex-col gap-1">
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>Tipo de desempate final</span>
-                    <select value={tiebreakerType} onChange={e => setTiebreakerType(e.target.value)} className={inputClass} style={inputStyle}>
-                      <option value="penalties">Pênaltis</option>
-                      <option value="shootouts">Shoot-outs</option>
-                    </select>
+                    <LabSelect value={tiebreakerType} onChange={setTiebreakerType} options={[
+                      { value: "penalties", label: "Pênaltis" },
+                      { value: "shootouts", label: "Shoot-outs" },
+                    ]} />
                   </label>
                 </div>
               </div>
@@ -772,11 +774,22 @@ export default function FaseClient({
                       ))}
                       {available.length > 0 && (
                         <div className="px-4 py-2 border-t" style={{ borderColor: "var(--color-border)" }}>
-                          <select defaultValue="" onChange={e => { if (e.target.value) handleAddTeamToGroup(g.id, e.target.value); e.target.value = ""; }}
-                            className={inputClass + " w-full"} style={inputStyle}>
-                            <option value="" disabled>+ Adicionar equipe ao grupo</option>
-                            {available.map((et: any) => <option key={et.id} value={et.id}>{et.teams?.full_name ?? et.id}</option>)}
-                          </select>
+                          <LabSelect
+                            value={groupAddSelect[g.id] ?? ""}
+                            onChange={(v) => {
+                              if (v) {
+                                handleAddTeamToGroup(g.id, v);
+                                setGroupAddSelect((prev) => ({ ...prev, [g.id]: "" }));
+                              } else {
+                                setGroupAddSelect((prev) => ({ ...prev, [g.id]: v }));
+                              }
+                            }}
+                            placeholder="+ Adicionar equipe ao grupo"
+                            options={available.map((et: any) => ({
+                              value: et.id,
+                              label: et.teams?.full_name ?? et.id,
+                            }))}
+                          />
                         </div>
                       )}
                     </div>
@@ -804,10 +817,8 @@ export default function FaseClient({
                   <label className="flex flex-col gap-1">
                     <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Tipo" : "Nome"}</span>
                     {hasMatchups ? (
-                      <select value={roundName} onChange={e => setRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
-                        <option value="">Selecione…</option>
-                        {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                      </select>
+                      <LabSelect value={roundName} onChange={setRoundName} autoFocus placeholder="Selecione…"
+                        options={KNOCKOUT_ROUND_LABELS.map((l) => ({ value: l, label: l }))} />
                     ) : (
                       <input type="text" value={roundName} onChange={e => setRoundName(e.target.value)} placeholder="Ex: Rodada 1" className={inputClass} style={inputStyle} autoFocus />
                     )}
@@ -865,9 +876,8 @@ export default function FaseClient({
                           <label className="flex flex-col gap-1">
                             <span className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{hasMatchups ? "Tipo" : "Nome"}</span>
                             {hasMatchups ? (
-                              <select value={editRoundName} onChange={e => setEditRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus>
-                                {KNOCKOUT_ROUND_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                              </select>
+                              <LabSelect value={editRoundName} onChange={setEditRoundName} autoFocus
+                                options={KNOCKOUT_ROUND_LABELS.map((l) => ({ value: l, label: l }))} />
                             ) : (
                               <input type="text" value={editRoundName} onChange={e => setEditRoundName(e.target.value)} className={inputClass} style={inputStyle} autoFocus />
                             )}
@@ -1102,14 +1112,13 @@ export default function FaseClient({
                                     </label>
                                     <label className="flex flex-col gap-1">
                                       <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Local</span>
-                                      <select value={editState.venue_id}
-                                        onChange={e => updateEditField(m.id, { venue_id: e.target.value })}
-                                        className={inputSmClass} style={inputSmStyle}>
-                                        <option value="">Sem local</option>
-                                        {venues.map((v: any) => (
-                                          <option key={v.id} value={v.id}>{v.short_name ?? v.full_name}</option>
-                                        ))}
-                                      </select>
+                                      <LabSelect value={editState.venue_id}
+                                        onChange={(v) => updateEditField(m.id, { venue_id: v })}
+                                        placeholder="Sem local"
+                                        options={venues.map((v: any) => ({
+                                          value: v.id,
+                                          label: v.short_name ?? v.full_name,
+                                        }))} />
                                     </label>
                                   </div>
 
@@ -1152,24 +1161,19 @@ export default function FaseClient({
                                         <div className="flex items-end gap-2">
                                           <label className="flex flex-col gap-1 flex-1">
                                             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Árbitro</span>
-                                            <select value={editState.newRefereeId}
-                                              onChange={e => updateEditField(m.id, { newRefereeId: e.target.value })}
-                                              className={inputSmClass} style={inputSmStyle}>
-                                              <option value="">Selecione…</option>
-                                              {referees
-                                                .filter((r: any) => !editState.refereesList.some(e => e.referee_id === r.id))
-                                                .map((r: any) => <option key={r.id} value={r.id}>{r.full_name}</option>)
-                                              }
-                                            </select>
+                                            <LabSelect value={editState.newRefereeId}
+                                              onChange={(v) => updateEditField(m.id, { newRefereeId: v })}
+                                              placeholder="Selecione…"
+                                              options={referees
+                                                .filter((r: any) => !editState.refereesList.some((e) => e.referee_id === r.id))
+                                                .map((r: any) => ({ value: r.id, label: r.full_name }))} />
                                           </label>
                                           <label className="flex flex-col gap-1 flex-1">
                                             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Função</span>
-                                            <select value={editState.newRefereeRoleId}
-                                              onChange={e => updateEditField(m.id, { newRefereeRoleId: e.target.value })}
-                                              className={inputSmClass} style={inputSmStyle}>
-                                              <option value="">Selecione…</option>
-                                              {refereeRoles.map((r: any) => <option key={r.id} value={r.id}>{r.full_name}</option>)}
-                                            </select>
+                                            <LabSelect value={editState.newRefereeRoleId}
+                                              onChange={(v) => updateEditField(m.id, { newRefereeRoleId: v })}
+                                              placeholder="Selecione…"
+                                              options={refereeRoles.map((r: any) => ({ value: r.id, label: r.full_name }))} />
                                           </label>
                                           <button type="button" onClick={() => addRefereeToList(m.id)}
                                             disabled={!editState.newRefereeId || !editState.newRefereeRoleId}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 type Edition = { id: string; name: string; competition_name: string };
 type Suspension = {
@@ -64,16 +65,14 @@ export default function SuspensoesClient({ suspensions, editions }: {
 
         {/* Filtro por edição */}
         {editions.length > 0 && (
-          <select
+          <LabSelect
             value={editionFilter}
-            onChange={e => setEditionFilter(e.target.value)}
-            className="rounded-lg border px-3 py-1.5 font-mono text-xs outline-none"
-            style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-secondary)" }}>
-            <option value="all">Todas as competições</option>
-            {editions.map(e => (
-              <option key={e.id} value={e.id}>{e.competition_name} — {e.name}</option>
-            ))}
-          </select>
+            onChange={setEditionFilter}
+            options={[
+              { value: "all", label: "Todas as competições" },
+              ...editions.map((e) => ({ value: e.id, label: `${e.competition_name} — ${e.name}` })),
+            ]}
+          />
         )}
       </div>
 
