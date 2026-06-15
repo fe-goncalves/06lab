@@ -314,19 +314,13 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
           />
         )}
 
-        {/* ── SEÇÃO 5 — Sistema, Perfil, Sair ── */}
+        {/* ── SEÇÃO 5 — Sair ── */}
         <div
           className={[
             "mt-auto flex flex-col gap-3 pb-7",
             isCollapsed ? "items-center px-0" : "px-5",
           ].join(" ")}
         >
-          {!isCollapsed && (
-            <>
-              <SidebarTextItem href="/sistema" label="SISTEMA" />
-              <SidebarTextItem href="/perfil" label="PERFIL" />
-            </>
-          )}
           <button
             type="button"
             onClick={handleSignOut}
