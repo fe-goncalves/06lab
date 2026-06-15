@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { LabPicker } from "@/app/(lab)/components/lab-picker";
 import {
-  buscarHallDaFama,
+  buscarCategoria,
   recalcularEstatisticas,
   type HallFiltros,
   type HallDaFamaData,
@@ -69,11 +69,13 @@ const CATEGORIES: Record<"atletas" | "equipes" | "comissao", { label: string; it
 };
 
 const PAGE_SIZE = 20;
-const PODIUM = [
-  { rank: 1, color: "#F2C005", scale: 1, height: 168 },
-  { rank: 2, color: "#A6A6A6", scale: 0.92, height: 140 },
-  { rank: 3, color: "#CD7F32", scale: 0.84, height: 120 },
-] as const;
+
+const RANK_STYLES: Record<1 | 2 | 3 | "default", { color: string; fontSize: number; fontWeight: number }> = {
+  1: { color: "#F2C005", fontSize: 20, fontWeight: 900 },
+  2: { color: "#A6A6A6", fontSize: 17, fontWeight: 800 },
+  3: { color: "#CD7F32", fontSize: 17, fontWeight: 800 },
+  default: { color: "rgba(255,255,255,0.4)", fontSize: 13, fontWeight: 700 },
+};
 
 type AnyEntry = AthleteEntry | TeamEntry | StaffEntry;
 
@@ -84,9 +86,21 @@ function isTeamEntry(e: AnyEntry): e is TeamEntry {
   return "team_id" in e;
 }
 
-function formatValue(value: number, suffix: string): string {
-  if (suffix === "pts" || suffix === "%") return String(value);
-  return `${value}`;
+function rankStyle(rank: number) {
+  if (rank === 1) return RANK_STYLES[1];
+  if (rank === 2) return RANK_STYLES[2];
+  if (rank === 3) return RANK_STYLES[3];
+  return RANK_STYLES.default;
+}
+
+function filtrosKey(f: HallFiltros): string {
+  return JSON.stringify({
+    competitionId: f.competitionId ?? "",
+    seasonId: f.seasonId ?? "",
+    yearId: f.yearId ?? "",
+    teamId: f.teamId ?? "",
+    gender: f.gender ?? "",
+  });
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -97,7 +111,8 @@ interface Props {
 }
 
 export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
-  const [data, setData] = useState<HallDaFamaData>(initialData);
+  const defaultCategory = CATEGORIES.atletas.items[0];
+  const [entries, setEntries] = useState<AnyEntry[]>(initialData.artilharia);
   const [filtros, setFiltros] = useState<HallFiltros>({});
   const [loading, setLoading] = useState(false);
   const [recalcPending, startRecalc] = useTransition();
@@ -108,48 +123,75 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
     equipes: true,
     comissao: true,
   });
-  const [activeCategory, setActiveCategory] = useState<CategoryItem>(CATEGORIES.atletas.items[0]);
+  const [activeCategory, setActiveCategory] = useState<CategoryItem>(defaultCategory);
   const [page, setPage] = useState(0);
+  const cacheRef = useRef<Map<string, AnyEntry[]>>(new Map());
 
   const showToast = (msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3500);
   };
 
-  const aplicarFiltros = async (novosFiltros: HallFiltros) => {
+  const carregarCategoria = useCallback(async (novosFiltros: HallFiltros, category: CategoryItem, skipCache = false) => {
+    const cacheKey = `${category.key}:${filtrosKey(novosFiltros)}`;
+    if (!skipCache) {
+      const cached = cacheRef.current.get(cacheKey);
+      if (cached) {
+        setEntries(cached);
+        setPage(0);
+        return;
+      }
+    }
+
     setLoading(true);
-    const result = await buscarHallDaFama(novosFiltros);
+    const result = await buscarCategoria(novosFiltros, category.key);
     setLoading(false);
-    if ("error" in result) { showToast(`Erro: ${result.error}`); return; }
-    setData(result);
+
+    if ("error" in result) {
+      showToast(`Erro: ${result.error}`);
+      return;
+    }
+
+    const list = result as AnyEntry[];
+    cacheRef.current.set(cacheKey, list);
+    setEntries(list);
     setPage(0);
-  };
+  }, []);
+
+  useEffect(() => {
+    const isDefault = activeCategory.key === "goals" && filtrosKey(filtros) === filtrosKey({});
+    if (isDefault) {
+      setEntries(initialData.artilharia);
+      setPage(0);
+      return;
+    }
+    carregarCategoria(filtros, activeCategory);
+  }, [activeCategory, filtros, carregarCategoria, initialData.artilharia]);
 
   const handleFiltroChange = (campo: keyof HallFiltros, valor: string) => {
     const next = { ...filtros, [campo]: valor || undefined };
     setFiltros(next);
-    aplicarFiltros(next);
+  };
+
+  const handleCategorySelect = (item: CategoryItem) => {
+    setActiveCategory(item);
   };
 
   const handleRecalcular = () => {
     startRecalc(async () => {
       const result = await recalcularEstatisticas();
-      if ("error" in result) { showToast(`Erro: ${result.error}`); return; }
+      if ("error" in result) {
+        showToast(`Erro: ${result.error}`);
+        return;
+      }
       showToast("Estatísticas atualizadas.");
-      const refreshed = await buscarHallDaFama(filtros);
-      if (!("error" in refreshed)) setData(refreshed);
+      cacheRef.current.clear();
+      await carregarCategoria(filtros, activeCategory, true);
     });
   };
 
-  const entries = useMemo(() => {
-    const list = (data[activeCategory.dataKey] ?? []) as AnyEntry[];
-    return [...list];
-  }, [data, activeCategory]);
-
-  const podium = entries.slice(0, 3);
-  const listItems = entries.slice(3);
-  const totalPages = Math.max(1, Math.ceil(listItems.length / PAGE_SIZE));
-  const pageItems = listItems.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const pageItems = entries.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   const filteredSections = useMemo(() => {
     const q = categorySearch.trim().toLowerCase();
@@ -175,7 +217,6 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
         </div>
       )}
 
-      {/* Header */}
       <div style={{ padding: "24px 28px 16px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
@@ -206,7 +247,6 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
       </div>
 
       <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {/* Sidebar */}
         <aside style={{
           width: 280, flexShrink: 0,
           borderRight: "1px solid rgba(255,255,255,0.06)",
@@ -254,7 +294,7 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
                       key={item.key}
                       type="button"
                       disabled={isDisabled}
-                      onClick={() => { if (!isDisabled) { setActiveCategory(item); setPage(0); } }}
+                      onClick={() => { if (!isDisabled) handleCategorySelect(item); }}
                       style={{
                         width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "9px 10px 9px 28px", marginBottom: 2, borderRadius: 8,
@@ -286,7 +326,6 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
           </div>
         </aside>
 
-        {/* Painel ranking */}
         <main style={{ flex: 1, minWidth: 0, padding: "20px 24px 32px", opacity: loading ? 0.55 : 1, transition: "opacity 0.2s" }}>
           <div style={{ marginBottom: 20 }}>
             <h2 style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 800, color: "var(--color-text-primary)", margin: "0 0 14px" }}>
@@ -357,7 +396,7 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
               {temFiltroAtivo && (
                 <button
                   type="button"
-                  onClick={() => { setFiltros({}); aplicarFiltros({}); }}
+                  onClick={() => setFiltros({})}
                   style={{
                     padding: "9px 14px", borderRadius: 8,
                     border: "1px solid rgba(255,68,68,0.3)",
@@ -378,40 +417,18 @@ export default function HallDaFamaClient({ initialData, opcoesFiltro }: Props) {
             </p>
           ) : (
             <>
-              {/* Pódio */}
-              <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 16, marginBottom: 28, minHeight: 200 }}>
-                {[
-                  { entry: podium[1], meta: PODIUM[1] },
-                  { entry: podium[0], meta: PODIUM[0] },
-                  { entry: podium[2], meta: PODIUM[2] },
-                ].map(({ entry, meta }) => {
-                  if (!entry) return <div key={meta.rank} style={{ width: 148, height: meta.height }} />;
-                  return (
-                    <PodiumCard
-                      key={getEntryId(entry)}
-                      entry={entry}
-                      rank={meta.rank}
-                      color={meta.color}
-                      height={meta.height}
-                      suffix={activeCategory.suffix}
-                    />
-                  );
-                })}
-              </div>
-
-              {/* Lista */}
               <div style={{ borderRadius: 12, border: "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                 {pageItems.map((entry, idx) => (
                   <RankingRow
                     key={getEntryId(entry)}
-                    rank={4 + page * PAGE_SIZE + idx}
+                    rank={page * PAGE_SIZE + idx + 1}
                     entry={entry}
                     suffix={activeCategory.suffix}
                   />
                 ))}
               </div>
 
-              {listItems.length > PAGE_SIZE && (
+              {entries.length > PAGE_SIZE && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginTop: 20 }}>
                   <button
                     type="button"
@@ -476,15 +493,7 @@ function getEntryId(entry: AnyEntry): string {
   return entry.staff_member_id;
 }
 
-function PodiumCard({
-  entry, rank, color, height, suffix,
-}: {
-  entry: AnyEntry;
-  rank: number;
-  color: string;
-  height: number;
-  suffix: string;
-}) {
+function RankingRow({ rank, entry, suffix }: { rank: number; entry: AnyEntry; suffix: string }) {
   const isAthlete = isAthleteEntry(entry);
   const isTeam = isTeamEntry(entry);
   const displayName = isAthlete
@@ -492,27 +501,35 @@ function PodiumCard({
     : isTeam
       ? (entry.abbreviation ?? entry.full_name)
       : ((entry as StaffEntry).surname ?? (entry as StaffEntry).full_name);
-  const subName = isTeam ? entry.full_name : isAthlete ? entry.team_name : null;
   const photo = isAthlete ? entry.photo_url : isTeam ? entry.logo_url : (entry as StaffEntry).photo_url;
+  const teamLabel = isAthlete ? entry.team_name : isTeam ? entry.full_name : null;
   const teamLogo = isAthlete ? entry.team_logo : null;
+  const rs = rankStyle(rank);
 
   return (
-    <div style={{
-      width: 148, height,
-      borderRadius: 14,
-      border: `1px solid ${color}44`,
-      background: `linear-gradient(180deg, ${color}18 0%, rgba(255,255,255,0.02) 100%)`,
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end",
-      padding: "14px 12px 16px", position: "relative",
-    }}>
+    <div
+      style={{
+        display: "flex", alignItems: "center", gap: 14,
+        padding: "12px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        transition: "background-color 0.12s",
+      }}
+      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
+      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+    >
       <span style={{
-        position: "absolute", top: 10, left: 10,
-        fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 900, color,
+        fontFamily: "var(--font-mono)",
+        fontSize: rs.fontSize,
+        fontWeight: rs.fontWeight,
+        color: rs.color,
+        width: 32,
+        flexShrink: 0,
+        textAlign: "right",
       }}>
         {rank}º
       </span>
-      <div style={{ position: "relative", marginBottom: 10 }}>
-        <Avatar url={photo} round={!isTeam} size={rank === 1 ? 56 : 48} />
+      <div style={{ position: "relative", flexShrink: 0 }}>
+        <Avatar url={photo} round size={40} />
         {teamLogo && (
           <img
             src={teamLogo}
@@ -526,71 +543,20 @@ function PodiumCard({
           />
         )}
       </div>
-      <p style={{
-        fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800,
-        color: "var(--color-text-primary)", margin: 0, textAlign: "center",
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%",
-      }}>
-        {displayName}
-      </p>
-      {subName && (
-        <p style={{
-          fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)",
-          margin: "4px 0 0", textAlign: "center",
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%",
-        }}>
-          {subName}
-        </p>
-      )}
-      <p style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 900, color, margin: "10px 0 0" }}>
-        {formatValue(entry.value, suffix)}
-        <span style={{ fontSize: 9, fontWeight: 600, marginLeft: 4, opacity: 0.8 }}>{suffix}</span>
-      </p>
-    </div>
-  );
-}
-
-function RankingRow({ rank, entry, suffix }: { rank: number; entry: AnyEntry; suffix: string }) {
-  const isAthlete = isAthleteEntry(entry);
-  const isTeam = isTeamEntry(entry);
-  const displayName = isAthlete
-    ? (entry.surname ?? entry.full_name)
-    : isTeam
-      ? entry.full_name
-      : ((entry as StaffEntry).surname ?? (entry as StaffEntry).full_name);
-  const photo = isAthlete ? entry.photo_url : isTeam ? entry.logo_url : (entry as StaffEntry).photo_url;
-  const teamLabel = isAthlete ? entry.team_name : isTeam ? entry.abbreviation : null;
-  const teamLogo = isAthlete ? entry.team_logo : null;
-
-  return (
-    <div
-      style={{
-        display: "flex", alignItems: "center", gap: 14,
-        padding: "12px 16px",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-        transition: "background-color 0.12s",
-      }}
-      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
-    >
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.35)", width: 28, flexShrink: 0 }}>
-        {rank}
-      </span>
-      <div style={{ position: "relative", flexShrink: 0 }}>
-        <Avatar url={photo} round={!isTeam} size={36} />
-        {teamLogo && (
-          <img src={teamLogo} alt="" style={{
-            position: "absolute", bottom: -2, right: -4, width: 16, height: 16,
-            objectFit: "contain", borderRadius: 3, border: "1px solid var(--color-background)",
-          }} />
-        )}
-      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <p style={{
+          fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
+          color: "var(--color-text-primary)", margin: 0,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
           {displayName}
         </p>
         {teamLabel && (
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.35)", margin: "2px 0 0" }}>
+          <p style={{
+            fontFamily: "var(--font-mono)", fontSize: 10,
+            color: "rgba(255,255,255,0.35)", margin: "3px 0 0",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
             {teamLabel}
           </p>
         )}
@@ -600,14 +566,19 @@ function RankingRow({ rank, entry, suffix }: { rank: number; entry: AnyEntry; su
           </p>
         )}
       </div>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "#BFF205", flexShrink: 0 }}>
-        {formatValue(entry.value, suffix)}
-      </span>
+      <div style={{ flexShrink: 0, textAlign: "right" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "#BFF205" }}>
+          {entry.value}
+        </span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)", marginLeft: 5 }}>
+          {suffix}
+        </span>
+      </div>
     </div>
   );
 }
 
-function Avatar({ url, round = true, size = 32 }: { url: string | null; round?: boolean; size?: number }) {
+function Avatar({ url, round = true, size = 40 }: { url: string | null; round?: boolean; size?: number }) {
   return (
     <div style={{
       width: size, height: size, flexShrink: 0,
