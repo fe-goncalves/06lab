@@ -71,6 +71,7 @@ export interface HallDaFamaData {
   best_goalkeeper: AthleteEntry[];
   motw: AthleteEntry[];
   penalty_conversion: AthleteEntry[];
+  shootout_conversion: AthleteEntry[];
   mais_finais: AthleteEntry[];
   // â”€â”€ Equipes â€“ existentes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   titulos: TeamEntry[];
@@ -104,7 +105,7 @@ function dadosVazios(): HallDaFamaData {
     penalty_goals: [], shootout_goals: [], best_match_goals: [], clean_sheets: [],
     totw: [], avg_rating: [], penalty_saves: [],
     hat_tricks: [], pokers: [], manitas: [], participacoes_diretas: [],
-    mvp: [], top_scorer: [], top_assists: [], best_goalkeeper: [], motw: [], penalty_conversion: [], mais_finais: [],
+    mvp: [], top_scorer: [], top_assists: [], best_goalkeeper: [], motw: [], penalty_conversion: [], shootout_conversion: [], mais_finais: [],
     titulos: [], vitorias: [], team_matches: [], team_points: [], aproveitamento: [], gols_marcados: [],
     sequencia_vitorias: [], sequencia_invicto: [], maior_goleada: [], mais_cleansheets: [],
     runner_up: [], podios: [], totw_appearances: [],

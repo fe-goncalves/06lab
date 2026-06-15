@@ -39,7 +39,9 @@ const CATEGORIES: Record<"atletas" | "equipes" | "comissao", { label: string; it
       { key: "awards", label: "Premiações", dataKey: "awards", suffix: "prêmios" },
       { key: "goal_assist", label: "Participações em Gol", dataKey: "goal_assist", suffix: "G+A" },
       { key: "penalty_goals", label: "Gols de Pênalti", dataKey: "penalty_goals", suffix: "gols" },
+      { key: "penalty_conversion", label: "Aproveitamento Pênaltis", dataKey: "penalty_conversion", suffix: "%" },
       { key: "shootout_goals", label: "Gols de Shoot-out", dataKey: "shootout_goals", suffix: "gols" },
+      { key: "shootout_conversion", label: "Aproveitamento Shoot-outs", dataKey: "shootout_conversion", suffix: "%" },
       { key: "hat_tricks", label: "Hat-tricks", dataKey: "hat_tricks", suffix: "hat-tricks" },
       { key: "best_match_goals", label: "Mais Gols num Jogo", dataKey: "best_match_goals", suffix: "gols" },
       { key: "clean_sheets", label: "Clean Sheets", dataKey: "clean_sheets", suffix: "CS" },
@@ -567,12 +569,20 @@ function RankingRow({ rank, entry, suffix }: { rank: number; entry: AnyEntry; su
         )}
       </div>
       <div style={{ flexShrink: 0, textAlign: "right" }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "#BFF205" }}>
-          {entry.value}
-        </span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)", marginLeft: 5 }}>
-          {suffix}
-        </span>
+        {suffix === "%" ? (
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "#BFF205" }}>
+            {entry.value.toFixed(1)}%
+          </span>
+        ) : (
+          <>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "#BFF205" }}>
+              {entry.value}
+            </span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)", marginLeft: 5 }}>
+              {suffix}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

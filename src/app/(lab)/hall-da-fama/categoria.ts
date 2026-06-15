@@ -507,6 +507,108 @@ async function fetchStaffByField(ctx: HallCtx, field: string): Promise<StaffEntr
     }));
 }
 
+const MIN_CONVERSION_ATTEMPTS = 3;
+
+type ConversionKind = "penalty" | "shootout";
+
+const CONVERSION_FIELDS: Record<ConversionKind, {
+  careerTaken: string;
+  careerScored: string;
+  editionTaken: string;
+  editionScored: string;
+}> = {
+  penalty: {
+    careerTaken: "total_penalties_taken",
+    careerScored: "total_penalties_scored",
+    editionTaken: "penalties_taken",
+    editionScored: "penalties_scored",
+  },
+  shootout: {
+    careerTaken: "total_shootouts_taken",
+    careerScored: "total_shootouts_scored",
+    editionTaken: "shootouts_taken",
+    editionScored: "shootouts_scored",
+  },
+};
+
+function conversionPct(scored: number, taken: number): number {
+  return Math.round((scored / taken) * 1000) / 10;
+}
+
+async function fetchConversion(ctx: HallCtx, kind: ConversionKind): Promise<AthleteEntry[]> {
+  const fields = CONVERSION_FIELDS[kind];
+
+  if (ctx.usarCareerStats) {
+    let careerQuery = ctx.supabase
+      .from("athlete_career_stats")
+      .select(`athlete_id, ${fields.careerTaken}, ${fields.careerScored}, athletes!inner(id, gender)`)
+      .eq("organization_id", ctx.orgId)
+      .gte(fields.careerTaken, MIN_CONVERSION_ATTEMPTS);
+    if (ctx.genderDb) careerQuery = careerQuery.eq("athletes.gender", ctx.genderDb);
+
+    const { data } = await careerQuery;
+    const rows = (data ?? []) as Record<string, number | string>[];
+
+    const ranked = rows
+      .map((r) => {
+        const taken = (r[fields.careerTaken] as number) ?? 0;
+        const scored = (r[fields.careerScored] as number) ?? 0;
+        return {
+          athlete_id: r.athlete_id as string,
+          taken,
+          pct: conversionPct(scored, taken),
+        };
+      })
+      .filter((r) => r.taken >= MIN_CONVERSION_ATTEMPTS)
+      .sort((a, b) => (b.pct !== a.pct ? b.pct - a.pct : b.taken - a.taken));
+
+    if (ranked.length === 0) return [];
+    const athleteMap = await enriquecerAtletas(ctx.supabase, ranked.map((r) => r.athlete_id));
+    return ranked.map((r) => athleteToEntry(athleteMap, r.athlete_id, r.pct));
+  }
+
+  const editionIds = await editionIdsParaUsar(ctx);
+  if (editionIds.length === 0) return [];
+
+  let statsQuery = ctx.supabase
+    .from("athlete_edition_stats")
+    .select(`athlete_id, ${fields.editionTaken}, ${fields.editionScored}`)
+    .in("edition_id", editionIds);
+  if (ctx.filtros.teamId) statsQuery = statsQuery.eq("team_id", ctx.filtros.teamId);
+
+  const { data: statsData } = await statsQuery;
+  let rows = (statsData ?? []) as Record<string, number | string>[];
+
+  if (ctx.genderDb && rows.length > 0) {
+    const athleteIds = [...new Set(rows.map((r) => r.athlete_id as string))];
+    const { data: genderData } = await ctx.supabase.from("athletes").select("id").in("id", athleteIds).eq("gender", ctx.genderDb);
+    const validIds = new Set((genderData ?? []).map((a: { id: string }) => a.id));
+    rows = rows.filter((r) => validIds.has(r.athlete_id as string));
+  }
+
+  const agregado = new Map<string, { taken: number; scored: number }>();
+  for (const r of rows) {
+    const id = r.athlete_id as string;
+    if (!agregado.has(id)) agregado.set(id, { taken: 0, scored: 0 });
+    const e = agregado.get(id)!;
+    e.taken += (r[fields.editionTaken] as number) ?? 0;
+    e.scored += (r[fields.editionScored] as number) ?? 0;
+  }
+
+  const ranked = [...agregado.entries()]
+    .map(([athlete_id, { taken, scored }]) => ({
+      athlete_id,
+      taken,
+      pct: conversionPct(scored, taken),
+    }))
+    .filter((r) => r.taken >= MIN_CONVERSION_ATTEMPTS)
+    .sort((a, b) => (b.pct !== a.pct ? b.pct - a.pct : b.taken - a.taken));
+
+  if (ranked.length === 0) return [];
+  const athleteMap = await enriquecerAtletas(ctx.supabase, ranked.map((r) => r.athlete_id));
+  return ranked.map((r) => athleteToEntry(athleteMap, r.athlete_id, r.pct));
+}
+
 const CAREER_ATHLETE_FIELDS: Record<string, string> = {
   goals: "total_goals",
   assists: "total_assists",
@@ -570,6 +672,12 @@ export async function queryCategoria(
 
     case "best_match_goals":
       return fetchBestMatchGoals(ctx);
+
+    case "penalty_conversion":
+      return fetchConversion(ctx, "penalty");
+
+    case "shootout_conversion":
+      return fetchConversion(ctx, "shootout");
 
     case "shootout_saves":
       return [];
