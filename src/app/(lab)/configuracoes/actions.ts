@@ -34,6 +34,7 @@ export async function salvarOrganizacao(
   const custom_domain_raw = String(formData.get("custom_domain") ?? "").trim() || null;
   const primary_color = String(formData.get("primary_color") ?? "").trim() || null;
   const secondary_color = String(formData.get("secondary_color") ?? "").trim() || null;
+  const tertiary_color = String(formData.get("tertiary_color") ?? "").trim() || null;
   const description = String(formData.get("description") ?? "").trim() || null;
 
   // Validação de custom_domain (se preenchido, deve ser HTTPS ou um hostname sem protocolo)
@@ -103,6 +104,7 @@ export async function salvarOrganizacao(
       custom_domain,
       primary_color,
       secondary_color,
+      tertiary_color,
       description,
       instagram_url: instagram_url_raw,
       youtube_url: youtube_url_raw,
@@ -125,8 +127,17 @@ export async function alterarSenha(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
+  const currentPassword = String(formData.get("current_password") ?? "").trim();
   const newPassword = String(formData.get("new_password") ?? "").trim();
+
+  if (!currentPassword) return { error: "Informe a senha atual." };
   if (!newPassword || newPassword.length < 6) return { error: "A senha deve ter pelo menos 6 caracteres." };
+
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: user.email!,
+    password: currentPassword,
+  });
+  if (signInError) return { error: "Senha atual incorreta." };
 
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) return { error: error.message };

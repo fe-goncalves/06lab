@@ -18,7 +18,7 @@ export default async function ConfiguracoesPage() {
   const { data: org } = await supabase
     .from("organizations")
     .select(
-      "id, name, slug, custom_domain, status, logo_url, primary_color, secondary_color, description, instagram_url, youtube_url, tiktok_url, twitter_url",
+      "id, name, slug, custom_domain, status, logo_url, primary_color, secondary_color, tertiary_color, description, instagram_url, youtube_url, tiktok_url, twitter_url",
     )
     .eq("id", profile?.organization_id ?? "")
     .maybeSingle();

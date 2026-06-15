@@ -2,7 +2,7 @@
 
 import { salvarOrganizacao, alterarSenha, listarUsuarios, convidarUsuario, desativarUsuario } from "./actions";
 import { useEffect, useRef, useState } from "react";
-import { Camera, Globe, Palette, AlignLeft, Users, UserPlus, UserX, Link2, ExternalLink } from "lucide-react";
+import { Camera, Palette, Users, UserPlus, UserX, Link2, ExternalLink } from "lucide-react";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,7 @@ interface Org {
   logo_url: string | null;
   primary_color: string | null;
   secondary_color: string | null;
+  tertiary_color: string | null;
   description: string | null;
   instagram_url: string | null;
   youtube_url: string | null;
@@ -38,7 +39,7 @@ interface UserRow {
   email: string;
 }
 
-type Tab = "organizacao" | "site" | "usuarios";
+type Tab = "geral" | "organizacao" | "usuarios";
 
 // ─── Estilos base (DS) ───────────────────────────────────────────────────────
 
@@ -140,9 +141,9 @@ function StyledInput({
   );
 }
 
-// ─── Aba Organização ──────────────────────────────────────────────────────────
+// ─── Aba Geral ────────────────────────────────────────────────────────────────
 
-function TabOrganizacao({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
+function TabGeral({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState(org?.name ?? "");
@@ -181,6 +182,7 @@ function TabOrganizacao({ org, onSaved }: { org: Org | null; onSaved: () => void
     fd.append("custom_domain", org?.custom_domain ?? "");
     fd.append("primary_color", org?.primary_color ?? "");
     fd.append("secondary_color", org?.secondary_color ?? "");
+    fd.append("tertiary_color", org?.tertiary_color ?? "");
     fd.append("description", org?.description ?? "");
     if (pendingLogo) fd.append("logo", pendingLogo);
     const result = await salvarOrganizacao(org?.id, fd);
@@ -283,17 +285,15 @@ function TabOrganizacao({ org, onSaved }: { org: Org | null; onSaved: () => void
   );
 }
 
-// ─── Aba Site ─────────────────────────────────────────────────────────────────
+// ─── Aba Organização (cores) ──────────────────────────────────────────────────
 
-function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
-  const [customDomain, setCustomDomain] = useState(org?.custom_domain ?? "");
+function TabOrganizacao({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
   const [primaryColor, setPrimaryColor] = useState(org?.primary_color ?? "#BFF205");
   const [secondaryColor, setSecondaryColor] = useState(org?.secondary_color ?? "#0a0a0a");
-  const [description, setDescription] = useState(org?.description ?? "");
+  const [tertiaryColor, setTertiaryColor] = useState(org?.tertiary_color ?? "#ffffff");
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Preview ao vivo das cores
   useEffect(() => {
     document.documentElement.style.setProperty("--color-brand", primaryColor);
   }, [primaryColor]);
@@ -306,22 +306,21 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
     setSaving(true);
     setFeedback(null);
     const fd = new FormData();
-    // Preserva campos de outras abas
     fd.append("name", org?.name ?? "");
     fd.append("slug", org?.slug ?? "");
     fd.append("instagram_url", org?.instagram_url ?? "");
     fd.append("youtube_url", org?.youtube_url ?? "");
     fd.append("tiktok_url", org?.tiktok_url ?? "");
     fd.append("twitter_url", org?.twitter_url ?? "");
-    // Campos desta aba
-    fd.append("custom_domain", customDomain);
+    fd.append("custom_domain", org?.custom_domain ?? "");
+    fd.append("description", org?.description ?? "");
     fd.append("primary_color", primaryColor);
     fd.append("secondary_color", secondaryColor);
-    fd.append("description", description);
+    fd.append("tertiary_color", tertiaryColor);
     const result = await salvarOrganizacao(org?.id, fd);
     setSaving(false);
     if ("error" in result) { setFeedback({ type: "error", text: result.error }); return; }
-    setFeedback({ type: "success", text: "Configurações do site salvas." });
+    setFeedback({ type: "success", text: "Cores salvas com sucesso." });
     onSaved();
   }
 
@@ -330,54 +329,26 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
     backgroundColor: "var(--color-surface)", padding: "20px 20px 24px",
   };
 
+  const colorFields = [
+    { label: "Cor primária", value: primaryColor, set: setPrimaryColor },
+    { label: "Cor secundária", value: secondaryColor, set: setSecondaryColor },
+    { label: "Cor terciária", value: tertiaryColor, set: setTertiaryColor },
+  ];
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={cardStyle}>
-        <SectionHeader title="Identidade do site público" />
+        <SectionHeader title="Cores da organização" />
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-          {/* URL do site */}
           <div>
-            <FieldLabel><span style={{ display: "flex", alignItems: "center", gap: 5 }}><Globe size={11} color="#BFF205" /> URL do site público</span></FieldLabel>
-            <StyledInput value={customDomain} onChange={setCustomDomain} placeholder="orange.06score.com" />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.06em", display: "block", marginTop: 5 }}>
-              Domínio ou subdomínio do 06.score
-            </span>
-          </div>
-
-          {/* Descrição */}
-          <div>
-            <FieldLabel><span style={{ display: "flex", alignItems: "center", gap: 5 }}><AlignLeft size={11} color="#BFF205" /> Descrição da organização</span></FieldLabel>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Uma breve descrição da sua organização…"
-              rows={3}
-              style={{
-                ...inputBaseStyle,
-                resize: "vertical",
-                minHeight: 80,
-                lineHeight: 1.5,
-              }}
-              onFocus={e => (e.target.style.borderColor = "rgba(191,242,5,0.4)")}
-              onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
-            />
-          </div>
-
-          {/* Cores */}
-          <div>
-            <FieldLabel><span style={{ display: "flex", alignItems: "center", gap: 5 }}><Palette size={11} color="#BFF205" /> Cores da organização</span></FieldLabel>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {[
-                { label: "Cor primária", value: primaryColor, set: setPrimaryColor },
-                { label: "Cor secundária", value: secondaryColor, set: setSecondaryColor },
-              ].map(({ label, value, set }) => (
+            <FieldLabel><span style={{ display: "flex", alignItems: "center", gap: 5 }}><Palette size={11} color="#BFF205" /> Paleta de cores</span></FieldLabel>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              {colorFields.map(({ label, value, set }) => (
                 <div key={label}>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
                     {label}
                   </span>
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    {/* Color picker nativo */}
                     <div style={{ position: "relative", flexShrink: 0 }}>
                       <div style={{
                         width: 36, height: 36, borderRadius: 8,
@@ -397,14 +368,10 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
                         />
                       </div>
                     </div>
-                    {/* Input hex */}
                     <input
                       type="text"
                       value={value}
-                      onChange={e => {
-                        const v = e.target.value;
-                        set(v);
-                      }}
+                      onChange={e => set(e.target.value)}
                       maxLength={7}
                       style={{ ...inputBaseStyle, width: "100%", fontFamily: "var(--font-mono)", fontSize: 12 }}
                       onFocus={e => (e.target.style.borderColor = "rgba(191,242,5,0.4)")}
@@ -415,7 +382,6 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
               ))}
             </div>
 
-            {/* Preview ao vivo */}
             <div style={{
               marginTop: 16, padding: "14px 16px", borderRadius: 10,
               border: "1px solid rgba(255,255,255,0.08)",
@@ -427,6 +393,7 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: primaryColor, border: "2px solid rgba(255,255,255,0.1)" }} />
                 <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: secondaryColor, border: "2px solid rgba(255,255,255,0.1)" }} />
+                <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: tertiaryColor, border: "2px solid rgba(255,255,255,0.1)" }} />
                 <button style={{
                   padding: "6px 16px", borderRadius: 7, border: "none",
                   backgroundColor: primaryColor, color: secondaryColor || "#0a0a0a",
@@ -441,6 +408,12 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
                 }}>
                   Link de destaque
                 </span>
+                <span style={{
+                  fontFamily: "var(--font-mono)", fontSize: 11,
+                  color: tertiaryColor, fontWeight: 700,
+                }}>
+                  Texto terciário
+                </span>
               </div>
             </div>
           </div>
@@ -449,7 +422,7 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
 
       {feedback && <FeedbackMessage type={feedback.type} text={feedback.text} />}
       <div>
-        <SaveButton saving={saving} label="Salvar configurações do site" onClick={handleSave} />
+        <SaveButton saving={saving} label="Salvar cores" onClick={handleSave} />
       </div>
     </div>
   );
@@ -457,7 +430,7 @@ function TabSite({ org, onSaved }: { org: Org | null; onSaved: () => void }) {
 
 // ─── Aba Usuários ─────────────────────────────────────────────────────────────
 
-function TabUsuarios({ orgId }: { orgId: string }) {
+function TabUsuarios({ orgId, userProfile }: { orgId: string; userProfile: UserProfile | null }) {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -467,6 +440,12 @@ function TabUsuarios({ orgId }: { orgId: string }) {
   const [inviting, setInviting] = useState(false);
   const [inviteFeedback, setInviteFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -504,6 +483,33 @@ function TabUsuarios({ orgId }: { orgId: string }) {
     setUsers(prev => prev.map(u => u.id === profileId ? { ...u, role: "inactive" } : u));
   }
 
+  async function handleSavePassword() {
+    setPasswordFeedback(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordFeedback({ type: "error", text: "As senhas não coincidem." });
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordFeedback({ type: "error", text: "A senha deve ter pelo menos 6 caracteres." });
+      return;
+    }
+    if (!currentPassword) {
+      setPasswordFeedback({ type: "error", text: "Informe a senha atual." });
+      return;
+    }
+    setSavingPassword(true);
+    const fd = new FormData();
+    fd.append("current_password", currentPassword);
+    fd.append("new_password", newPassword);
+    const result = await alterarSenha(fd);
+    setSavingPassword(false);
+    if ("error" in result) { setPasswordFeedback({ type: "error", text: result.error }); return; }
+    setPasswordFeedback({ type: "success", text: "Senha alterada com sucesso." });
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
   const roleLabel: Record<string, string> = {
     main: "Principal",
     admin: "Admin",
@@ -525,6 +531,55 @@ function TabUsuarios({ orgId }: { orgId: string }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Card — Minha conta */}
+      <div style={cardStyle}>
+        <SectionHeader title="Minha conta" />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "rgba(191,242,5,0.1)", border: "2px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#BFF205" }}>
+                {(userProfile?.full_name ?? "A").slice(0, 2).toUpperCase()}
+              </span>
+            </div>
+            <div>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                {userProfile?.full_name ?? "Administrador"}
+              </p>
+              <span style={{
+                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em",
+                padding: "2px 8px", borderRadius: 20, display: "inline-block", marginTop: 4,
+                border: `1px solid ${(roleColor[userProfile?.role ?? "main"] ?? "#BFF205")}44`,
+                color: roleColor[userProfile?.role ?? "main"] ?? "#BFF205",
+                backgroundColor: `${roleColor[userProfile?.role ?? "main"] ?? "#BFF205"}11`,
+              }}>
+                {roleLabel[userProfile?.role ?? "main"] ?? userProfile?.role ?? "—"}
+              </span>
+            </div>
+          </div>
+          <div>
+            <FieldLabel>Senha atual</FieldLabel>
+            <StyledInput value={currentPassword} onChange={setCurrentPassword} type="password" placeholder="Digite sua senha atual" />
+          </div>
+          <div>
+            <FieldLabel>Nova senha</FieldLabel>
+            <StyledInput value={newPassword} onChange={setNewPassword} type="password" placeholder="Mínimo 6 caracteres" />
+          </div>
+          <div>
+            <FieldLabel>Confirmar nova senha</FieldLabel>
+            <StyledInput value={confirmPassword} onChange={setConfirmPassword} type="password" placeholder="Repita a nova senha" />
+          </div>
+        </div>
+        {passwordFeedback && <FeedbackMessage type={passwordFeedback.type} text={passwordFeedback.text} />}
+        <div style={{ marginTop: 20 }}>
+          <SaveButton
+            saving={savingPassword}
+            label="Alterar senha"
+            onClick={handleSavePassword}
+            disabled={!currentPassword || !newPassword || !confirmPassword}
+          />
+        </div>
+      </div>
+
       <div style={cardStyle}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -698,7 +753,12 @@ function TabUsuarios({ orgId }: { orgId: string }) {
         )}
       </div>
 
-      {/* Card — Minha conta (permanece na aba Usuários) */}
+      <div style={{ ...cardStyle, marginTop: 0 }}>
+        <SectionHeader title="Representantes" />
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0 }}>
+          Em breve — gestão de representantes de equipes.
+        </p>
+      </div>
     </div>
   );
 }
@@ -712,30 +772,13 @@ export default function ConfiguracoesClient({
   org: Org | null;
   userProfile: UserProfile | null;
 }) {
-  const [activeTab, setActiveTab] = useState<Tab>("organizacao");
-
-  // Senha state
-  const [newPassword, setNewPassword] = useState("");
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordFeedback, setPasswordFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("geral");
 
   const initials = (org?.name ?? "").slice(0, 2).toUpperCase() || "—";
 
-  async function handleSavePassword() {
-    setSavingPassword(true);
-    setPasswordFeedback(null);
-    const fd = new FormData();
-    fd.append("new_password", newPassword);
-    const result = await alterarSenha(fd);
-    setSavingPassword(false);
-    if ("error" in result) { setPasswordFeedback({ type: "error", text: result.error }); return; }
-    setPasswordFeedback({ type: "success", text: "Senha alterada com sucesso." });
-    setNewPassword("");
-  }
-
   const tabs: { key: Tab; label: string }[] = [
+    { key: "geral", label: "Geral" },
     { key: "organizacao", label: "Organização" },
-    { key: "site", label: "Site" },
     { key: "usuarios", label: "Usuários" },
   ];
 
@@ -797,66 +840,9 @@ export default function ConfiguracoesClient({
 
       {/* ── Conteúdo das abas ────────────────────────────────────────────────── */}
       <div style={{ padding: "32px 32px", maxWidth: 680 }}>
-        {activeTab === "organizacao" && (
-          <>
-            <TabOrganizacao org={org} onSaved={() => {}} />
-            {/* Minha conta — aparece ao final da aba Organização */}
-            <div style={{ marginTop: 16, borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205" }}>Minha conta</span>
-                <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", borderRadius: 10, backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}>
-                  <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "rgba(191,242,5,0.1)", border: "2px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#BFF205" }}>
-                      {(userProfile?.full_name ?? "A").slice(0, 2).toUpperCase()}
-                    </span>
-                  </div>
-                  <div>
-                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                      {userProfile?.full_name ?? "Administrador"}
-                    </p>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(191,242,5,0.4)", color: "#BFF205", backgroundColor: "rgba(191,242,5,0.08)", display: "inline-block", marginTop: 4 }}>
-                      Administrador principal
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nova senha</span>
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={e => setNewPassword(e.target.value)}
-                    placeholder="Mínimo 6 caracteres"
-                    style={inputBaseStyle}
-                    onFocus={e => (e.target.style.borderColor = "rgba(191,242,5,0.4)")}
-                    onBlur={e => (e.target.style.borderColor = "rgba(255,255,255,0.08)")}
-                  />
-                </div>
-              </div>
-              {passwordFeedback && <FeedbackMessage type={passwordFeedback.type} text={passwordFeedback.text} />}
-              <div style={{ marginTop: 20 }}>
-                <button
-                  type="button"
-                  onClick={handleSavePassword}
-                  disabled={savingPassword || newPassword.length < 6}
-                  style={{
-                    padding: "10px 28px", borderRadius: 9, border: "none",
-                    backgroundColor: (savingPassword || newPassword.length < 6) ? "rgba(191,242,5,0.3)" : "#BFF205",
-                    color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
-                    letterSpacing: "0.08em", textTransform: "uppercase",
-                    cursor: (savingPassword || newPassword.length < 6) ? "not-allowed" : "pointer",
-                  }}
-                >
-                  {savingPassword ? "Alterando…" : "Alterar senha"}
-                </button>
-              </div>
-            </div>
-          </>
-        )}
-        {activeTab === "site" && <TabSite org={org} onSaved={() => {}} />}
-        {activeTab === "usuarios" && <TabUsuarios orgId={org?.id ?? ""} />}
+        {activeTab === "geral" && <TabGeral org={org} onSaved={() => {}} />}
+        {activeTab === "organizacao" && <TabOrganizacao org={org} onSaved={() => {}} />}
+        {activeTab === "usuarios" && <TabUsuarios orgId={org?.id ?? ""} userProfile={userProfile} />}
       </div>
     </>
   );
