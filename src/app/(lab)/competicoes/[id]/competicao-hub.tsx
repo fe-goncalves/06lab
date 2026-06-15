@@ -21,6 +21,7 @@ type Edition = {
   id: string; season_id: string; status: string;
   season_name: string; year_value: number; custom_name: string | null;
   start_date: string | null; end_date: string | null; created_at: string;
+  display_order: number; is_hidden: boolean;
 };
 type Season = { id: string; name: string; year_value: number };
 type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; is_virtual?: boolean };
@@ -261,7 +262,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     abaParam === "suspensoes" ? "suspensoes" : ((configParam as any) ?? "gerais")
   );
   const [selectedEditionId, setSelectedEditionId] = useState<string>(
-    searchParams.get("edicao") ?? initialEditionId ?? editions[0]?.id ?? "",
+    searchParams.get("edicao") ?? initialEditionId ?? editions.find(e => !e.is_hidden)?.id ?? editions[0]?.id ?? "",
   );
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
@@ -350,13 +351,17 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
-  const sortedEditionsForDropdown = [...editions].sort((a, b) => {
+  const visibleEditions = editions.filter(e => !e.is_hidden);
+
+  const sortedEditionsForDropdown = [...visibleEditions].sort((a, b) => {
+    if (a.display_order !== b.display_order) return a.display_order - b.display_order;
     if (a.status === "ongoing" && b.status !== "ongoing") return -1;
     if (b.status === "ongoing" && a.status !== "ongoing") return 1;
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
-  const selectedEdition = editions.find(e => e.id === selectedEditionId);
+  const selectedEdition = visibleEditions.find(e => e.id === selectedEditionId)
+    ?? editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
   const isClassificatory = (type: string) => type === "round_robin" || type === "group_stage";
   const isEliminatoria = (type: string) => type === "knockout" || type === "conference";

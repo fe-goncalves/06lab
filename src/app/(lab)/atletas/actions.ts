@@ -176,10 +176,37 @@ export async function vincularAtleta(
   return { success: true };
 }
 
+export async function encerrarVinculoAtual(
+  athleteId: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: current } = await supabase
+    .from("athlete_team_stints")
+    .select("id")
+    .eq("athlete_id", athleteId)
+    .eq("is_current", true)
+    .maybeSingle();
+
+  if (!current) return { error: "Não há vínculo atual para encerrar." };
+
+  const { error } = await supabase
+    .from("athlete_team_stints")
+    .update({
+      ended_at: new Date().toISOString().split("T")[0],
+      is_current: false,
+    })
+    .eq("id", current.id);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function adicionarStint(
   athleteId: string,
   teamId: string,
-  movementType: string,
   startedAt: string,
   endedAt: string | null,
 ): Promise<{ success: true } | { error: string }> {
@@ -192,7 +219,7 @@ export async function adicionarStint(
     .insert({
       athlete_id: athleteId,
       team_id: teamId,
-      movement_type: movementType,
+      movement_type: "arrival",
       started_at: startedAt,
       ended_at: endedAt,
       is_current: false,
@@ -228,7 +255,6 @@ export async function removerStint(
 
 export async function editarStint(
   stintId: string,
-  movementType: string,
   startedAt: string,
   endedAt: string | null,
 ): Promise<{ success: true } | { error: string }> {
@@ -239,7 +265,6 @@ export async function editarStint(
   const { error } = await supabase
     .from("athlete_team_stints")
     .update({
-      movement_type: movementType,
       started_at: startedAt,
       ended_at: endedAt ?? null,
     })

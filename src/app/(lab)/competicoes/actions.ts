@@ -332,3 +332,22 @@ export async function deletarEdicao(
   revalidatePath("/competicoes/" + competitionId + "/configuracoes");
   return { success: true };
 }
+
+export async function atualizarOrdemEdicoesAction(
+  updates: { id: string; display_order: number; is_hidden: boolean }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  for (const update of updates) {
+    const { error } = await supabase
+      .from("competition_editions")
+      .update({ display_order: update.display_order, is_hidden: update.is_hidden })
+      .eq("id", update.id);
+
+    if (error) return { error: error.message };
+  }
+
+  return { success: true };
+}

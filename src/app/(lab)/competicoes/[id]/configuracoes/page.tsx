@@ -37,9 +37,9 @@ export default async function ConfiguracoesCompeticaoPage({
       .select("id, label, display_order")
       .eq("organization_id", orgId).order("display_order"),
     supabase.from("competition_editions")
-      .select("id, status, season_id, custom_name, is_current, start_date, end_date, created_at, seasons(id, name, year_id, years(value))")
+      .select("id, status, season_id, custom_name, is_current, start_date, end_date, created_at, display_order, is_hidden, seasons(id, name, year_id, years(value))")
       .eq("competition_id", id)
-      .order("created_at", { ascending: false }),
+      .order("display_order", { ascending: true }),
     supabase.from("seasons")
       .select("id, name, year_id, display_order, years(value)")
       .eq("organization_id", orgId)
@@ -60,13 +60,11 @@ export default async function ConfiguracoesCompeticaoPage({
     created_at: e.created_at ?? "",
     season_name: e.seasons?.name ?? "—",
     year_value: e.seasons?.years?.value ?? 0,
+    display_order: e.display_order ?? 0,
+    is_hidden: e.is_hidden ?? false,
   }));
 
-  // Ordena: ano decrescente, depois nome decrescente
-  editionsList.sort((a, b) => {
-    if (b.year_value !== a.year_value) return b.year_value - a.year_value;
-    return b.season_name.localeCompare(a.season_name);
-  });
+  editionsList.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
 
   const seasonsList = (seasons ?? []).map((s: any) => ({
     id: s.id,

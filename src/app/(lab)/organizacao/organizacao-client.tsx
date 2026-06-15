@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import {
   Crown, Users, UserRound, Shield, MapPin, UserCheck,
   ClipboardCheck, Ban, UserCog, CalendarDays, BarChart2, Trophy, Star,
+  Tag, FileText,
 } from "lucide-react";
 
 type Item = {
@@ -16,99 +18,120 @@ type Item = {
 
 type Section = {
   group: string;
+  tab: "cadastros" | "gestao" | "relatorios";
   items: Item[];
 };
 
 const sections: Section[] = [
   {
     group: "CADASTROS",
+    tab: "cadastros",
     items: [
       { href: "/competicoes",   icon: Crown,          label: "Competições",      description: "Gerencie as competições e edições" },
       { href: "/equipes",       icon: Shield,         label: "Equipes",          description: "Clubes e equipes da organização" },
       { href: "/atletas",       icon: UserRound,      label: "Atletas",          description: "Cadastro e histórico de atletas" },
-      { href: "/arbitros",      icon: Users,          label: "Árbitros",         description: "Árbitros e assistentes cadastrados" },
       { href: "/comissao",      icon: UserCheck,      label: "Comissão Técnica", description: "Técnicos, auxiliares e demais membros" },
       { href: "/locais",        icon: MapPin,         label: "Locais",           description: "Estádios e campos utilizados" },
+      { href: "/arbitros",      icon: Users,          label: "Árbitros",         description: "Árbitros e assistentes cadastrados" },
     ],
   },
   {
     group: "GESTÃO",
+    tab: "gestao",
     items: [
       { href: "/aprovacoes",     icon: ClipboardCheck, label: "Aprovações",     description: "Inscrições e relatórios pendentes" },
       { href: "/suspensoes",     icon: Ban,            label: "Suspensões",     description: "Suspensões ativas e históricas" },
       { href: "/representantes", icon: UserCog,        label: "Representantes", description: "Acesso e gestão de representantes" },
       { href: "/temporadas",     icon: CalendarDays,   label: "Temporadas",     description: "Anos e temporadas da organização" },
+      { href: "/categorias",     icon: Tag,            label: "Categorias",     description: "Categorias globais da organização" },
     ],
   },
   {
-    group: "RELATÓRIOS & HISTÓRICO",
+    group: "RELATÓRIOS",
+    tab: "relatorios",
     items: [
       { href: "/relatorios",    icon: BarChart2, label: "Relatórios",   description: "Exportar dados em CSV e PDF" },
       { href: "/rankings",      icon: Trophy,    label: "Ranking",      description: "Classificações históricas",         placeholder: true },
       { href: "/hall-da-fama",  icon: Star,      label: "Hall da Fama", description: "Maiores destaques da organização" },
+      { href: "/relatorios",    icon: FileText,  label: "Súmulas",      description: "Gerar e exportar súmulas oficiais" },
     ],
   },
 ];
 
-export default function OrganizacaoClient() {
-  return (
-    <div style={{ padding: "32px 32px 64px" }}>
+const TABS = [
+  { key: "cadastros" as const, label: "CADASTROS" },
+  { key: "gestao" as const, label: "GESTÃO" },
+  { key: "relatorios" as const, label: "RELATÓRIOS" },
+];
 
-      <div style={{ marginBottom: 40 }}>
-        <h1 style={{
-          fontFamily: "var(--font-display)",
-          fontSize: 22,
-          fontWeight: 900,
-          color: "var(--color-text-primary)",
-          margin: 0,
-          letterSpacing: "0.01em",
-        }}>
-          ORGANIZAÇÃO
-        </h1>
-        <p style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          color: "var(--color-text-secondary)",
-          marginTop: 6,
-        }}>
-          Gerencie todas as entidades e configurações da organização
-        </p>
+export default function OrganizacaoClient() {
+  const [activeTab, setActiveTab] = useState<"cadastros" | "gestao" | "relatorios">("cadastros");
+  const activeSection = sections.find(s => s.tab === activeTab);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
+
+      <div style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ padding: "20px 32px 0" }}>
+          <h1 style={{
+            fontFamily: "var(--font-display)",
+            fontSize: 22,
+            fontWeight: 900,
+            color: "var(--color-text-primary)",
+            margin: 0,
+            letterSpacing: "0.01em",
+          }}>
+            ORGANIZAÇÃO
+          </h1>
+          <p style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 12,
+            color: "var(--color-text-secondary)",
+            marginTop: 6,
+            marginBottom: 20,
+          }}>
+            Gerencie todas as entidades e configurações da organização
+          </p>
+
+          <div style={{ display: "flex", gap: 0 }}>
+            {TABS.map(tab => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: "11px 18px",
+                  border: "none",
+                  borderBottom: `2px solid ${activeTab === tab.key ? "#BFF205" : "transparent"}`,
+                  backgroundColor: "transparent",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.1em",
+                  color: activeTab === tab.key ? "#BFF205" : "#666",
+                  cursor: "pointer",
+                  transition: "color 0.12s",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 40 }}>
-        {sections.map((section) => (
-          <div key={section.group}>
-
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-              <span style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-                color: "#BFF205",
-              }}>
-                {section.group}
-              </span>
-              <div style={{
-                flex: 1,
-                height: 1,
-                background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)",
-              }} />
-            </div>
-
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-              gap: 12,
-            }}>
-              {section.items.map((item) => (
-                <ItemCard key={item.href} item={item} />
-              ))}
-            </div>
-
+      <div style={{ flex: 1, padding: "32px 32px 64px" }}>
+        {activeSection && (
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gap: 12,
+          }}>
+            {activeSection.items.map((item) => (
+              <ItemCard key={`${activeSection.tab}-${item.href}-${item.label}`} item={item} />
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

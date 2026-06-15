@@ -6,7 +6,8 @@ import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
-import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint, toggleStintAtivo } from "../actions";
+import { TeamPicker } from "@/app/(lab)/components/team-picker";
+import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint, toggleStintAtivo, encerrarVinculoAtual } from "../actions";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
@@ -25,7 +26,7 @@ type AthleteRow = {
 };
 
 type Position = { id: string; full_name: string; abbreviation: string };
-type Team = { id: string; full_name: string; logo_url?: string | null; primary_color?: string | null };
+type Team = { id: string; full_name: string; short_name: string | null; logo_url?: string | null; primary_color?: string | null; gender?: string | null };
 type StintHistory = {
   id: string;
   team_id: string;
@@ -74,12 +75,6 @@ type RosterEntry = {
   } | null;
 };
 
-const MOVEMENT_LABELS: Record<string, string> = {
-  arrival: "Chegada", transfer: "Transferência", loan: "Empréstimo", departure: "Saída",
-};
-const MOVEMENT_COLORS: Record<string, string> = {
-  arrival: "#BFF205", transfer: "#A6A6A6", loan: "#F2C005", departure: "#FF4444",
-};
 const AWARD_LABELS: Record<string, string> = {
   top_scorer: "Artilheiro", top_assists: "Garçom", mvp: "MVP",
   best_goalkeeper: "Melhor Goleiro", best_coach: "Melhor Técnico",
@@ -163,17 +158,16 @@ export default function AtletaPage() {
   const [transferring, setTransferring] = useState(false);
 
   const [editingStintId, setEditingStintId] = useState<string | null>(null);
-  const [editStintMovement, setEditStintMovement] = useState("");
   const [editStintStarted, setEditStintStarted] = useState("");
   const [editStintEnded, setEditStintEnded] = useState("");
   const [savingStint, setSavingStint] = useState(false);
 
   const [showAddStint, setShowAddStint] = useState(false);
   const [addStintTeamId, setAddStintTeamId] = useState("");
-  const [addStintMovement, setAddStintMovement] = useState("arrival");
   const [addStintStarted, setAddStintStarted] = useState("");
   const [addStintEnded, setAddStintEnded] = useState("");
   const [addingStint, setAddingStint] = useState(false);
+  const [endingVinculo, setEndingVinculo] = useState(false);
 
   const [tournamentSearch, setTournamentSearch] = useState("");
 
@@ -204,7 +198,7 @@ export default function AtletaPage() {
     ] = await Promise.all([
       supabase.from("athletes").select("*").eq("id", id).maybeSingle(),
       supabase.from("player_positions").select("id, full_name, abbreviation").eq("sport_slug", "football7").order("display_order"),
-      supabase.from("teams").select("id, full_name, logo_url, primary_color").eq("organization_id", profile.organization_id).order("full_name"),
+      supabase.from("teams").select("id, full_name, short_name, logo_url, primary_color, gender, is_virtual").eq("organization_id", profile.organization_id).eq("is_virtual", false).order("full_name"),
       supabase.from("athlete_team_stints").select("id, team_id, teams(id, full_name, logo_url, primary_color)").eq("athlete_id", id).eq("is_current", true).maybeSingle(),
       supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
       // team_id e years(value) adicionados para suportar os filtros
@@ -278,7 +272,6 @@ export default function AtletaPage() {
 
   function openEditStint(stint: StintHistory) {
     setEditingStintId(stint.id);
-    setEditStintMovement(stint.movement_type ?? "arrival");
     setEditStintStarted(formatDateToBR(stint.started_at));
     setEditStintEnded(formatDateToBR(stint.ended_at));
   }
@@ -288,7 +281,7 @@ export default function AtletaPage() {
     const started = parseDateToISO(editStintStarted);
     const ended = editStintEnded ? parseDateToISO(editStintEnded) : null;
     if (!started) { toast("error", "Data de início inválida."); setSavingStint(false); return; }
-    const result = await editarStint(stintId, editStintMovement, started, ended);
+    const result = await editarStint(stintId, started, ended);
     setSavingStint(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Vínculo atualizado.");
@@ -302,12 +295,23 @@ export default function AtletaPage() {
     if (!started) { toast("error", "Data de início inválida."); return; }
     const ended = addStintEnded ? parseDateToISO(addStintEnded) : null;
     setAddingStint(true);
-    const result = await adicionarStint(id, addStintTeamId, addStintMovement, started, ended);
+    const result = await adicionarStint(id, addStintTeamId, started, ended);
     setAddingStint(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Vínculo adicionado.");
     setShowAddStint(false);
-    setAddStintTeamId(""); setAddStintMovement("arrival"); setAddStintStarted(""); setAddStintEnded("");
+    setAddStintTeamId(""); setAddStintStarted(""); setAddStintEnded("");
+    await load();
+  }
+
+  async function handleEncerrarVinculo() {
+    if (!confirm("Encerrar o vínculo atual? O atleta ficará sem clube.")) return;
+    setEndingVinculo(true);
+    const result = await encerrarVinculoAtual(id);
+    setEndingVinculo(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Vínculo encerrado.");
+    setShowAddStint(false);
     await load();
   }
 
@@ -332,6 +336,8 @@ export default function AtletaPage() {
   const teamColor = currentTeam?.color ?? null;
   const accentColor = teamColor ?? "#BFF205";
   const border = "1px solid rgba(255,255,255,0.08)";
+  const availableTeams = teams.filter((t) => t.gender === gender);
+  const hasCurrentStint = stintHistory.some((s) => s.ended_at === null);
 
   const inputBaseStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px",
@@ -617,7 +623,7 @@ export default function AtletaPage() {
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     <LabSelect value={transferTeamId} onChange={setTransferTeamId} placeholder="Selecione a equipe…"
-                      options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
+                      options={availableTeams.map((t) => ({ value: t.id, label: t.short_name ?? t.full_name }))} />
                     <div style={{ display: "flex", gap: 8 }}>
                       <button type="button" onClick={handleVincular} disabled={!transferTeamId || transferring}
                         style={{ flex: 2, padding: "8px", borderRadius: 8, border: "none", backgroundColor: !transferTeamId || transferring ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: !transferTeamId || transferring ? "not-allowed" : "pointer" }}>
@@ -728,13 +734,17 @@ export default function AtletaPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                     <div style={{ gridColumn: "1 / -1" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Equipe *</span>
-                      <LabSelect value={addStintTeamId} onChange={setAddStintTeamId} placeholder="Selecione…"
-                        options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Tipo</span>
-                      <LabSelect value={addStintMovement} onChange={setAddStintMovement}
-                        options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
+                      <TeamPicker
+                        teams={availableTeams.map((t) => ({
+                          id: t.id,
+                          full_name: t.full_name,
+                          short_name: t.short_name,
+                          logo_url: t.logo_url ?? null,
+                        }))}
+                        value={addStintTeamId}
+                        onChange={setAddStintTeamId}
+                        placeholder="Selecione…"
+                      />
                     </div>
                     <div>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Início *</span>
@@ -749,6 +759,29 @@ export default function AtletaPage() {
                         maxLength={10} style={inputBaseStyle} />
                     </div>
                   </div>
+                  {hasCurrentStint && (
+                    <button
+                      type="button"
+                      onClick={handleEncerrarVinculo}
+                      disabled={endingVinculo}
+                      style={{
+                        width: "100%",
+                        marginBottom: 10,
+                        padding: "9px 14px",
+                        borderRadius: 9,
+                        border: "1px solid rgba(255,68,68,0.25)",
+                        backgroundColor: "rgba(255,68,68,0.06)",
+                        color: "rgba(255,120,120,0.9)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: endingVinculo ? "not-allowed" : "pointer",
+                        opacity: endingVinculo ? 0.6 : 1,
+                      }}
+                    >
+                      {endingVinculo ? "Encerrando…" : "Ficou sem clube (encerrar vínculo atual)"}
+                    </button>
+                  )}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button type="button" onClick={handleAddStint} disabled={addingStint}
                       style={{ padding: "8px 18px", borderRadius: 8, border: "none", backgroundColor: addingStint ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: addingStint ? "not-allowed" : "pointer" }}>
@@ -780,12 +813,7 @@ export default function AtletaPage() {
                             {stint.teams?.full_name ?? "Equipe"}
                           </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-                          <div>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Tipo</span>
-                            <LabSelect value={editStintMovement} onChange={setEditStintMovement}
-                              options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
-                          </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
                           <div>
                             <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Início</span>
                             <input type="text" placeholder="DD/MM/AAAA" value={editStintStarted}
@@ -814,13 +842,6 @@ export default function AtletaPage() {
                       <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", opacity: stint.is_active !== false ? 0.85 : 0.35, transition: "opacity 0.1s" }}
                         onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
                         onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = stint.is_active !== false ? "0.85" : "0.35"}>
-
-                        {/* Badge de movimento */}
-                        <div style={{ flexShrink: 0, width: 80 }}>
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: 20, backgroundColor: `${MOVEMENT_COLORS[stint.movement_type ?? "arrival"]}18`, color: MOVEMENT_COLORS[stint.movement_type ?? "arrival"], border: `1px solid ${MOVEMENT_COLORS[stint.movement_type ?? "arrival"]}33` }}>
-                            {MOVEMENT_LABELS[stint.movement_type ?? "arrival"] ?? "—"}
-                          </span>
-                        </div>
 
                         {/* Logo do time */}
                         <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>

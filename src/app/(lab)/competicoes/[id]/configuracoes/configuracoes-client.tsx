@@ -10,8 +10,9 @@ import {
   criarEdicaoNaConfiguracao,
   editarEdicaoNaConfiguracao,
   deletarEdicao,
+  atualizarOrdemEdicoesAction,
 } from "../../actions";
-import { Plus, Trash2, X, Pencil } from "lucide-react";
+import { Plus, Trash2, X, Pencil, GripVertical } from "lucide-react";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
 
@@ -32,6 +33,8 @@ type Edition = {
   custom_name: string | null; is_current: boolean;
   season_name: string; year_value: number;
   start_date: string | null; end_date: string | null;
+  display_order: number;
+  is_hidden: boolean;
 };
 type Season = { id: string; name: string; year_value: number };
 
@@ -687,6 +690,8 @@ export default function ConfiguracoesCompeticaoClient({
 
   // Edições
   const [editions, setEditions] = useState<Edition[]>(initialEditions);
+  const [draggingEditionId, setDraggingEditionId] = useState<string | null>(null);
+  const [savingEditionOrder, setSavingEditionOrder] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEdition, setEditingEdition] = useState<Edition | null>(null);
   const [deletingEditionId, setDeletingEditionId] = useState<string | null>(null);
@@ -710,12 +715,48 @@ export default function ConfiguracoesCompeticaoClient({
     return () => URL.revokeObjectURL(url);
   }, [pendingLogo, logoUrl]);
 
-  const sortedEditions = [...editions].sort((a, b) => {
-    if (b.year_value !== a.year_value) return b.year_value - a.year_value;
-    const nameA = a.custom_name ?? a.season_name;
-    const nameB = b.custom_name ?? b.season_name;
-    return nameB.localeCompare(nameA);
-  });
+  const sortedEditions = [...editions].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+
+  async function persistEditionsState(nextEditions: Edition[]) {
+    setSavingEditionOrder(true);
+    const ordered = [...nextEditions].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    const updates = ordered.map((ed, idx) => ({
+      id: ed.id,
+      display_order: idx + 1,
+      is_hidden: ed.is_hidden ?? false,
+    }));
+    const result = await atualizarOrdemEdicoesAction(updates);
+    setSavingEditionOrder(false);
+    if ("error" in result) {
+      toast("error", result.error);
+      return false;
+    }
+    return true;
+  }
+
+  function reorderEditions(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setEditions(prev => {
+      const list = [...prev].sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+      const fromIdx = list.findIndex(e => e.id === fromId);
+      const toIdx = list.findIndex(e => e.id === toId);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      const [moved] = list.splice(fromIdx, 1);
+      list.splice(toIdx, 0, moved);
+      const updated = list.map((ed, idx) => ({ ...ed, display_order: idx + 1 }));
+      void persistEditionsState(updated);
+      return updated;
+    });
+  }
+
+  async function toggleEditionHidden(id: string) {
+    const next = editions.map(ed =>
+      ed.id === id ? { ...ed, is_hidden: !ed.is_hidden } : ed,
+    );
+    setEditions(next);
+    const ok = await persistEditionsState(next);
+    if (!ok) setEditions(editions);
+  }
 
   async function handlePendingLogoChange(file: File | null) {
     setPendingLogo(file);
@@ -807,10 +848,12 @@ export default function ConfiguracoesCompeticaoClient({
       custom_name: data.customName.trim() || null, is_current: data.isCurrent,
       start_date: data.startDate.trim() || null, end_date: data.endDate.trim() || null,
       season_name: season?.name ?? "—", year_value: season?.year_value ?? 0,
+      display_order: editions.length + 1,
+      is_hidden: false,
     };
     setEditions(prev => {
       const updated = data.isCurrent ? prev.map(e => ({ ...e, is_current: false })) : prev;
-      return [newEd, ...updated];
+      return [...updated, newEd];
     });
     setShowCreateModal(false);
     toast("success", "Edição criada.");
@@ -1071,7 +1114,8 @@ export default function ConfiguracoesCompeticaoClient({
           <div style={{ maxWidth: 560 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", margin: 0 }}>
-                Cada edição representa esta competição em uma temporada específica.
+                Arraste para reordenar. Edições ocultas não aparecem no hub nem no 06.score.
+                {savingEditionOrder && <span style={{ marginLeft: 8, color: "#BFF205" }}>Salvando…</span>}
               </p>
               <button type="button" onClick={() => setShowCreateModal(true)}
                 style={{
@@ -1095,54 +1139,107 @@ export default function ConfiguracoesCompeticaoClient({
               )}
               {sortedEditions.map((ed, idx) => {
                 const edDisplayName = ed.custom_name ?? (ed.season_name + (ed.year_value ? " " + ed.year_value : ""));
+                const isDragging = draggingEditionId === ed.id;
                 return (
-                  <Link
+                  <div
                     key={ed.id}
-                    href={"/competicoes/" + competition.id + "?edicao=" + ed.id}
+                    draggable
+                    onDragStart={() => setDraggingEditionId(ed.id)}
+                    onDragEnd={() => setDraggingEditionId(null)}
+                    onDragOver={e => { e.preventDefault(); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      if (draggingEditionId) reorderEditions(draggingEditionId, ed.id);
+                      setDraggingEditionId(null);
+                    }}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-                      padding: "16px 20px", textDecoration: "none",
+                      padding: "16px 20px",
                       borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                      transition: "background-color 0.12s",
+                      backgroundColor: isDragging ? "rgba(191,242,5,0.04)" : "transparent",
+                      opacity: ed.is_hidden ? 0.55 : 1,
+                      transition: "background-color 0.12s, opacity 0.12s",
                     }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)")}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
                   >
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                          {edDisplayName}
-                        </p>
-                        {ed.is_current && (
-                          <span style={{
-                            fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
-                            padding: "2px 8px", borderRadius: 20,
-                            backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
-                            border: "1px solid rgba(191,242,5,0.2)",
-                          }}>
-                            ATUAL
-                          </span>
-                        )}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{ color: "rgba(255,255,255,0.25)", cursor: "grab", flexShrink: 0, display: "flex", alignItems: "center" }}
+                        title="Arrastar para reordenar"
+                      >
+                        <GripVertical size={16} />
                       </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                        <span style={{
-                          fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
-                          padding: "2px 8px", borderRadius: 6,
-                          backgroundColor: ed.status === "ongoing" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.06)",
-                          color: STATUS_COLOR[ed.status] ?? "#A6A6A6",
-                        }}>
-                          {EDITION_STATUS_OPTIONS.find(o => o.value === ed.status)?.label ?? ed.status}
-                        </span>
-                        {ed.year_value > 0 && (
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{ed.year_value}</span>
-                        )}
-                      </div>
+                      <Link
+                        href={"/competicoes/" + competition.id + "?edicao=" + ed.id}
+                        style={{ flex: 1, minWidth: 0, textDecoration: "none" }}
+                      >
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
+                              {edDisplayName}
+                            </p>
+                            {ed.is_current && (
+                              <span style={{
+                                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+                                padding: "2px 8px", borderRadius: 20,
+                                backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
+                                border: "1px solid rgba(191,242,5,0.2)",
+                              }}>
+                                ATUAL
+                              </span>
+                            )}
+                            {ed.is_hidden && (
+                              <span style={{
+                                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+                                padding: "2px 8px", borderRadius: 20,
+                                backgroundColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)",
+                                border: "1px solid rgba(255,255,255,0.1)",
+                              }}>
+                                OCULTA
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+                            <span style={{
+                              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
+                              padding: "2px 8px", borderRadius: 6,
+                              backgroundColor: ed.status === "ongoing" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.06)",
+                              color: STATUS_COLOR[ed.status] ?? "#A6A6A6",
+                            }}>
+                              {EDITION_STATUS_OPTIONS.find(o => o.value === ed.status)?.label ?? ed.status}
+                            </span>
+                            {ed.year_value > 0 && (
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{ed.year_value}</span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}
-                      onClick={e => e.preventDefault()}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em" }}>Visível</span>
+                        <button
+                          type="button"
+                          disabled={savingEditionOrder}
+                          onClick={() => void toggleEditionHidden(ed.id)}
+                          style={{
+                            width: 44, height: 24, borderRadius: 12, border: "none", cursor: savingEditionOrder ? "wait" : "pointer",
+                            backgroundColor: !ed.is_hidden ? "#BFF205" : "rgba(255,255,255,0.1)",
+                            transition: "background 0.15s", position: "relative" as const, flexShrink: 0,
+                            opacity: savingEditionOrder ? 0.6 : 1,
+                          }}
+                        >
+                          <div style={{
+                            position: "absolute", top: 3,
+                            left: !ed.is_hidden ? 23 : 3,
+                            width: 18, height: 18, borderRadius: "50%",
+                            backgroundColor: !ed.is_hidden ? "#0a0a0a" : "#555",
+                            transition: "left 0.15s",
+                          }} />
+                        </button>
+                      </div>
                       <button type="button"
-                        onClick={e => { e.preventDefault(); e.stopPropagation(); setEditingEdition(ed); }}
+                        onClick={() => setEditingEdition(ed)}
                         style={{
                           padding: 6, borderRadius: 8, cursor: "pointer",
                           border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
@@ -1151,7 +1248,7 @@ export default function ConfiguracoesCompeticaoClient({
                         <Pencil size={13} />
                       </button>
                       <button type="button"
-                        onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteEdition(ed.id); }}
+                        onClick={() => void handleDeleteEdition(ed.id)}
                         disabled={deletingEditionId === ed.id}
                         style={{
                           padding: 6, borderRadius: 8, cursor: deletingEditionId === ed.id ? "not-allowed" : "pointer",
@@ -1161,7 +1258,7 @@ export default function ConfiguracoesCompeticaoClient({
                         <Trash2 size={13} />
                       </button>
                     </div>
-                  </Link>
+                  </div>
                 );
               })}
             </div>

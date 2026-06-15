@@ -5,17 +5,19 @@
 import {
   editarMembro, vincularMembroEquipe,
   adicionarStintMembro, removerStintMembro, editarStintMembro, toggleStintMembroAtivo,
+  encerrarVinculoMembro,
 } from "../actions";
 import { createClient } from "@/lib/supabase";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { TeamPicker } from "@/app/(lab)/components/team-picker";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera } from "lucide-react";
 
 type StaffRole  = { id: string; full_name: string };
-type Team       = { id: string; full_name: string };
+type Team = { id: string; full_name: string; short_name: string | null; logo_url?: string | null };
 type RosterEntry = {
   id: string;
   edition_team_id: string;
@@ -58,13 +60,6 @@ type StaffEditionStat = {
     seasons: { name: string } | null;
     competitions: { full_name: string; short_name: string | null } | null;
   } | null;
-};
-
-const MOVEMENT_LABELS: Record<string, string> = {
-  arrival: "Chegada", transfer: "Transferência", loan: "Empréstimo", departure: "Saída",
-};
-const MOVEMENT_COLORS: Record<string, string> = {
-  arrival: "#BFF205", transfer: "#A6A6A6", loan: "#F2C005", departure: "#FF4444",
 };
 
 const TABS = [
@@ -150,17 +145,16 @@ export default function MembroPage() {
   const [transferring,   setTransferring]   = useState(false);
 
   const [editingStintId,    setEditingStintId]    = useState<string | null>(null);
-  const [editStintMovement, setEditStintMovement] = useState("");
   const [editStintStarted,  setEditStintStarted]  = useState("");
   const [editStintEnded,    setEditStintEnded]     = useState("");
   const [savingStint,       setSavingStint]        = useState(false);
 
   const [showAddStint,    setShowAddStint]    = useState(false);
   const [addStintTeamId,  setAddStintTeamId]  = useState("");
-  const [addStintMovement,setAddStintMovement]= useState("arrival");
   const [addStintStarted, setAddStintStarted] = useState("");
   const [addStintEnded,   setAddStintEnded]   = useState("");
   const [addingStint,     setAddingStint]     = useState(false);
+  const [endingVinculo,   setEndingVinculo]   = useState(false);
 
   const [fullName,     setFullName]     = useState("");
   const [surname,      setSurname]      = useState("");
@@ -194,7 +188,7 @@ export default function MembroPage() {
       ] = await Promise.all([
         supabase.from("staff_members").select("*").eq("id", id).maybeSingle(),
         supabase.from("staff_roles").select("id, full_name").eq("sport_slug", "football7").order("display_order"),
-        supabase.from("teams").select("id, full_name").eq("organization_id", profile?.organization_id ?? "").order("full_name"),
+        supabase.from("teams").select("id, full_name, short_name, logo_url, gender, is_virtual").eq("organization_id", profile?.organization_id ?? "").eq("is_virtual", false).order("full_name"),
         supabase.from("staff_team_stints")
           .select("id, team_id, teams(full_name, primary_color)")
           .eq("staff_member_id", id).eq("is_current", true).maybeSingle(),
@@ -278,7 +272,6 @@ export default function MembroPage() {
 
   function openEditStint(stint: StintHistory) {
     setEditingStintId(stint.id);
-    setEditStintMovement(stint.movement_type ?? "arrival");
     setEditStintStarted(formatDateToBR(stint.started_at));
     setEditStintEnded(formatDateToBR(stint.ended_at));
   }
@@ -288,7 +281,7 @@ export default function MembroPage() {
     const started = parseDateToISO(editStintStarted);
     const ended   = editStintEnded ? parseDateToISO(editStintEnded) : null;
     if (!started) { toast("error", "Data de início inválida."); setSavingStint(false); return; }
-    const result = await editarStintMembro(stintId, editStintMovement, started, ended);
+    const result = await editarStintMembro(stintId, started, ended);
     setSavingStint(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Vínculo atualizado.");
@@ -302,13 +295,24 @@ export default function MembroPage() {
     if (!started) { toast("error", "Data de início inválida."); return; }
     const ended = addStintEnded ? parseDateToISO(addStintEnded) : null;
     setAddingStint(true);
-    const result = await adicionarStintMembro(id, addStintTeamId, addStintMovement, started, ended);
+    const result = await adicionarStintMembro(id, addStintTeamId, started, ended);
     setAddingStint(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Vínculo adicionado.");
     setShowAddStint(false);
-    setAddStintTeamId(""); setAddStintMovement("arrival");
+    setAddStintTeamId("");
     setAddStintStarted(""); setAddStintEnded("");
+    await load();
+  }
+
+  async function handleEncerrarVinculo() {
+    if (!confirm("Encerrar o vínculo atual? O membro ficará sem clube.")) return;
+    setEndingVinculo(true);
+    const result = await encerrarVinculoMembro(id);
+    setEndingVinculo(false);
+    if ("error" in result) { toast("error", result.error); return; }
+    toast("success", "Vínculo encerrado.");
+    setShowAddStint(false);
     await load();
   }
 
@@ -330,6 +334,8 @@ export default function MembroPage() {
   const displayPhoto = previewUrl ?? photoUrl;
   const roleLabel    = roles.find(r => r.id === staffRoleId)?.full_name ?? null;
   const genderLabel  = gender === "male" ? "Masculino" : gender === "female" ? "Feminino" : null;
+  const availableTeams = teams;
+  const hasCurrentStint = stintHistory.some((s) => s.ended_at === null);
 
   if (loading)   return <div style={{ padding: 32, fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Carregando…</div>;
   if (loadError) return <div style={{ padding: 32, fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-primary)" }}>{loadError}</div>;
@@ -599,7 +605,7 @@ export default function MembroPage() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         <LabSelect value={transferTeamId} onChange={setTransferTeamId} placeholder="Selecione a equipe…"
                           style={{ flex: 1 }}
-                          options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
+                          options={availableTeams.map((t) => ({ value: t.id, label: t.short_name ?? t.full_name }))} />
                         <button type="button" onClick={handleVincular} disabled={!transferTeamId || transferring} style={{
                           padding: "9px 16px", borderRadius: 9, border: "none",
                           backgroundColor: transferring ? "rgba(191,242,5,0.3)" : accentColor,
@@ -654,15 +660,19 @@ export default function MembroPage() {
               {showAddStint && (
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
-                    <div>
+                    <div style={{ gridColumn: "1 / -1" }}>
                       <span style={labelStyle}>Equipe *</span>
-                      <LabSelect value={addStintTeamId} onChange={setAddStintTeamId} placeholder="Selecione…"
-                        options={teams.map((t) => ({ value: t.id, label: t.full_name }))} />
-                    </div>
-                    <div>
-                      <span style={labelStyle}>Tipo</span>
-                      <LabSelect value={addStintMovement} onChange={setAddStintMovement}
-                        options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
+                      <TeamPicker
+                        teams={availableTeams.map((t) => ({
+                          id: t.id,
+                          full_name: t.full_name,
+                          short_name: t.short_name,
+                          logo_url: t.logo_url ?? null,
+                        }))}
+                        value={addStintTeamId}
+                        onChange={setAddStintTeamId}
+                        placeholder="Selecione…"
+                      />
                     </div>
                     <div>
                       <span style={labelStyle}>Início *</span>
@@ -677,6 +687,28 @@ export default function MembroPage() {
                         maxLength={10} style={{ ...inputStyle, letterSpacing: "0.05em" }} />
                     </div>
                   </div>
+                  {hasCurrentStint && (
+                    <button
+                      type="button"
+                      onClick={handleEncerrarVinculo}
+                      disabled={endingVinculo}
+                      style={{
+                        width: "100%",
+                        padding: "9px 14px",
+                        borderRadius: 9,
+                        border: "1px solid rgba(255,68,68,0.25)",
+                        backgroundColor: "rgba(255,68,68,0.06)",
+                        color: "rgba(255,120,120,0.9)",
+                        fontFamily: "var(--font-mono)",
+                        fontSize: 10,
+                        fontWeight: 700,
+                        cursor: endingVinculo ? "not-allowed" : "pointer",
+                        opacity: endingVinculo ? 0.6 : 1,
+                      }}
+                    >
+                      {endingVinculo ? "Encerrando…" : "Ficou sem clube (encerrar vínculo atual)"}
+                    </button>
+                  )}
                   <div style={{ display: "flex", gap: 8 }}>
                     <button type="button" onClick={handleAddStint} disabled={addingStint} style={{
                       padding: "7px 16px", borderRadius: 9, border: "none",
@@ -716,12 +748,7 @@ export default function MembroPage() {
                             {stint.teams?.full_name ?? "Equipe"}
                           </span>
                         </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-                          <div>
-                            <span style={labelStyle}>Tipo</span>
-                            <LabSelect value={editStintMovement} onChange={setEditStintMovement}
-                              options={Object.entries(MOVEMENT_LABELS).map(([k, v]) => ({ value: k, label: v }))} />
-                          </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
                           <div>
                             <span style={labelStyle}>Início</span>
                             <input type="text" placeholder="DD/MM/AAAA" value={editStintStarted}
@@ -758,18 +785,6 @@ export default function MembroPage() {
                       <div
                         style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", opacity: stint.is_active !== false ? 1 : 0.35, transition: "opacity 0.15s" }}
                       >
-                        {/* Badge de movimento */}
-                        <div style={{ flexShrink: 0, width: 88 }}>
-                          <span style={{
-                            fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700,
-                            letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 20,
-                            backgroundColor: `${MOVEMENT_COLORS[stint.movement_type ?? "arrival"]}18`,
-                            color: MOVEMENT_COLORS[stint.movement_type ?? "arrival"],
-                          }}>
-                            {MOVEMENT_LABELS[stint.movement_type ?? "arrival"] ?? "—"}
-                          </span>
-                        </div>
-
                         {/* Logo */}
                         {stint.teams?.logo_url ? (
                           <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0, filter: stint.is_active !== false ? "none" : "grayscale(1)" }} />
