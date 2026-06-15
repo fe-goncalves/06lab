@@ -17,108 +17,98 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
 
   const { data: referee } = await supabase
     .from("referees")
-    .select("id, full_name, surname, photo_url, phone, pix_key, referee_role_id, profile_public, birth_date")
+    .select("id, full_name, surname, photo_url, phone, pix_key, referee_role_id, profile_public, birth_date, gender")
     .eq("id", id)
     .eq("organization_id", orgId)
     .maybeSingle();
 
   if (!referee) notFound();
 
-  const { data: matchReferees } = await supabase
+  const { data: matchRefs } = await supabase
     .from("match_referees")
-    .select(`
-      id,
-      referee_role_id,
-      matches (
-        id,
-        match_date,
-        status,
-        score_a,
-        score_b,
-        team_a_id,
-        team_b_id,
-        phases (
-          id,
-          name,
-          competition_editions (
-            id,
-            competitions ( id, full_name, short_name ),
-            seasons (
+    .select("id, match_id, referee_role_id, referee_roles(name)")
+    .eq("referee_id", id);
+
+  const matchIds = [...new Set((matchRefs ?? []).map((r) => r.match_id))];
+
+  const { data: matchesData } = matchIds.length > 0
+    ? await supabase
+        .from("matches")
+        .select(`
+          id, match_date, status, score_a, score_b,
+          team_a:teams!matches_team_a_id_fkey ( id, full_name, short_name, logo_url, primary_color ),
+          team_b:teams!matches_team_b_id_fkey ( id, full_name, short_name, logo_url, primary_color ),
+          phases (
+            edition_id,
+            full_name,
+            custom_label,
+            competition_editions (
               id,
-              name,
-              years ( value )
+              competitions ( id, full_name, short_name, logo_url )
             )
           )
-        )
-      )
-    `)
-    .eq("referee_id", id)
-    .order("id", { ascending: false });
+        `)
+        .in("id", matchIds)
+        .order("match_date", { ascending: false })
+    : { data: [] as any[] };
 
-  const teamIds = new Set<string>();
-  const matchIds: string[] = [];
+  const refByMatchId = new Map(
+    (matchRefs ?? []).map((r) => [r.match_id, r]),
+  );
 
-  (matchReferees ?? []).forEach(mr => {
-    const m = mr.matches as any;
-    if (!m) return;
-    matchIds.push(m.id);
-    if (m.team_a_id) teamIds.add(m.team_a_id);
-    if (m.team_b_id) teamIds.add(m.team_b_id);
+  const matches = (matchesData ?? []).map((m: any) => {
+    const mr = refByMatchId.get(m.id);
+    const phase = m.phases as any;
+    const edition = phase?.competition_editions as any;
+    const competition = edition?.competitions as any;
+    const teamA = m.team_a as any;
+    const teamB = m.team_b as any;
+
+    return {
+      matchRefereeId: (mr?.id ?? m.id) as string,
+      matchId: m.id as string,
+      matchDate: m.match_date as string | null,
+      status: m.status as string | null,
+      scoreA: m.score_a as number | null,
+      scoreB: m.score_b as number | null,
+      teamA: teamA ? {
+        id: teamA.id as string,
+        full_name: teamA.full_name as string,
+        abbreviation: (teamA.short_name ?? null) as string | null,
+        logo_url: teamA.logo_url as string | null,
+        primary_color: teamA.primary_color as string | null,
+      } : null,
+      teamB: teamB ? {
+        id: teamB.id as string,
+        full_name: teamB.full_name as string,
+        abbreviation: (teamB.short_name ?? null) as string | null,
+        logo_url: teamB.logo_url as string | null,
+        primary_color: teamB.primary_color as string | null,
+      } : null,
+      phaseName: (phase?.custom_label ?? phase?.full_name ?? null) as string | null,
+      editionId: (edition?.id ?? null) as string | null,
+      competitionId: (competition?.id ?? null) as string | null,
+      competitionName: (competition?.full_name ?? null) as string | null,
+      competitionShort: (competition?.short_name ?? null) as string | null,
+      yearValue: m.match_date ? new Date(m.match_date).getFullYear() : null,
+      refereeRoleId: (mr?.referee_role_id ?? null) as string | null,
+    };
   });
 
-  const [teamsResult, actionsResult] = await Promise.all([
-    teamIds.size > 0
-      ? supabase.from("teams").select("id, full_name, abbreviation, logo_url, primary_color").in("id", Array.from(teamIds))
-      : Promise.resolve({ data: [] }),
-    matchIds.length > 0
-      ? supabase
-          .from("match_actions")
-          .select("id, match_id, action_type, team_id")
-          .in("match_id", matchIds)
-          .in("action_type", ["yellow_card", "red_card", "yellow_red_card"])
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const teamsMap: Record<string, { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; primary_color: string | null }> = {};
-  (teamsResult.data ?? []).forEach((t: any) => { teamsMap[t.id] = t; });
+  const { data: actionsData } = matchIds.length > 0
+    ? await supabase
+        .from("match_actions")
+        .select("id, match_id, action_type, team_id")
+        .in("match_id", matchIds)
+        .in("action_type", ["yellow_card", "red_card", "yellow_red_card"])
+    : { data: [] as any[] };
 
   const { data: refereeRoles } = await supabase
     .from("referee_roles")
     .select("id, name")
     .eq("organization_id", orgId);
 
-  const matches = (matchReferees ?? [])
-    .map(mr => {
-      const m = mr.matches as any;
-      if (!m) return null;
-      const phase = m.phases as any;
-      const edition = phase?.competition_editions as any;
-      const competition = edition?.competitions as any;
-      const season = edition?.seasons as any;
-      const year = season?.years as any;
-
-      return {
-        matchRefereeId: mr.id as string,
-        matchId: m.id as string,
-        matchDate: m.match_date as string | null,
-        status: m.status as string | null,
-        scoreA: m.score_a as number | null,
-        scoreB: m.score_b as number | null,
-        teamA: m.team_a_id ? (teamsMap[m.team_a_id] ?? null) : null,
-        teamB: m.team_b_id ? (teamsMap[m.team_b_id] ?? null) : null,
-        phaseName: (phase?.name ?? null) as string | null,
-        editionId: (edition?.id ?? null) as string | null,
-        competitionId: (competition?.id ?? null) as string | null,
-        competitionName: (competition?.full_name ?? null) as string | null,
-        competitionShort: (competition?.short_name ?? null) as string | null,
-        seasonName: (season?.name ?? null) as string | null,
-        yearValue: (year?.value ?? null) as number | null,
-        refereeRoleId: mr.referee_role_id as string | null,
-      };
-    })
-    .filter(Boolean) as NonNullable<ReturnType<typeof normalizeMatch>>[];
-
-  const cardActions = (actionsResult.data ?? []).map((a: any) => ({
+  const cardActions = (actionsData ?? []).map((a: any) => ({
     id: a.id as string,
     matchId: a.match_id as string,
     actionType: a.action_type as "yellow_card" | "red_card" | "yellow_red_card",
@@ -134,5 +124,3 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
     />
   );
 }
-
-function normalizeMatch(x: any) { return x; }

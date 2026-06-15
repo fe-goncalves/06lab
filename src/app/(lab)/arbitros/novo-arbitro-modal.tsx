@@ -4,6 +4,7 @@ import { criarArbitro } from "./actions";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { X, Camera } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 const REFEREE_ROLES = [
   { id: "e9bd3156-58b3-4758-8c6e-5d48e53228e0", label: "Árbitro" },
@@ -25,6 +26,7 @@ export function NovoArbitroModal({
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState("");
   const [refereeRoleId, setRefereeRoleId] = useState(defaultRoleId ?? REFEREE_ROLES[0].id);
+  const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
   const [pixKey, setPixKey] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -34,7 +36,7 @@ export function NovoArbitroModal({
 
   useEffect(() => {
     if (!isOpen) {
-      setFullName(""); setPhone(""); setPixKey("");
+      setFullName(""); setPhone(""); setPixKey(""); setGender("");
       setFile(null); setError(null); setLoading(false);
       setRefereeRoleId(defaultRoleId ?? REFEREE_ROLES[0].id);
       setPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
@@ -66,6 +68,7 @@ export function NovoArbitroModal({
       const fd = new FormData();
       fd.append("full_name", fullName.trim());
       fd.append("referee_role_id", refereeRoleId);
+      fd.append("gender", gender);
       fd.append("phone", phone.trim());
       fd.append("pix_key", pixKey.trim());
       if (file) fd.append("photo", file);
@@ -242,6 +245,21 @@ export function NovoArbitroModal({
               style={inputStyle}
               onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
               onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+            />
+          </div>
+
+          {/* Gênero */}
+          <div>
+            <span style={fieldLabel}>Gênero</span>
+            <LabSelect
+              value={gender}
+              onChange={setGender}
+              options={[
+                { value: "male", label: "Masculino" },
+                { value: "female", label: "Feminino" },
+                { value: "other", label: "Outro" },
+              ]}
+              placeholder="Gênero"
             />
           </div>
 

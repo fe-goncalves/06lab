@@ -7,6 +7,7 @@ import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { editarArbitro } from "../actions";
 import { Camera } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -22,6 +23,7 @@ type Referee = {
   referee_role_id: string | null;
   profile_public: boolean;
   birth_date: string | null;
+  gender: string | null;
 };
 
 type TeamInfo = {
@@ -206,7 +208,7 @@ function MatchRow({ match, roles, isFirst }: { match: MatchEntry; roles: Referee
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "var(--color-text-primary)" }}>{match.scoreB}</span>
             </>
           ) : (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.25)" }}>{match.status === "live" ? "AO VIVO" : "—"}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.25)" }}>{match.status === "ongoing" ? "AO VIVO" : "—"}</span>
           )}
         </div>
 
@@ -234,6 +236,7 @@ function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRo
   const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState(referee.full_name);
   const [refereeRoleId, setRefereeRoleId] = useState(referee.referee_role_id ?? "");
+  const [gender, setGender] = useState(referee.gender ?? "");
   const [phone, setPhone] = useState(referee.phone ?? "");
   const [pixKey, setPix] = useState(referee.pix_key ?? "");
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
@@ -255,6 +258,7 @@ function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRo
       const fd = new FormData();
       fd.append("full_name", fullName.trim());
       fd.append("referee_role_id", refereeRoleId);
+      fd.append("gender", gender);
       fd.append("phone", phone.trim());
       fd.append("pix_key", pixKey.trim());
       if (pendingPhoto) fd.append("photo", pendingPhoto);
@@ -320,6 +324,19 @@ function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRo
           <div>
             <span style={fieldLabel}>Nome completo *</span>
             <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={inputStyle} onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")} onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")} />
+          </div>
+          <div>
+            <span style={fieldLabel}>Gênero</span>
+            <LabSelect
+              value={gender}
+              onChange={setGender}
+              options={[
+                { value: "male", label: "Masculino" },
+                { value: "female", label: "Feminino" },
+                { value: "other", label: "Outro" },
+              ]}
+              placeholder="Gênero"
+            />
           </div>
           <div>
             <span style={fieldLabel}>Telefone</span>
@@ -416,7 +433,7 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
   const stats = useMemo(() => {
     const filtered = cardActions.filter(a => filteredMatchIds.has(a.matchId));
     return {
-      totalJogos: filteredMatchIds.size,
+      total_matches: filteredMatchIds.size,
       amarelos: filtered.filter(a => a.actionType === "yellow_card").length,
       vermelhos: filtered.filter(a => a.actionType === "red_card").length,
       amarelovermelhos: filtered.filter(a => a.actionType === "yellow_red_card").length,
@@ -487,7 +504,7 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
       <div>
         <SectionHeader label={hasFilters ? "Estatísticas (filtradas)" : "Estatísticas gerais"} />
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          <StatCard value={stats.totalJogos} label="Jogos" color="#BFF205" />
+          <StatCard value={stats.total_matches} label="Jogos" color="#BFF205" />
           <StatCard value={stats.amarelos} label="Amarelos" color="#F2C005" />
           <StatCard value={stats.amarelovermelhos} label="Amarelo-vermelho" color="#F27405" />
           <StatCard value={stats.vermelhos} label="Vermelhos" color="#FF4444" />

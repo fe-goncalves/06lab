@@ -21,6 +21,7 @@ export async function criarArbitro(
   if (!full_name) return { error: "Nome completo é obrigatório." };
 
   const referee_role_id = String(formData.get("referee_role_id") ?? "").trim() || null;
+  const gender = String(formData.get("gender") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const pix_key = String(formData.get("pix_key") ?? "").trim() || null;
   const file = formData.get("photo") as File | null;
@@ -45,7 +46,7 @@ export async function criarArbitro(
 
   const { data: inserted, error } = await supabase
     .from("referees")
-    .insert({ full_name, referee_role_id, phone, pix_key, photo_url, organization_id: profile.organization_id })
+    .insert({ full_name, referee_role_id, gender, phone, pix_key, photo_url, organization_id: profile.organization_id })
     .select("id").single();
 
   if (error) return { error: error.message };
@@ -76,6 +77,7 @@ export async function editarArbitro(
   if (!full_name) return { error: "Nome completo é obrigatório." };
 
   const referee_role_id = String(formData.get("referee_role_id") ?? "").trim() || null;
+  const gender = String(formData.get("gender") ?? "").trim() || null;
   const phone = String(formData.get("phone") ?? "").trim() || null;
   const pix_key = String(formData.get("pix_key") ?? "").trim() || null;
 
@@ -100,7 +102,7 @@ export async function editarArbitro(
 
   const { error } = await supabase
     .from("referees")
-    .update({ full_name, referee_role_id, phone, pix_key, photo_url })
+    .update({ full_name, referee_role_id, gender, phone, pix_key, photo_url })
     .eq("id", id).eq("organization_id", profile.organization_id);
 
   if (error) return { error: error.message };
