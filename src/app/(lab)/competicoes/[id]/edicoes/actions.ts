@@ -76,31 +76,45 @@ export async function editarEdicao(
   if (!user) return { error: "Não autenticado." };
 
   const status = String(formData.get("status") ?? "planned");
+  const startDateRaw = formData.get("start_date");
+  const endDateRaw = formData.get("end_date");
   const min_athletes = Number(formData.get("min_athletes") ?? 0) || null;
   const max_athletes = Number(formData.get("max_athletes") ?? 0) || null;
   const min_age = Number(formData.get("min_age") ?? 0) || null;
   const max_age = Number(formData.get("max_age") ?? 0) || null;
-  const yellow_card_threshold = Number(formData.get("yellow_card_threshold") ?? 0) || null;
+  const yellowCardThresholdRaw = formData.get("yellow_card_threshold");
   const is_public = formData.get("is_public") === "true";
+
+  const editionUpdate: Record<string, unknown> = { status };
+  if (startDateRaw !== null) {
+    editionUpdate.start_date = String(startDateRaw).trim() || null;
+  }
+  if (endDateRaw !== null) {
+    editionUpdate.end_date = String(endDateRaw).trim() || null;
+  }
 
   const { error: editionError } = await supabase
     .from("competition_editions")
-    .update({ status })
+    .update(editionUpdate)
     .eq("id", edicaoId);
 
   if (editionError) return { error: editionError.message };
 
+  const settingsRow: Record<string, unknown> = {
+    edition_id: edicaoId,
+    is_public,
+    min_athletes,
+    max_athletes,
+    min_age,
+    max_age,
+  };
+  if (yellowCardThresholdRaw !== null) {
+    settingsRow.yellow_card_suspension_threshold = Number(yellowCardThresholdRaw) || null;
+  }
+
   const { error: settingsError } = await supabase
     .from("edition_settings")
-    .upsert({
-      edition_id: edicaoId,
-      is_public,
-      min_athletes,
-      max_athletes,
-      min_age,
-      max_age,
-      yellow_card_suspension_threshold: yellow_card_threshold,
-    }, { onConflict: "edition_id" });
+    .upsert(settingsRow, { onConflict: "edition_id" });
 
   if (settingsError) return { error: settingsError.message };
   return { success: true };
@@ -1583,16 +1597,48 @@ export async function recalcularEstatisticasEdicao(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  const { syncEditionStats } = await import("@/lib/edition-stats-sync");
-  const result = await syncEditionStats(supabase, editionId);
-  if (result.error) return { error: result.error };
+  const { data: roster } = await supabase
+    .from("edition_roster_entries")
+    .select("athlete_id, edition_teams!inner(edition_id)")
+    .eq("edition_teams.edition_id", editionId)
+    .eq("status", "approved")
+    .eq("member_type", "athlete")
+    .not("athlete_id", "is", null);
+
+  if (roster?.length) {
+    const athleteIds = [...new Set(roster.map((r) => r.athlete_id as string))];
+
+    for (const athleteId of athleteIds) {
+      const { error } = await supabase.rpc("recalculate_athlete_edition_stats", {
+        p_athlete_id: athleteId,
+        p_edition_id: editionId,
+      });
+      if (error) return { error: error.message };
+    }
+
+    for (const athleteId of athleteIds) {
+      const { error } = await supabase.rpc("recalculate_athlete_career_stats", {
+        p_athlete_id: athleteId,
+      });
+      if (error) return { error: error.message };
+    }
+  }
+
+  const { error: teamError } = await supabase.rpc("recalculate_team_edition_stats", {
+    p_edition_id: editionId,
+  });
+  if (teamError) return { error: teamError.message };
+
+  const { reapplyStandingsOverridesForEdition } = await import("@/lib/edition-stats-sync");
+  const overridesResult = await reapplyStandingsOverridesForEdition(supabase, editionId);
+  if (overridesResult.error) return { error: overridesResult.error };
 
   return { success: true };
 }
 
 export async function salvarAjustesPontosClassificacao(
   editionId: string,
-  adjustments: { teamId: string; awarded: number; deducted: number }[],
+  adjustments: { editionTeamId: string; awarded: number; deducted: number }[],
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -1601,7 +1647,7 @@ export async function salvarAjustesPontosClassificacao(
   const { addStandingsPointAdjustments, syncEditionStats } = await import("@/lib/edition-stats-sync");
 
   const deltas = adjustments
-    .map((a) => ({ teamId: a.teamId, delta: a.awarded - a.deducted }))
+    .map((a) => ({ editionTeamId: a.editionTeamId, delta: a.awarded - a.deducted }))
     .filter((a) => a.delta !== 0);
 
   const adjustResult = await addStandingsPointAdjustments(supabase, editionId, deltas);

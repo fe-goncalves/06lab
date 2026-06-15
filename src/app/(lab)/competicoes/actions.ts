@@ -218,6 +218,8 @@ export async function criarEdicaoNaConfiguracao(
   seasonId: string,
   customName: string,
   isCurrent: boolean,
+  startDate = "",
+  endDate = "",
 ): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -251,6 +253,8 @@ export async function criarEdicaoNaConfiguracao(
       status: "planned",
       custom_name: customName.trim() || null,
       is_current: isCurrent,
+      start_date: startDate.trim() || null,
+      end_date: endDate.trim() || null,
     })
     .select("id").single();
 
@@ -271,6 +275,7 @@ export async function criarEdicaoNaConfiguracao(
   }
 
   revalidatePath("/competicoes/" + competitionId + "/configuracoes");
+  revalidatePath("/competicoes/" + competitionId);
   return { id: inserted.id };
 }
 
@@ -280,6 +285,8 @@ export async function editarEdicaoNaConfiguracao(
   status: string,
   customName: string,
   isCurrent: boolean,
+  startDate = "",
+  endDate = "",
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -299,11 +306,14 @@ export async function editarEdicaoNaConfiguracao(
       status,
       custom_name: customName.trim() || null,
       is_current: isCurrent,
+      start_date: startDate.trim() || null,
+      end_date: endDate.trim() || null,
     })
     .eq("id", edicaoId);
 
   if (error) return { error: error.message };
   revalidatePath("/competicoes/" + competitionId + "/configuracoes");
+  revalidatePath("/competicoes/" + competitionId);
   return { success: true };
 }
 

@@ -37,7 +37,7 @@ export default async function ConfiguracoesCompeticaoPage({
       .select("id, label, display_order")
       .eq("organization_id", orgId).order("display_order"),
     supabase.from("competition_editions")
-      .select("id, status, season_id, custom_name, is_current, seasons(id, name, year_id, years(value))")
+      .select("id, status, season_id, custom_name, is_current, start_date, end_date, created_at, seasons(id, name, year_id, years(value))")
       .eq("competition_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("seasons")
@@ -55,6 +55,9 @@ export default async function ConfiguracoesCompeticaoPage({
     season_id: e.season_id,
     custom_name: e.custom_name ?? null,
     is_current: e.is_current ?? false,
+    start_date: e.start_date ?? null,
+    end_date: e.end_date ?? null,
+    created_at: e.created_at ?? "",
     season_name: e.seasons?.name ?? "—",
     year_value: e.seasons?.years?.value ?? 0,
   }));

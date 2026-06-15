@@ -27,7 +27,7 @@ export default async function CompeticaoPage({
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competition_editions")
-      .select("id, season_id, status, custom_name, seasons(name, years(value))")
+      .select("id, season_id, status, custom_name, start_date, end_date, created_at, seasons(name, years(value))")
       .eq("competition_id", id)
       .order("created_at", { ascending: false }),
     supabase.from("seasons")
@@ -59,7 +59,18 @@ export default async function CompeticaoPage({
     season_name: e.seasons?.name ?? "—",
     year_value: e.seasons?.years?.value ?? 0,
     custom_name: e.custom_name ?? null,
+    start_date: e.start_date ?? null,
+    end_date: e.end_date ?? null,
+    created_at: e.created_at ?? "",
   }));
+
+  const defaultEdition =
+    editionsList.find((e) => e.status === "ongoing") ??
+    [...editionsList].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    )[0];
+
+  const initialEditionId = defaultEdition?.id ?? null;
 
   const seasonsList = (seasons ?? []).map((s: any) => ({
     id: s.id,
@@ -74,6 +85,7 @@ export default async function CompeticaoPage({
       seasons={seasonsList}
       allTeams={allTeams ?? []}
       orgId={orgId}
+      initialEditionId={initialEditionId}
     />
   );
 }

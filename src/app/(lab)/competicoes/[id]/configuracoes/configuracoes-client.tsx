@@ -31,6 +31,7 @@ type Edition = {
   id: string; status: string; season_id: string;
   custom_name: string | null; is_current: boolean;
   season_name: string; year_value: number;
+  start_date: string | null; end_date: string | null;
 };
 type Season = { id: string; name: string; year_value: number };
 
@@ -103,7 +104,18 @@ function idsToJson(ids: string[]): string {
   return JSON.stringify(ids);
 }
 
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.includes("T") ? value.slice(0, 10) : value;
+}
+
 type DivLinkType = "above" | "below" | "same";
+
+const DIV_LEVEL_LABEL: Record<DivLinkType, string> = {
+  above: "Acima",
+  same: "Mesmo nível",
+  below: "Abaixo",
+};
 
 function CompetitionAvatar({ comp }: { comp: OtherCompetition }) {
   const label = comp.short_name ?? comp.full_name;
@@ -130,30 +142,17 @@ function DivisionLinkSection({
   desc,
   linkedIds,
   allCompetitions,
-  excludedIds,
-  onAdd,
+  onEdit,
   onRemove,
 }: {
   label: string;
   desc: string;
   linkedIds: string[];
   allCompetitions: OtherCompetition[];
-  excludedIds: Set<string>;
-  onAdd: (id: string) => void;
+  onEdit: (id: string) => void;
   onRemove: (id: string) => void;
 }) {
-  const [showPicker, setShowPicker] = useState(false);
-  const [pickId, setPickId] = useState("");
-
   const compById = new Map(allCompetitions.map(c => [c.id, c]));
-  const available = allCompetitions.filter(c => !excludedIds.has(c.id));
-
-  function handleAdd() {
-    if (!pickId) return;
-    onAdd(pickId);
-    setPickId("");
-    setShowPicker(false);
-  }
 
   return (
     <div style={cardStyle}>
@@ -161,11 +160,11 @@ function DivisionLinkSection({
       <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 14, marginTop: -8 }}>{desc}</p>
 
       {linkedIds.length === 0 ? (
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", marginBottom: 12 }}>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", margin: 0 }}>
           Nenhuma competição vinculada.
         </p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {linkedIds.map(id => {
             const comp = compById.get(id);
             const displayName = comp?.short_name ?? comp?.full_name ?? id.slice(0, 8);
@@ -182,6 +181,13 @@ function DivisionLinkSection({
                 <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {displayName}
                 </span>
+                <button type="button" onClick={() => onEdit(id)} title="Alterar nível" style={{
+                  padding: 6, borderRadius: 8, cursor: "pointer", flexShrink: 0,
+                  border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
+                  color: "rgba(255,255,255,0.35)",
+                }}>
+                  <Pencil size={13} />
+                </button>
                 <button type="button" onClick={() => onRemove(id)} title="Remover vínculo" style={{
                   padding: 6, borderRadius: 8, cursor: "pointer", flexShrink: 0,
                   border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
@@ -194,55 +200,198 @@ function DivisionLinkSection({
           })}
         </div>
       )}
+    </div>
+  );
+}
 
-      {!showPicker ? (
-        <button type="button" onClick={() => setShowPicker(true)} disabled={available.length === 0}
-          style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            padding: "7px 14px", borderRadius: 9, cursor: available.length === 0 ? "not-allowed" : "pointer",
-            border: "1px solid rgba(191,242,5,0.35)", backgroundColor: "rgba(191,242,5,0.06)",
-            color: available.length === 0 ? "rgba(191,242,5,0.3)" : "#BFF205",
+function DivisionLinkModal({
+  open,
+  mode,
+  allCompetitions,
+  allLinkedIds,
+  editFromType,
+  initialSelectedId,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  mode: "add" | "edit";
+  allCompetitions: OtherCompetition[];
+  allLinkedIds: Set<string>;
+  editFromType: DivLinkType | null;
+  initialSelectedId: string | null;
+  onClose: () => void;
+  onConfirm: (compId: string, level: DivLinkType) => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  const [level, setLevel] = useState<DivLinkType | null>(editFromType);
+
+  useEffect(() => {
+    if (!open) return;
+    setSearch("");
+    setSelectedId(initialSelectedId);
+    setLevel(editFromType);
+  }, [open, initialSelectedId, editFromType]);
+
+  if (!open) return null;
+
+  const q = search.toLowerCase();
+  const available = allCompetitions.filter(c => {
+    const matchesSearch = !q || c.full_name.toLowerCase().includes(q) || (c.short_name ?? "").toLowerCase().includes(q);
+    if (!matchesSearch) return false;
+    if (mode === "edit" && c.id === initialSelectedId) return true;
+    return !allLinkedIds.has(c.id);
+  });
+
+  const selectedComp = allCompetitions.find(c => c.id === selectedId);
+
+  function handleConfirm() {
+    if (!selectedId || !level) return;
+    onConfirm(selectedId, level);
+  }
+
+  return (
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 60,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        backgroundColor: "rgba(0,0,0,0.75)",
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          width: "100%", maxWidth: 480, borderRadius: 16,
+          border: "1px solid rgba(255,255,255,0.08)",
+          backgroundColor: "#0e0e0e", overflow: "hidden",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+          maxHeight: "85vh", display: "flex", flexDirection: "column",
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{
+          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0,
+        }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+              {mode === "add" ? "Vincular competição" : "Alterar nível"}
+            </p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+              Busque e selecione o nível hierárquico
+            </p>
+          </div>
+          <button type="button" onClick={onClose} style={{
+            width: 28, height: 28, borderRadius: 8,
+            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "rgba(255,255,255,0.4)",
+          }}>
+            <X size={14} strokeWidth={2} />
+          </button>
+        </div>
+
+        <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 12, overflow: "hidden", flex: 1 }}>
+          {mode === "add" && (
+            <>
+              <div>
+                <span style={fieldLabel}>Buscar</span>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Nome da competição…"
+                  style={inputStyle}
+                  onFocus={focusBrand}
+                  onBlur={blurBrand}
+                  autoFocus
+                />
+              </div>
+              <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 4, minHeight: 120, maxHeight: 240 }}>
+                {available.length === 0 ? (
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, padding: "12px 0" }}>
+                    Nenhuma competição disponível.
+                  </p>
+                ) : available.map(c => (
+                  <button key={c.id} type="button" onClick={() => setSelectedId(c.id)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, width: "100%",
+                      padding: "9px 10px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                      border: `1px solid ${selectedId === c.id ? "rgba(191,242,5,0.35)" : "rgba(255,255,255,0.06)"}`,
+                      backgroundColor: selectedId === c.id ? "rgba(191,242,5,0.08)" : "transparent",
+                    }}
+                    onMouseEnter={e => { if (selectedId !== c.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === c.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                  >
+                    <CompetitionAvatar comp={c} />
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                      {c.short_name ?? c.full_name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {mode === "edit" && selectedComp && (
+            <div style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)",
+            }}>
+              <CompetitionAvatar comp={selectedComp} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>
+                {selectedComp.short_name ?? selectedComp.full_name}
+              </span>
+            </div>
+          )}
+
+          {(selectedId || mode === "edit") && (
+            <div>
+              <span style={fieldLabel}>Nível hierárquico</span>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {(["above", "same", "below"] as DivLinkType[]).map(lvl => (
+                  <button key={lvl} type="button" onClick={() => setLevel(lvl)}
+                    style={{
+                      padding: "8px 14px", borderRadius: 9, cursor: "pointer",
+                      border: `1px solid ${level === lvl ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      backgroundColor: level === lvl ? "rgba(191,242,5,0.12)" : "transparent",
+                      color: level === lvl ? "#BFF205" : "rgba(255,255,255,0.4)",
+                      fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: level === lvl ? 800 : 500,
+                      letterSpacing: "0.06em", textTransform: "uppercase",
+                    }}>
+                    {DIV_LEVEL_LABEL[lvl]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <button type="button" onClick={onClose} style={{
+            flex: 1, padding: 10, borderRadius: 9,
+            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+            color: "rgba(255,255,255,0.4)",
+            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
+            letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer",
+          }}>
+            Cancelar
+          </button>
+          <button type="button" onClick={handleConfirm} disabled={!selectedId || !level} style={{
+            flex: 2, padding: 10, borderRadius: 9, border: "none",
+            backgroundColor: !selectedId || !level ? "rgba(191,242,5,0.3)" : "#BFF205",
+            color: "#0a0a0a", cursor: !selectedId || !level ? "not-allowed" : "pointer",
             fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
             letterSpacing: "0.08em", textTransform: "uppercase",
-            opacity: available.length === 0 ? 0.6 : 1,
           }}>
-          <Plus size={12} />
-          Vincular
-        </button>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span style={fieldLabel}>Selecionar competição</span>
-          <LabSelect
-            value={pickId}
-            onChange={setPickId}
-            placeholder="Escolha uma competição…"
-            options={available.map(c => ({
-              value: c.id,
-              label: c.short_name ?? c.full_name,
-            }))}
-          />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button type="button" onClick={() => { setShowPicker(false); setPickId(""); }} style={{
-              flex: 1, padding: "8px 12px", borderRadius: 9, cursor: "pointer",
-              border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
-              color: "rgba(255,255,255,0.4)",
-              fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
-              letterSpacing: "0.06em", textTransform: "uppercase",
-            }}>
-              Cancelar
-            </button>
-            <button type="button" onClick={handleAdd} disabled={!pickId} style={{
-              flex: 2, padding: "8px 12px", borderRadius: 9, border: "none",
-              backgroundColor: !pickId ? "rgba(191,242,5,0.3)" : "#BFF205",
-              color: "#0a0a0a", cursor: !pickId ? "not-allowed" : "pointer",
-              fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-              letterSpacing: "0.06em", textTransform: "uppercase",
-            }}>
-              Adicionar
-            </button>
-          </div>
+            Confirmar
+          </button>
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -312,7 +461,7 @@ function EdicaoModal({
   usedSeasonIds: Set<string>;
   initial?: Edition;
   onClose: () => void;
-  onSave: (data: { seasonId: string; customName: string; status: string; isCurrent: boolean }) => Promise<void>;
+  onSave: (data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) => Promise<void>;
 }) {
   const availableSeasons = mode === "create"
     ? seasons.filter(s => !usedSeasonIds.has(s.id))
@@ -324,6 +473,8 @@ function EdicaoModal({
   const [customName, setCustomName] = useState(initial?.custom_name ?? "");
   const [status, setStatus] = useState(initial?.status ?? "planned");
   const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
+  const [startDate, setStartDate] = useState(toDateInputValue(initial?.start_date));
+  const [endDate, setEndDate] = useState(toDateInputValue(initial?.end_date));
   const [saving, setSaving] = useState(false);
 
   const selectedSeason = seasons.find(s => s.id === seasonId);
@@ -331,7 +482,7 @@ function EdicaoModal({
 
   async function handleSubmit() {
     setSaving(true);
-    await onSave({ seasonId, customName, status, isCurrent });
+    await onSave({ seasonId, customName, status, isCurrent, startDate, endDate });
     setSaving(false);
   }
 
@@ -429,6 +580,31 @@ function EdicaoModal({
               options={EDITION_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
           </div>
 
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div>
+              <span style={fieldLabel}>Data de início</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                style={{ ...inputStyle, colorScheme: "dark" as const }}
+                onFocus={focusBrand}
+                onBlur={blurBrand}
+              />
+            </div>
+            <div>
+              <span style={fieldLabel}>Data de fim</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                style={{ ...inputStyle, colorScheme: "dark" as const }}
+                onFocus={focusBrand}
+                onBlur={blurBrand}
+              />
+            </div>
+          </div>
+
           <div
             style={{
               display: "flex", alignItems: "flex-start", gap: 12, padding: 12, borderRadius: 10, cursor: "pointer",
@@ -487,7 +663,7 @@ export default function ConfiguracoesCompeticaoClient({
 }: Props) {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"geral" | "divisoes" | "temporadas">("geral");
+  const [activeTab, setActiveTab] = useState<"geral" | "temporadas">("geral");
 
   // Geral
   const [fullName, setFullName] = useState(competition.full_name ?? "");
@@ -514,6 +690,12 @@ export default function ConfiguracoesCompeticaoClient({
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingEdition, setEditingEdition] = useState<Edition | null>(null);
   const [deletingEditionId, setDeletingEditionId] = useState<string | null>(null);
+
+  // Divisões — modal de vínculo
+  const [divModalOpen, setDivModalOpen] = useState(false);
+  const [divModalMode, setDivModalMode] = useState<"add" | "edit">("add");
+  const [divEditFrom, setDivEditFrom] = useState<DivLinkType | null>(null);
+  const [divEditId, setDivEditId] = useState<string | null>(null);
 
   const displayLogo = headerLogoUrl;
   const usedSeasonIds = new Set(editions.map(e => e.season_id));
@@ -551,17 +733,47 @@ export default function ConfiguracoesCompeticaoClient({
 
   const allLinkedIds = new Set([...aboveIds, ...belowIds, ...sameIds]);
 
-  function addLink(type: DivLinkType, id: string) {
-    if (allLinkedIds.has(id)) return;
-    if (type === "above") setAboveIds(prev => [...prev, id]);
-    if (type === "below") setBelowIds(prev => [...prev, id]);
-    if (type === "same") setSameIds(prev => [...prev, id]);
-  }
-
   function removeLink(type: DivLinkType, id: string) {
     if (type === "above") setAboveIds(prev => prev.filter(i => i !== id));
     if (type === "below") setBelowIds(prev => prev.filter(i => i !== id));
     if (type === "same") setSameIds(prev => prev.filter(i => i !== id));
+  }
+
+  function getLinkType(id: string): DivLinkType | null {
+    if (aboveIds.includes(id)) return "above";
+    if (sameIds.includes(id)) return "same";
+    if (belowIds.includes(id)) return "below";
+    return null;
+  }
+
+  function openDivAddModal() {
+    setDivModalMode("add");
+    setDivEditFrom(null);
+    setDivEditId(null);
+    setDivModalOpen(true);
+  }
+
+  function openDivEditModal(id: string) {
+    const from = getLinkType(id);
+    if (!from) return;
+    setDivModalMode("edit");
+    setDivEditFrom(from);
+    setDivEditId(id);
+    setDivModalOpen(true);
+  }
+
+  function setLinkLevel(level: DivLinkType, id: string) {
+    setAboveIds(prev => prev.filter(i => i !== id));
+    setSameIds(prev => prev.filter(i => i !== id));
+    setBelowIds(prev => prev.filter(i => i !== id));
+    if (level === "above") setAboveIds(prev => [...prev, id]);
+    if (level === "same") setSameIds(prev => [...prev, id]);
+    if (level === "below") setBelowIds(prev => [...prev, id]);
+  }
+
+  function confirmDivLink(compId: string, level: DivLinkType) {
+    setLinkLevel(level, compId);
+    setDivModalOpen(false);
   }
 
   async function handleSave() {
@@ -586,13 +798,14 @@ export default function ConfiguracoesCompeticaoClient({
     router.refresh();
   }
 
-  async function handleCreateEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean }) {
-    const result = await criarEdicaoNaConfiguracao(competition.id, data.seasonId, data.customName, data.isCurrent);
+  async function handleCreateEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) {
+    const result = await criarEdicaoNaConfiguracao(competition.id, data.seasonId, data.customName, data.isCurrent, data.startDate, data.endDate);
     if ("error" in result) { toast("error", result.error); return; }
     const season = seasons.find(s => s.id === data.seasonId);
     const newEd: Edition = {
       id: result.id, status: data.status, season_id: data.seasonId,
       custom_name: data.customName.trim() || null, is_current: data.isCurrent,
+      start_date: data.startDate.trim() || null, end_date: data.endDate.trim() || null,
       season_name: season?.name ?? "—", year_value: season?.year_value ?? 0,
     };
     setEditions(prev => {
@@ -603,12 +816,15 @@ export default function ConfiguracoesCompeticaoClient({
     toast("success", "Edição criada.");
   }
 
-  async function handleEditEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean }) {
+  async function handleEditEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) {
     if (!editingEdition) return;
-    const result = await editarEdicaoNaConfiguracao(editingEdition.id, competition.id, data.status, data.customName, data.isCurrent);
+    const result = await editarEdicaoNaConfiguracao(editingEdition.id, competition.id, data.status, data.customName, data.isCurrent, data.startDate, data.endDate);
     if ("error" in result) { toast("error", result.error); return; }
     setEditions(prev => prev.map(e => {
-      if (e.id === editingEdition.id) return { ...e, status: data.status, custom_name: data.customName.trim() || null, is_current: data.isCurrent };
+      if (e.id === editingEdition.id) return {
+        ...e, status: data.status, custom_name: data.customName.trim() || null, is_current: data.isCurrent,
+        start_date: data.startDate.trim() || null, end_date: data.endDate.trim() || null,
+      };
       if (data.isCurrent) return { ...e, is_current: false };
       return e;
     }));
@@ -628,7 +844,6 @@ export default function ConfiguracoesCompeticaoClient({
 
   const tabs = [
     { key: "geral" as const, label: "GERAL" },
-    { key: "divisoes" as const, label: "DIVISÕES" },
     { key: "temporadas" as const, label: "EDIÇÕES" },
   ];
 
@@ -669,7 +884,7 @@ export default function ConfiguracoesCompeticaoClient({
               </span>
             </div>
 
-            {(activeTab === "geral" || activeTab === "divisoes") && (
+            {activeTab === "geral" && (
               <button
                 type="button"
                 onClick={handleSave}
@@ -848,55 +1063,6 @@ export default function ConfiguracoesCompeticaoClient({
               </div>
             </div>
 
-          </div>
-        )}
-
-        {/* ══ DIVISÕES ══ */}
-        {activeTab === "divisoes" && (
-          <div style={{ maxWidth: 640 }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", marginBottom: 20 }}>
-              Defina quais outras competições se relacionam com esta por divisão.
-            </p>
-            {allCompetitions.length === 0 ? (
-              <div style={{ ...cardStyle, textAlign: "center", padding: "32px 20px" }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", marginBottom: 6 }}>
-                  Nenhuma outra competição disponível
-                </p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-                  Para vincular divisões, cadastre pelo menos uma outra competição nesta organização.
-                </p>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <DivisionLinkSection
-                  label="Acima"
-                  desc="Competições de nível superior a esta."
-                  linkedIds={aboveIds}
-                  allCompetitions={allCompetitions}
-                  excludedIds={allLinkedIds}
-                  onAdd={(id) => addLink("above", id)}
-                  onRemove={(id) => removeLink("above", id)}
-                />
-                <DivisionLinkSection
-                  label="Mesmo nível"
-                  desc="Competições equivalentes nesta hierarquia."
-                  linkedIds={sameIds}
-                  allCompetitions={allCompetitions}
-                  excludedIds={allLinkedIds}
-                  onAdd={(id) => addLink("same", id)}
-                  onRemove={(id) => removeLink("same", id)}
-                />
-                <DivisionLinkSection
-                  label="Abaixo"
-                  desc="Competições de nível inferior a esta."
-                  linkedIds={belowIds}
-                  allCompetitions={allCompetitions}
-                  excludedIds={allLinkedIds}
-                  onAdd={(id) => addLink("below", id)}
-                  onRemove={(id) => removeLink("below", id)}
-                />
-              </div>
-            )}
           </div>
         )}
 

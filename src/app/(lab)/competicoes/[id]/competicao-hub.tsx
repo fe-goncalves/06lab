@@ -17,7 +17,11 @@ import { Star, Search, AlertTriangle } from "lucide-react";
 import { criarSuspensao, editarSuspensao, desativarSuspensao } from "@/app/(lab)/suspensoes/actions";
 
 type Competition = any;
-type Edition = { id: string; season_id: string; status: string; season_name: string; year_value: number; custom_name: string | null };
+type Edition = {
+  id: string; season_id: string; status: string;
+  season_name: string; year_value: number; custom_name: string | null;
+  start_date: string | null; end_date: string | null; created_at: string;
+};
 type Season = { id: string; name: string; year_value: number };
 type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; is_virtual?: boolean };
 type Match = {
@@ -211,8 +215,9 @@ const AWARD_LABELS: Record<string, string> = {
   champion: "Campeão", runner_up: "Vice-campeão", third_place: "Terceiro Lugar",
 };
 
-export default function CompeticaoHub({ competition, editions, seasons, allTeams, orgId }: {
+export default function CompeticaoHub({ competition, editions, seasons, allTeams, orgId, initialEditionId }: {
   competition: Competition; editions: Edition[]; seasons: Season[]; allTeams: Team[]; orgId: string;
+  initialEditionId?: string | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -255,7 +260,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [activeConfigTab, setActiveConfigTab] = useState<"gerais" | "premiacoes" | "inscricoes" | "ranking" | "suspensoes" | "detalhes">(
     abaParam === "suspensoes" ? "suspensoes" : ((configParam as any) ?? "gerais")
   );
-  const [selectedEditionId, setSelectedEditionId] = useState<string>(searchParams.get("edicao") ?? editions[0]?.id ?? "");
+  const [selectedEditionId, setSelectedEditionId] = useState<string>(
+    searchParams.get("edicao") ?? initialEditionId ?? editions[0]?.id ?? "",
+  );
   const [showEditionDropdown, setShowEditionDropdown] = useState(false);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
 
@@ -276,7 +283,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [showNovoConfronto, setShowNovoConfronto] = useState(false);
 
 
-  const [standingsMode, setStandingsMode] = useState<"view" | "edit_points" | "reorder" | "edit_markers">("view");
+  const [standingsMode, setStandingsMode] = useState<"view" | "edit_points" | "edit_markers">("view");
   const [markers, setMarkers] = useState<TableMarker[]>([]);
   const [loadingMarkers, setLoadingMarkers] = useState(false);
   const [savingMarkers, setSavingMarkers] = useState(false);
@@ -343,6 +350,12 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     router.replace(`?${params.toString()}`, { scroll: false });
   }
 
+  const sortedEditionsForDropdown = [...editions].sort((a, b) => {
+    if (a.status === "ongoing" && b.status !== "ongoing") return -1;
+    if (b.status === "ongoing" && a.status !== "ongoing") return 1;
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
   const selectedEdition = editions.find(e => e.id === selectedEditionId);
   const selectedPhase = phases.find(p => p.id === selectedPhaseId);
   const isClassificatory = (type: string) => type === "round_robin" || type === "group_stage";
@@ -375,7 +388,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         : Promise.resolve({ data: [] }),
         supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, short_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
       supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
-      supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).order("goals", { ascending: false }),
+      supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).not("athlete_id", "is", null).order("goals", { ascending: false }),
       phaseIds.length > 0
         ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
@@ -783,13 +796,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     filteredMatchesByRound[key].matches.push(m);
   });
 
-  const topScorers = [...scorers].filter(s => (s.goals ?? 0) > 0).sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0));
-  const topAssists = [...scorers].filter(s => (s.assists ?? 0) > 0).sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0));
-  const topYellow = [...scorers].filter(s => (s.yellow_cards ?? 0) > 0).sort((a, b) => (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0));
-  const topRed = [...scorers].filter(s => (s.red_cards ?? 0) > 0).sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0));
-  const topMatches = [...scorers].filter(s => (s.matches_played ?? 0) > 0).sort((a, b) => (b.matches_played ?? 0) - (a.matches_played ?? 0));
-  const topMotm = [...scorers].filter(s => (s.motm_count ?? 0) > 0).sort((a, b) => (b.motm_count ?? 0) - (a.motm_count ?? 0));
-  const topRating = [...scorers].filter(s => (s.matches_played ?? 0) >= 3 && (s.avg_rating ?? 0) > 0).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0));
+  const athleteScorers = scorers.filter((s: Scorer) => s.athlete_id && s.athletes);
+  const topScorers = [...athleteScorers].filter(s => (s.goals ?? 0) > 0).sort((a, b) => (b.goals ?? 0) - (a.goals ?? 0));
+  const topAssists = [...athleteScorers].filter(s => (s.assists ?? 0) > 0).sort((a, b) => (b.assists ?? 0) - (a.assists ?? 0));
+  const topYellow = [...athleteScorers].filter(s => (s.yellow_cards ?? 0) > 0).sort((a, b) => (b.yellow_cards ?? 0) - (a.yellow_cards ?? 0));
+  const topRed = [...athleteScorers].filter(s => (s.red_cards ?? 0) > 0).sort((a, b) => (b.red_cards ?? 0) - (a.red_cards ?? 0));
 
   // Para a aba Jogos: fases em ordem decrescente de display_order (maior número = mais recente = primeiro)
   const sortedPhases = [...phases].sort((a, b) => (b.display_order ?? 0) - (a.display_order ?? 0));
@@ -912,9 +923,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     <th className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-danger)" }}>-PTS</th>
                   </>
                 )}
-                {standingsMode === "reorder" && (
-                  <th className="px-4 py-3 text-left font-mono text-xs" style={{ color: "rgba(255,255,255,0.3)" }}>↕</th>
-                )}
               </tr>
             </thead>
             <tbody>
@@ -927,26 +935,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 const useLegacyHighlight = activeMarkers.length === 0 && idx < highlightTop;
                 return (
                   <tr key={row.team_id}
-                    draggable={standingsMode === "reorder"}
-                    onDragStart={() => { dragTeamRef.current = row.team_id; }}
-                    onDragOver={e => e.preventDefault()}
-                    onDrop={() => {
-                      if (!dragTeamRef.current || dragTeamRef.current === row.team_id) return;
-                      const cur = reorderedTeams.length > 0 ? reorderedTeams : rows.map((r: any) => r.team_id);
-                      const fromIdx = cur.indexOf(dragTeamRef.current);
-                      const toIdx = cur.indexOf(row.team_id);
-                      const next = [...cur];
-                      next.splice(fromIdx, 1);
-                      next.splice(toIdx, 0, dragTeamRef.current);
-                      setReorderedTeams(next);
-                      dragTeamRef.current = null;
-                    }}
                     style={{
                       borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-                      cursor: standingsMode === "reorder" ? "grab" : "default",
                       backgroundColor: rankMarker?.show_background
                         ? hexToRgba(rankMarker.color_hex, 0.1)
-                        : standingsMode === "reorder" ? "rgba(255,255,255,0.01)" : "transparent",
+                        : "transparent",
                       boxShadow: rankMarker ? `inset 3px 0 0 ${rankMarker.color_hex}` : undefined,
                       transition: "background 0.1s",
                     }}
@@ -998,11 +991,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         </td>
                       </>
                     )}
-                    {standingsMode === "reorder" && (
-                      <td className="px-4 py-3">
-                        <span style={{ color: "rgba(255,255,255,0.2)", fontSize: 16, cursor: "grab" }}>⠿</span>
-                      </td>
-                    )}
                   </tr>
                 );
               })}
@@ -1017,7 +1005,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       setSavingStandings(true);
       const adjustments = Object.entries(editedPoints)
         .filter(([, v]) => v.awarded > 0 || v.deducted > 0)
-        .map(([teamId, { awarded, deducted }]) => ({ teamId, awarded, deducted }));
+        .map(([teamId, { awarded, deducted }]) => {
+          const editionTeam = editionTeams.find(et => et.team_id === teamId);
+          return { editionTeamId: editionTeam?.id, awarded, deducted };
+        })
+        .filter((a): a is { editionTeamId: string; awarded: number; deducted: number } => !!a.editionTeamId);
       const result = await salvarAjustesPontosClassificacao(selectedEditionId, adjustments);
       setSavingStandings(false);
       if ("error" in result) {
@@ -1075,7 +1067,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   disabled={saving}
                   onClick={() => {
                     if (standingsMode === "edit_points") void handleSavePoints(rows);
-                    else if (standingsMode === "reorder") void handleSaveOrder(rows);
                     else void handleSaveMarkers();
                   }}
                   style={{ padding: "5px 14px", borderRadius: 7, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
@@ -1097,7 +1088,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 220, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
                       {[
                         { icon: "◧", label: "Gerenciar marcações", action: startEditMarkers },
-                        { icon: "↕", label: "Reordenar equipes", action: () => { setStandingsMode("reorder"); setStandingsMenuOpen(false); setReorderedTeams(rows.map((r: any) => r.team_id)); } },
                         { icon: "✎", label: "Editar pontos", action: () => { setStandingsMode("edit_points"); setStandingsMenuOpen(false); setEditedPoints({}); } },
                         { icon: "↺", label: "Recalcular a classificação", action: () => { setStandingsMenuOpen(false); setStandingsConfirmRecalc(true); }, danger: false },
                       ].map((item, idx) => (
@@ -1201,11 +1191,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             <StandingsMarkersEditor visible={standingsMode === "edit_markers"} markers={editingMarkers} onChange={setEditingMarkers} />
             {rows.length === 0
               ? <p className="px-5 py-8 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>Nenhum dado de classificação disponível.</p>
-              : <StandingsTable rows={
-                  reorderedTeams.length > 0
-                    ? [...rows].sort((a, b) => reorderedTeams.indexOf(a.team_id) - reorderedTeams.indexOf(b.team_id))
-                    : rows
-                } highlightTop={4} />}
+              : <StandingsTable rows={rows} highlightTop={4} />}
             <StandingsMarkersLegend />
           </div>
         </>
@@ -1277,16 +1263,36 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
                 {showEditionDropdown && (
                   <div style={{ position: "absolute", left: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 200, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                    {editions.map((e, idx) => (
+                    {sortedEditionsForDropdown.map((e, idx) => (
                       <button key={e.id} type="button" onClick={() => {
                         setSelectedEditionId(e.id); setShowEditionDropdown(false);
                         const params = new URLSearchParams(searchParams.toString()); params.set("edicao", e.id);
                         router.replace(`?${params.toString()}`, { scroll: false });
                       }}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "9px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: e.id === selectedEditionId ? "#BFF205" : "var(--color-text-primary)", backgroundColor: e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent", border: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
+                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, width: "100%", padding: "9px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: e.id === selectedEditionId ? "#BFF205" : "var(--color-text-primary)", backgroundColor: e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent", border: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
                         onMouseEnter={ev => { if (e.id !== selectedEditionId) ev.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
                         onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent"; }}>
-                        {editionLabel(e)}
+                        <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
+                          {e.status === "ongoing" && (
+                            <span style={{
+                              width: 6, height: 6, borderRadius: "50%", backgroundColor: "#BFF205", flexShrink: 0,
+                              boxShadow: "0 0 6px rgba(191,242,5,0.6)",
+                            }} />
+                          )}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {editionLabel(e)}
+                          </span>
+                          {e.status === "ongoing" && (
+                            <span style={{
+                              fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", flexShrink: 0,
+                              padding: "2px 6px", borderRadius: 4,
+                              backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
+                              border: "1px solid rgba(191,242,5,0.25)",
+                            }}>
+                              EM ANDAMENTO
+                            </span>
+                          )}
+                        </span>
                         {e.id === selectedEditionId && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </button>
                     ))}
@@ -1895,50 +1901,26 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {/* ABA ESTATÍSTICAS */}
         {activeTab === "estatisticas" && (
           <div>
-            <div className="mb-6 flex items-center gap-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-              <div className="flex gap-4 flex-1">
-                {[{ key: "geral", label: "GERAL" }, { key: "semanal", label: "SEMANAL" }].map(sub => (
-                  <button key={sub.key} type="button" onClick={() => { setActiveStatsTab(sub.key as any); updateTab("stats", sub.key); }}
-                    className="border-b-2 pb-3 font-mono text-xs transition-colors"
-                    style={{ borderColor: activeStatsTab === sub.key ? "var(--color-brand)" : "transparent", color: activeStatsTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
-                    {sub.label}
-                  </button>
-                ))}
-              </div>
-              {activeStatsTab === "geral" && (
-                <button type="button"
-                  onClick={async () => {
-                    const r = await recalcularEstatisticasEdicao(selectedEditionId);
-                    if ("error" in r) { toast("error", r.error); return; }
-                    toast("success", "Estatísticas atualizadas.");
-                    await loadEditionData(selectedEditionId);
-                  }}
-                  style={{ marginBottom: 1, padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}>
-                  ↻ Atualizar dados
-                </button>
-              )}
+            <div className="mb-6 flex items-center justify-end gap-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+              <button type="button"
+                onClick={async () => {
+                  const r = await recalcularEstatisticasEdicao(selectedEditionId);
+                  if ("error" in r) { toast("error", r.error); return; }
+                  toast("success", "Estatísticas atualizadas.");
+                  await loadEditionData(selectedEditionId);
+                }}
+                style={{ marginBottom: 1, padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}>
+                ↻ Atualizar dados
+              </button>
             </div>
-            {activeStatsTab === "geral" && (
-              <div className="grid gap-6 lg:grid-cols-2">
-                <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum gol registrado." />
-                <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma assistência registrada." />
-                <StatRanking title="Partidas Jogadas" data={topMatches} valueKey="matches_played" valueLabel="jogos" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma partida registrada." />
-                <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão amarelo registrado." />
-                <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão vermelho registrado." />
-                <StatRanking title="MOTM" data={topMotm} valueKey="motm_count" valueLabel="prêmios" valueColor="#F2C005" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum MOTM registrado." />
-                <StatRanking title="Nota Média" data={topRating} valueKey="avg_rating" valueLabel="nota" allScorers={scorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Mínimo 3 partidas para aparecer." isDecimal />
-              </div>
-            )}
-            {/* Sub-aba SEMANAL */}
-            {activeStatsTab === "semanal" && (
-              <SemanasTab
-                selectedEditionId={selectedEditionId}
-                rounds={rounds}
-                editionTeams={editionTeams}
-              />
-            )}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum gol registrado." />
+              <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma assistência registrada." />
+              <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão amarelo registrado." />
+              <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão vermelho registrado." />
+            </div>
           </div>
         )}
 
@@ -2141,10 +2123,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             <div className="mb-6 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
             {[
                 { key: "gerais", label: "GERAIS" },
-                { key: "premiacoes", label: "PREMIAÇÕES" },
                 { key: "inscricoes", label: "INSCRIÇÕES" },
                 { key: "ranking", label: "RANKING" },
                 { key: "suspensoes", label: "SUSPENSÕES" },
+                { key: "premiacoes", label: "PREMIAÇÕES" },
                 { key: "detalhes", label: "DETALHES" },
               ].map(sub => (
                 <button key={sub.key} type="button" onClick={() => { setActiveConfigTab(sub.key as any); updateTab("config", sub.key); }}
@@ -5174,10 +5156,8 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
   // We filter allScorers by team only (phase/round filtering on edition-level stats
   // isn't directly supported without per-match data; we filter by team_id instead)
   const filteredForModal = allScorers.filter(s => {
+    if (!s.athlete_id || !s.athletes) return false;
     if (filterTeamId && s.team_id !== filterTeamId) return false;
-    // Phase / round filter: athlete_edition_stats don't have phase_id directly.
-    // We approximate: if round filter set, skip (not filterable without match data).
-    // If phase filter set, skip same reason. Just team filter works cleanly.
     return true;
   }).filter(s => (s[valueKey] ?? 0) > 0).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0));
 
@@ -5445,28 +5425,6 @@ function DetalhesConfigTab({
   editionTeams: EditionTeam[];
   phases: Phase[];
 }) {
-  const [startsAt, setStartsAt] = useState<string | null>(null);
-  const [endsAt, setEndsAt] = useState<string | null>(null);
-  const [loadingDates, setLoadingDates] = useState(true);
-
-  useEffect(() => {
-    if (!edition.id) return;
-    async function load() {
-      setLoadingDates(true);
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("competition_editions")
-        .select("starts_at, ends_at, seasons(starts_at, ends_at)")
-        .eq("id", edition.id)
-        .maybeSingle();
-      const row = data as { starts_at?: string | null; ends_at?: string | null; seasons?: { starts_at?: string | null; ends_at?: string | null } | null } | null;
-      setStartsAt(row?.starts_at ?? row?.seasons?.starts_at ?? null);
-      setEndsAt(row?.ends_at ?? row?.seasons?.ends_at ?? null);
-      setLoadingDates(false);
-    }
-    void load();
-  }, [edition.id]);
-
   function fmtDate(value: string | null): string {
     if (!value) return "—";
     const d = value.includes("T") ? value : `${value}T00:00:00`;
@@ -5479,8 +5437,8 @@ function DetalhesConfigTab({
     { label: "Status", value: EDITION_STATUS_LABEL[edition.status] ?? edition.status },
     { label: "Competição", value: competition.full_name ?? "—" },
     { label: "Temporada", value: edition.season_name ?? "—" },
-    { label: "Início", value: loadingDates ? "…" : fmtDate(startsAt) },
-    { label: "Fim", value: loadingDates ? "…" : fmtDate(endsAt) },
+    { label: "Data de início", value: fmtDate(edition.start_date) },
+    { label: "Data de fim", value: fmtDate(edition.end_date) },
     { label: "Equipes inscritas", value: String(teamCount) },
     { label: "Fases", value: String(phases.length) },
   ];
@@ -5506,13 +5464,19 @@ function DetalhesConfigTab({
 
 // ─── EdicaoConfigTab ─────────────────────────────────────────────────────────
 
+function toDateInputValue(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.includes("T") ? value.slice(0, 10) : value;
+}
+
 function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, inputStyle }: {
   selectedEditionId: string; selectedEditionName: string; inputClass: string; inputStyle: any;
 }) {
   const [editionStatus, setEditionStatus] = useState("planned");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [isPublic, setIsPublic] = useState(false);
   const [showInHome, setShowInHome] = useState(false);
-  const [yellowThreshold, setYellowThreshold] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [updatingShowInHome, setUpdatingShowInHome] = useState(false);
@@ -5522,13 +5486,14 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
     async function load() {
       const supabase = createClient();
       const [{ data: ed }, { data: settings }] = await Promise.all([
-        supabase.from("competition_editions").select("status, show_in_home").eq("id", selectedEditionId).maybeSingle(),
-        supabase.from("edition_settings").select("*").eq("edition_id", selectedEditionId).maybeSingle(),
+        supabase.from("competition_editions").select("status, show_in_home, start_date, end_date").eq("id", selectedEditionId).maybeSingle(),
+        supabase.from("edition_settings").select("is_public").eq("edition_id", selectedEditionId).maybeSingle(),
       ]);
       setEditionStatus(ed?.status ?? "planned");
+      setStartDate(toDateInputValue(ed?.start_date));
+      setEndDate(toDateInputValue(ed?.end_date));
       setShowInHome(ed?.show_in_home ?? false);
       setIsPublic(settings?.is_public ?? false);
-      setYellowThreshold(String(settings?.yellow_card_suspension_threshold ?? ""));
       setLoaded(true);
     }
     void load();
@@ -5550,8 +5515,9 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
     setSaving(true);
     const fd = new FormData();
     fd.append("status", editionStatus);
+    fd.append("start_date", startDate);
+    fd.append("end_date", endDate);
     fd.append("is_public", String(isPublic));
-    fd.append("yellow_card_threshold", yellowThreshold);
     const result = await editarEdicao(selectedEditionId, fd);
     setSaving(false);
     if ("error" in result) { toast("error", result.error); return; }
@@ -5614,6 +5580,33 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
         ))}
       </div>
 
+      <SectionHeader title="Período" />
+
+      <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "14px 16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.4)", margin: "0 0 6px" }}>Data de início</p>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className={inputClass}
+              style={{ ...inputStyle, colorScheme: "dark" as const }}
+            />
+          </div>
+          <div>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.4)", margin: "0 0 6px" }}>Data de fim</p>
+            <input
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              className={inputClass}
+              style={{ ...inputStyle, colorScheme: "dark" as const }}
+            />
+          </div>
+        </div>
+      </div>
+
       <SectionHeader title="Visibilidade" />
 
       {/* Visibilidade */}
@@ -5639,22 +5632,6 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
               <div style={{ position: "absolute", top: 3, left: showInHome ? 23 : 3, width: 18, height: 18, borderRadius: "50%", backgroundColor: showInHome ? "#0a0a0a" : "#555", transition: "left 0.15s" }} />
             </button>
           </div>
-        </div>
-      </div>
-
-      <SectionHeader title="Regras" />
-
-      {/* Limite de amarelos */}
-      <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "14px 16px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Limite de amarelos para suspensão</p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>Após este número, o atleta é automaticamente suspenso</p>
-          </div>
-          <input type="number" min="1" max="20" value={yellowThreshold}
-            onChange={e => setYellowThreshold(e.target.value)}
-            placeholder="—"
-            style={{ width: 60, padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "#BFF205", outline: "none", textAlign: "center" as const, flexShrink: 0 }} />
         </div>
       </div>
 

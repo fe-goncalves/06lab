@@ -134,7 +134,7 @@ export default function AtletaPage() {
   const id = typeof params.id === "string" ? params.id : "";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"informacoes" | "historico" | "estatisticas">("informacoes");
+  const [activeTab, setActiveTab] = useState<"informacoes" | "historico">("informacoes");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -545,7 +545,6 @@ export default function AtletaPage() {
             {[
               { key: "informacoes", label: "INFORMAÇÕES" },
               { key: "historico", label: "HISTÓRICO" },
-              { key: "estatisticas", label: "ESTATÍSTICAS" },
             ].map(tab => (
               <button key={tab.key} type="button"
                 onClick={() => setActiveTab(tab.key as any)}
@@ -937,158 +936,6 @@ export default function AtletaPage() {
                 ))
               )}
             </div>
-          </div>
-        )}
-
-        {/* ── ABA ESTATÍSTICAS ─────────────────────────────────────────── */}
-        {activeTab === "estatisticas" && (
-          <div style={{ maxWidth: 760, display: "flex", flexDirection: "column", gap: 24 }}>
-
-            {editionStats.length === 0 && awards.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", textAlign: "center" as const }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>Sem estatísticas</p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>Nenhuma edição com dados registrados.</p>
-              </div>
-            ) : (
-              <>
-                {/* ── Filtros ────────────────────────────────────────────── */}
-                {editionStats.length > 0 && (
-                  <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "16px 18px" }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: accentColor }}>
-                        Filtros
-                      </span>
-                      {hasActiveFilter && (
-                        <button type="button" onClick={clearFilters}
-                          style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.35)", background: "none", border: "none", cursor: "pointer", letterSpacing: "0.08em", textTransform: "uppercase" as const }}
-                          onMouseEnter={e => e.currentTarget.style.color = accentColor}
-                          onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.35)"}>
-                          Limpar filtros
-                        </button>
-                      )}
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10 }}>
-
-                      {/* Filtro — Clube */}
-                      <div>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
-                          Clube
-                        </span>
-                        <LabSelect value={filterTeamId} onChange={setFilterTeamId} placeholder="Todos"
-                          options={statsTeamOptions.map((t) => ({ value: t.id, label: t.name }))} />
-                      </div>
-
-                      {/* Filtro — Ano */}
-                      <div>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
-                          Ano
-                        </span>
-                        <LabSelect value={filterYear} onChange={setFilterYear} placeholder="Todos"
-                          options={statsYearOptions.map((y) => ({ value: String(y), label: String(y) }))} />
-                      </div>
-
-                      {/* Filtro — Temporada */}
-                      <div>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
-                          Temporada
-                        </span>
-                        <LabSelect value={filterSeason} onChange={setFilterSeason} placeholder="Todas"
-                          options={statsSeasonOptions.map((s) => ({ value: s, label: s }))} />
-                      </div>
-
-                      {/* Filtro — Competição */}
-                      <div>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>
-                          Competição
-                        </span>
-                        <LabSelect value={filterCompetition} onChange={setFilterCompetition} placeholder="Todas"
-                          options={statsCompetitionOptions.map((c) => ({ value: c.full, label: c.short }))} />
-                      </div>
-
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Tabela de stats ───────────────────────────────────── */}
-                {editionStats.length > 0 && (
-                  <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-                    <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <SectionHeader title="Por edição" color={accentColor} />
-                      {hasActiveFilter && (
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>
-                          {filteredStats.length} de {editionStats.length} edições
-                        </span>
-                      )}
-                    </div>
-
-                    {filteredStats.length === 0 ? (
-                      <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-                        Nenhum resultado para os filtros selecionados.
-                      </p>
-                    ) : (
-                      <div style={{ overflowX: "auto" }}>
-                        <table style={{ width: "100%", borderCollapse: "collapse" as const }}>
-                          <thead>
-                            <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                              {["Competição", "Temporada", "J", "G", "A", "AM", "VM", "MOTM"].map(h => (
-                                <th key={h} style={{ padding: "10px 14px", textAlign: "left" as const, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", whiteSpace: "nowrap" as const }}>
-                                  {h}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {filteredStats.map((stat, idx) => (
-                              <tr key={stat.edition_id} style={{ borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", whiteSpace: "nowrap" as const }}>
-                                  {stat.competition_editions?.competitions?.short_name ?? stat.competition_editions?.competitions?.full_name ?? "—"}
-                                </td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", whiteSpace: "nowrap" as const }}>
-                                  {stat.competition_editions?.seasons?.name ?? "—"}
-                                </td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.matches_played ?? 0}</td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: accentColor }}>{stat.goals ?? 0}</td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)" }}>{stat.assists ?? 0}</td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#F2C005" }}>{stat.yellow_cards ?? 0}</td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: "#FF4444" }}>{stat.red_cards ?? 0}</td>
-                                <td style={{ padding: "11px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: accentColor }}>{stat.motm_count ?? 0}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {awards.length > 0 && (
-                  <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-                    <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                      <SectionHeader title={`Premiações (${awards.length})`} color={accentColor} />
-                    </div>
-                    {awards.map((award, idx) => (
-                      <div key={award.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 18px", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", opacity: 0.85, transition: "opacity 0.1s" }}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}>
-                        <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: `${accentColor}12`, border: `1px solid ${accentColor}25`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>
-                          {AWARD_ICONS[award.award_type] ?? "🏆"}
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                            {AWARD_LABELS[award.award_type] ?? award.award_type}
-                          </p>
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>
-                            {award.competition_editions?.competitions?.short_name ?? award.competition_editions?.competitions?.full_name ?? "—"}
-                            {" · "}
-                            {award.competition_editions?.seasons?.name ?? "—"}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
           </div>
         )}
       </div>

@@ -112,7 +112,7 @@ export default function EquipeHubPage() {
   const router = useRouter();
   const id = typeof params.id === "string" ? params.id : "";
 
-  const [activeTab, setActiveTab] = useState<"informacao" | "elenco" | "jogos">("informacao");
+  const [activeTab, setActiveTab] = useState<"informacao" | "elenco">("informacao");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingData, setLoadingData] = useState(true);
 
@@ -206,7 +206,6 @@ export default function EquipeHubPage() {
   useEffect(() => { void loadTeamAndOptions(); }, [loadTeamAndOptions]);
   useEffect(() => {
     if (activeTab === "elenco" && athletes.length === 0) loadAthletes();
-    if (activeTab === "jogos" && matches.length === 0) loadMatches();
   }, [activeTab]);
   useEffect(() => {
     if (!parentTeamId) return;
@@ -372,7 +371,6 @@ export default function EquipeHubPage() {
             {[
               { key: "informacao", label: "INFORMAÇÃO" },
               { key: "elenco", label: "ELENCO" },
-              { key: "jogos", label: "JOGOS" },
             ].map(tab => (
               <button key={tab.key} type="button"
                 onClick={() => setActiveTab(tab.key as any)}
@@ -621,148 +619,7 @@ export default function EquipeHubPage() {
             )}
           </div>
         )}
-
-        {/* ── ABA JOGOS ───────────────────────────────────────────────── */}
-        {activeTab === "jogos" && (
-          <div style={{ maxWidth: 760 }}>
-            {loadingMatches ? (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Carregando…</p>
-            ) : matches.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center" as const }}>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>Sem partidas</p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>Nenhuma partida registrada para esta equipe.</p>
-              </div>
-            ) : (
-              <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-                {matches.map((m, idx) => {
-                  const isHome = m.team_a_id === id;
-                  const opponent = isHome ? m.teams_b : m.teams_a;
-                  const myScore = isHome ? m.score_a : m.score_b;
-                  const oppScore = isHome ? m.score_b : m.score_a;
-                  const compName = (m.phases as any)?.competition_editions?.competitions?.full_name ?? "—";
-                  const isScheduled = m.status === "scheduled";
-                  const oppColor = opponent?.primary_color ?? null;
-                  const won = myScore > oppScore;
-                  const lost = myScore < oppScore;
-
-                  return (
-                    <MatchRowEquipe
-                      key={m.id}
-                      matchId={m.id}
-                      idx={idx}
-                      isHome={isHome}
-                      opponent={opponent}
-                      myScore={myScore}
-                      oppScore={oppScore}
-                      compName={compName}
-                      matchDate={m.match_date}
-                      status={m.status}
-                      teamColor={teamColor}
-                    />
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     </div>
-  );
-}
-
-// ─── MatchRowEquipe ──────────────────────────────────────────────────────────
-
-function MatchRowEquipe({ matchId, idx, isHome, opponent, myScore, oppScore, compName, matchDate, status, teamColor }: {
-  matchId: string;
-  idx: number;
-  isHome: boolean;
-  opponent: { full_name: string; abbreviation: string | null; logo_url: string | null; primary_color: string | null } | null;
-  myScore: number;
-  oppScore: number;
-  compName: string;
-  matchDate: string | null;
-  status: string;
-  teamColor: string | null;
-}) {
-  const [hovered, setHovered] = useState(false);
-  const isScheduled = status === "scheduled";
-  const won = !isScheduled && myScore > oppScore;
-  const lost = !isScheduled && myScore < oppScore;
-  const drew = !isScheduled && myScore === oppScore;
-  const resultColor = won ? "#BFF205" : lost ? "#FF4444" : "rgba(255,255,255,0.4)";
-  const oppColor = opponent?.primary_color ?? null;
-
-  return (
-    <Link href={`/partidas/${matchId}`}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex", alignItems: "center", gap: 14, padding: "0 18px", height: 60,
-        textDecoration: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
-        backgroundColor: hovered ? "rgba(255,255,255,0.025)" : "transparent",
-        transition: "background 0.1s", position: "relative" as const,
-        opacity: hovered ? 1 : 0.82,
-      }}>
-      {/* Faixa colorida no hover */}
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
-        background: hovered ? `linear-gradient(90deg, ${teamColor ?? "#BFF205"}80 0%, ${oppColor ? oppColor + "80" : "transparent"} 100%)` : "transparent",
-        transition: "opacity 0.2s", pointerEvents: "none",
-      }} />
-
-      {/* Data + status */}
-      <div style={{ width: 48, flexShrink: 0, display: "flex", flexDirection: "column", gap: 2 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: STATUS_COLOR[status] ?? "#A6A6A6" }}>
-          {STATUS_LABEL[status] ?? status.toUpperCase()}
-        </span>
-        {matchDate && (
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)" }}>
-            {new Date(matchDate + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
-          </span>
-        )}
-      </div>
-
-      <div style={{ width: 1, height: 20, backgroundColor: "rgba(255,255,255,0.07)", flexShrink: 0 }} />
-
-      {/* Adversário */}
-      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-        <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {opponent?.logo_url
-            ? <img src={opponent.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} />
-            : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
-                  {(opponent?.abbreviation ?? opponent?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                </span>
-              </div>
-          }
-        </div>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginRight: 4 }}>{isHome ? "vs" : "@"}</span>
-            {opponent?.full_name ?? "A definir"}
-          </p>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-            {compName}
-          </p>
-        </div>
-      </div>
-
-      {/* Placar */}
-      {!isScheduled && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {/* Badge W/D/L */}
-          <div style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: won ? "rgba(191,242,5,0.15)" : lost ? "rgba(255,68,68,0.15)" : "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, color: resultColor }}>
-              {won ? "V" : lost ? "D" : "E"}
-            </span>
-          </div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: resultColor, lineHeight: 1 }}>
-            {myScore}–{oppScore}
-          </span>
-        </div>
-      )}
-
-      <ChevronRight size={12} style={{ color: "rgba(255,255,255,0.15)", flexShrink: 0 }} />
-    </Link>
   );
 }

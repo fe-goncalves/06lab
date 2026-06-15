@@ -70,7 +70,6 @@ const MOVEMENT_COLORS: Record<string, string> = {
 const TABS = [
   { key: "informacoes",  label: "INFORMAÇÕES"  },
   { key: "historico",    label: "HISTÓRICO"    },
-  { key: "estatisticas", label: "ESTATÍSTICAS" },
 ];
 
 function applyDateMask(v: string) {
@@ -936,112 +935,6 @@ export default function MembroPage() {
                 </div>
               );
             })()}
-          </div>
-        )}
-
-        {/* ABA ESTATÍSTICAS */}
-        {activeTab === "estatisticas" && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 24, maxWidth: 900 }}>
-            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-              <SectionHeader title="Carreira" accentColor={accentColor} />
-              {careerStats ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 12 }}>
-                  {[
-                    { label: "Partidas", value: careerStats.total_matches_attended },
-                    { label: "Títulos", value: careerStats.total_titles },
-                    { label: "Vice", value: careerStats.total_runner_up },
-                    { label: "3º lugar", value: careerStats.total_third_place },
-                    { label: "Melhor técnico", value: careerStats.total_best_coach },
-                    { label: "TOTW", value: careerStats.total_totw },
-                    { label: "MOTW", value: careerStats.total_motw },
-                    { label: "Amarelos", value: careerStats.total_yellow_cards },
-                    { label: "Vermelhos", value: careerStats.total_red_cards },
-                  ].map((card) => (
-                    <div key={card.label} style={{
-                      padding: "14px 12px", borderRadius: 10,
-                      border: "1px solid rgba(255,255,255,0.06)",
-                      backgroundColor: "rgba(255,255,255,0.02)",
-                    }}>
-                      <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)", margin: 0 }}>
-                        {card.label}
-                      </p>
-                      <p style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 900, color: accentColor, margin: "6px 0 0" }}>
-                        {card.value ?? 0}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)", margin: 0 }}>
-                  Nenhuma estatística de carreira. Use &quot;Recalcular estatísticas&quot; no Hall da Fama.
-                </p>
-              )}
-            </div>
-
-            <div style={{ borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", color: accentColor }}>
-                  HISTÓRICO POR EDIÇÃO
-                </span>
-              </div>
-              {editionStats.length === 0 ? (
-                <p style={{ padding: "20px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)", margin: 0 }}>
-                  Nenhuma edição com estatísticas registradas.
-                </p>
-              ) : (
-                editionStats.map((stat, idx) => {
-                  const comp = stat.competition_editions?.competitions?.short_name
-                    ?? stat.competition_editions?.competitions?.full_name ?? "—";
-                  const season = stat.competition_editions?.seasons?.name ?? "—";
-                  const premios: string[] = [];
-                  if ((stat.best_coach_count ?? 0) > 0) premios.push(`Melhor técnico ×${stat.best_coach_count}`);
-                  if ((stat.motw_count ?? 0) > 0) premios.push(`MOTW ×${stat.motw_count}`);
-                  if ((stat.totw_count ?? 0) > 0) premios.push(`TOTW ×${stat.totw_count}`);
-
-                  return (
-                    <div key={stat.edition_id} style={{
-                      display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12,
-                      padding: "12px 20px",
-                      borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                    }}>
-                      <div style={{ flex: 1, minWidth: 180 }}>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                          {comp}
-                        </p>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: "2px 0 0" }}>
-                          {season}
-                        </p>
-                      </div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
-                          {stat.matches_attended ?? 0} partidas
-                        </span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
-                          🟨 {stat.yellow_cards ?? 0}
-                        </span>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.5)" }}>
-                          🟥 {stat.red_cards ?? 0}
-                        </span>
-                      </div>
-                      {premios.length > 0 && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {premios.map((p) => (
-                            <span key={p} style={{
-                              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700,
-                              padding: "2px 8px", borderRadius: 20,
-                              border: `1px solid ${accentColor}33`,
-                              color: accentColor, backgroundColor: `${accentColor}11`,
-                            }}>
-                              {p}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
           </div>
         )}
       </div>
