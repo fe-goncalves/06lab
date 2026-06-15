@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase-server";
 export interface HallFiltros {
   competitionId?: string;
   seasonId?: string;
+  yearId?: string;
   teamId?: string;
   gender?: string;
 }
@@ -18,15 +19,17 @@ export interface AthleteEntry {
   photo_url: string | null;
   team_name: string | null;
   team_logo: string | null;
+  team_abbreviation?: string | null;
   value: number;
 }
 
 export interface TeamEntry {
   team_id: string;
   full_name: string;
+  abbreviation: string | null;
   logo_url: string | null;
   value: number;
-  subtitle?: string | null; // para sequências: exibe "Edição · Temporada"
+  subtitle?: string | null;
 }
 
 export interface StaffEntry {
@@ -43,8 +46,16 @@ export interface HallDaFamaData {
   assistencias: AthleteEntry[];
   partidas: AthleteEntry[];
   cartoes_amarelos: AthleteEntry[];
+  red_cards: AthleteEntry[];
   motm: AthleteEntry[];
   tots: AthleteEntry[];
+  titles: AthleteEntry[];
+  awards: AthleteEntry[];
+  goal_assist: AthleteEntry[];
+  penalty_goals: AthleteEntry[];
+  shootout_goals: AthleteEntry[];
+  best_match_goals: AthleteEntry[];
+  clean_sheets: AthleteEntry[];
   totw: AthleteEntry[];
   avg_rating: AthleteEntry[];
   penalty_saves: AthleteEntry[];
@@ -63,6 +74,8 @@ export interface HallDaFamaData {
   // ── Equipes – existentes ─────────────────────────────────────────────
   titulos: TeamEntry[];
   vitorias: TeamEntry[];
+  team_matches: TeamEntry[];
+  team_points: TeamEntry[];
   aproveitamento: TeamEntry[];
   gols_marcados: TeamEntry[];
   // ── Equipes – novas ──────────────────────────────────────────────────
@@ -75,6 +88,7 @@ export interface HallDaFamaData {
   totw_appearances: TeamEntry[];
   // ── Comissão Técnica ─────────────────────────────────────────────────
   tecnicos_titulos: StaffEntry[];
+  staff_wins: StaffEntry[];
   tecnicos_premiacoes: StaffEntry[];
   staff_partidas: StaffEntry[];
   staff_motw: StaffEntry[];
@@ -92,23 +106,35 @@ function resolveGenderDb(gender?: string): "male" | "female" | undefined {
 async function enriquecerAtletas(
   supabase: Awaited<ReturnType<typeof createClient>>,
   athleteIds: string[],
-): Promise<Map<string, { full_name: string; surname: string | null; photo_url: string | null; team_name: string | null; team_logo: string | null }>> {
+): Promise<Map<string, { full_name: string; surname: string | null; photo_url: string | null; team_name: string | null; team_logo: string | null; team_abbreviation: string | null }>> {
   if (athleteIds.length === 0) return new Map();
 
-  const { data } = await supabase
+  const { data: athletesData } = await supabase
     .from("athletes")
-    .select("id, full_name, surname, photo_url, athlete_team_stints(is_current, teams(full_name, logo_url))")
+    .select("id, full_name, surname, photo_url")
     .in("id", athleteIds);
 
+  const { data: stintsData } = await supabase
+    .from("athlete_team_stints")
+    .select("athlete_id, teams(full_name, abbreviation, logo_url)")
+    .in("athlete_id", athleteIds)
+    .eq("is_current", true);
+
+  const stintByAthlete = new Map<string, any>();
+  for (const s of (stintsData ?? []) as any[]) {
+    stintByAthlete.set(s.athlete_id, s.teams);
+  }
+
   const map = new Map<string, any>();
-  for (const a of (data ?? []) as any[]) {
-    const currentStint = (a.athlete_team_stints ?? []).find((s: any) => s.is_current);
+  for (const a of (athletesData ?? []) as any[]) {
+    const team = stintByAthlete.get(a.id);
     map.set(a.id, {
       full_name: a.full_name ?? "",
       surname: a.surname ?? null,
       photo_url: a.photo_url ?? null,
-      team_name: currentStint?.teams?.full_name ?? null,
-      team_logo: currentStint?.teams?.logo_url ?? null,
+      team_name: team?.full_name ?? null,
+      team_logo: team?.logo_url ?? null,
+      team_abbreviation: team?.abbreviation ?? null,
     });
   }
   return map;
@@ -146,7 +172,7 @@ async function resolverEditionIds(
   orgId: string,
   filtros: HallFiltros,
 ): Promise<string[] | null> {
-  const temFiltro = filtros.competitionId || filtros.seasonId || filtros.gender;
+  const temFiltro = filtros.competitionId || filtros.seasonId || filtros.gender || filtros.yearId;
   if (!temFiltro) return null;
 
   let query = supabase
@@ -155,7 +181,23 @@ async function resolverEditionIds(
     .eq("competitions.organization_id", orgId);
 
   if (filtros.competitionId) query = query.eq("competition_id", filtros.competitionId);
-  if (filtros.seasonId)      query = query.eq("season_id", filtros.seasonId);
+  if (filtros.seasonId) query = query.eq("season_id", filtros.seasonId);
+
+  if (filtros.yearId) {
+    const { data: yearSeasons } = await supabase
+      .from("seasons")
+      .select("id")
+      .eq("organization_id", orgId)
+      .eq("year_id", filtros.yearId);
+    const yearSeasonIds = (yearSeasons ?? []).map((s: { id: string }) => s.id);
+    if (yearSeasonIds.length === 0) return [];
+    if (filtros.seasonId) {
+      if (!yearSeasonIds.includes(filtros.seasonId)) return [];
+    } else {
+      query = query.in("season_id", yearSeasonIds);
+    }
+  }
+
   const genderDb = resolveGenderDb(filtros.gender);
   if (genderDb) query = query.eq("competitions.gender", genderDb);
 
@@ -185,13 +227,31 @@ async function labelEdicao(
 function dadosVazios(): HallDaFamaData {
   return {
     artilharia: [], assistencias: [], partidas: [], cartoes_amarelos: [],
-    motm: [], tots: [], totw: [], avg_rating: [], penalty_saves: [],
+    red_cards: [], motm: [], tots: [], titles: [], awards: [], goal_assist: [],
+    penalty_goals: [], shootout_goals: [], best_match_goals: [], clean_sheets: [],
+    totw: [], avg_rating: [], penalty_saves: [],
     hat_tricks: [], pokers: [], manitas: [], participacoes_diretas: [],
     mvp: [], top_scorer: [], top_assists: [], best_goalkeeper: [], motw: [], penalty_conversion: [], mais_finais: [],
-    titulos: [], vitorias: [], aproveitamento: [], gols_marcados: [],
+    titulos: [], vitorias: [], team_matches: [], team_points: [], aproveitamento: [], gols_marcados: [],
     sequencia_vitorias: [], sequencia_invicto: [], maior_goleada: [], mais_cleansheets: [],
     runner_up: [], podios: [], totw_appearances: [],
-    tecnicos_titulos: [], tecnicos_premiacoes: [], staff_partidas: [], staff_motw: [],
+    tecnicos_titulos: [], staff_wins: [], tecnicos_premiacoes: [], staff_partidas: [], staff_motw: [],
+  };
+}
+
+function teamEntryFrom(
+  teamId: string,
+  team: { full_name?: string; logo_url?: string | null; abbreviation?: string | null } | undefined,
+  value: number,
+  subtitle?: string | null,
+): TeamEntry {
+  return {
+    team_id: teamId,
+    full_name: team?.full_name ?? "",
+    abbreviation: team?.abbreviation ?? null,
+    logo_url: team?.logo_url ?? null,
+    value,
+    subtitle,
   };
 }
 
@@ -228,8 +288,16 @@ export async function buscarHallDaFama(
   let assistencias: AthleteEntry[]     = [];
   let partidas: AthleteEntry[]         = [];
   let cartoes_amarelos: AthleteEntry[] = [];
+  let red_cards: AthleteEntry[]         = [];
   let motm: AthleteEntry[]             = [];
   let tots: AthleteEntry[]             = [];
+  let titles: AthleteEntry[]           = [];
+  let awards: AthleteEntry[]           = [];
+  let goal_assist: AthleteEntry[]      = [];
+  let penalty_goals: AthleteEntry[]    = [];
+  let shootout_goals: AthleteEntry[]   = [];
+  let best_match_goals: AthleteEntry[] = [];
+  let clean_sheets: AthleteEntry[]     = [];
   let totw: AthleteEntry[]             = [];
   let avg_rating: AthleteEntry[]       = [];
   let penalty_saves: AthleteEntry[]    = [];
@@ -244,11 +312,12 @@ export async function buscarHallDaFama(
     let careerQuery = supabase
       .from("athlete_career_stats")
       .select(`
-        athlete_id, total_goals, total_assists, total_matches, total_yellow_cards,
+        athlete_id, total_goals, total_assists, total_matches, total_yellow_cards, total_red_cards,
         total_motm, total_tots, total_totw, total_penalty_saves, avg_rating,
         total_hat_tricks, total_pokers, total_mvp, total_top_scorer, total_top_assists,
         total_best_goalkeeper, total_motw, total_penalties_taken, total_penalties_scored,
-        athletes!inner(id, gender)
+        total_shootouts_scored, total_titles, total_clean_sheets,
+        athletes!inner(id, gender, position_id, player_positions(is_goalkeeper))
       `)
       .eq("organization_id", orgId);
     if (genderDb) careerQuery = careerQuery.eq("athletes.gender", genderDb);
@@ -268,6 +337,7 @@ export async function buscarHallDaFama(
           photo_url: a?.photo_url ?? null,
           team_name: a?.team_name ?? null,
           team_logo: a?.team_logo ?? null,
+          team_abbreviation: a?.team_abbreviation ?? null,
           value,
         };
       };
@@ -279,9 +349,27 @@ export async function buscarHallDaFama(
       assistencias     = sortField("total_assists");
       partidas         = sortField("total_matches");
       cartoes_amarelos = sortField("total_yellow_cards");
+      red_cards        = sortField("total_red_cards");
       motm             = sortField("total_motm");
       tots             = sortField("total_tots");
       totw             = sortField("total_totw");
+      titles           = sortField("total_titles");
+      penalty_goals    = sortField("total_penalties_scored");
+      shootout_goals   = sortField("total_shootouts_scored");
+      goal_assist      = [...rows]
+        .map((r) => ({ r, v: (r.total_goals ?? 0) + (r.total_assists ?? 0) }))
+        .filter(({ v }) => v > 0)
+        .sort((a, b) => b.v - a.v)
+        .map(({ r, v }) => toEntry(r, v));
+      const isGoalkeeper = (r: any) => {
+        const pp = r.athletes?.player_positions;
+        if (Array.isArray(pp)) return pp.some((p: { is_goalkeeper?: boolean }) => p.is_goalkeeper);
+        return pp?.is_goalkeeper === true;
+      };
+      clean_sheets     = [...rows]
+        .filter((r) => isGoalkeeper(r) && (r.total_clean_sheets ?? 0) > 0)
+        .sort((a, b) => (b.total_clean_sheets ?? 0) - (a.total_clean_sheets ?? 0))
+        .map((r) => toEntry(r, r.total_clean_sheets));
       avg_rating       = [...rows].filter((r) => (r.total_matches ?? 0) >= 10 && r.avg_rating != null).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)).map((r) => toEntry(r, Math.round((r.avg_rating ?? 0) * 10) / 10));
       penalty_saves    = sortField("total_penalty_saves");
       mvp              = sortField("total_mvp");
@@ -303,7 +391,7 @@ export async function buscarHallDaFama(
     if (editionIdsParaUsar.length > 0) {
       let statsQuery = supabase
         .from("athlete_edition_stats")
-        .select("athlete_id, team_id, matches_played, goals, assists, yellow_cards, motm_count, tots_count, totw_count, penalty_saves, avg_rating")
+        .select("athlete_id, team_id, matches_played, goals, assists, yellow_cards, red_cards, motm_count, tots_count, totw_count, penalty_saves, avg_rating")
         .in("edition_id", editionIdsParaUsar);
 
       if (filtros.teamId) statsQuery = statsQuery.eq("team_id", filtros.teamId);
@@ -322,13 +410,14 @@ export async function buscarHallDaFama(
       for (const r of rows) {
         const key = r.athlete_id;
         if (!agregado.has(key)) {
-          agregado.set(key, { athlete_id: key, total_goals: 0, total_assists: 0, total_matches: 0, total_yellow_cards: 0, total_motm: 0, total_tots: 0, total_totw: 0, total_penalty_saves: 0, rating_sum: 0, rating_count: 0 });
+          agregado.set(key, { athlete_id: key, total_goals: 0, total_assists: 0, total_matches: 0, total_yellow_cards: 0, total_red_cards: 0, total_motm: 0, total_tots: 0, total_totw: 0, total_penalty_saves: 0, rating_sum: 0, rating_count: 0 });
         }
         const e = agregado.get(key)!;
         e.total_goals         += r.goals         ?? 0;
         e.total_assists       += r.assists        ?? 0;
         e.total_matches       += r.matches_played ?? 0;
         e.total_yellow_cards  += r.yellow_cards   ?? 0;
+        e.total_red_cards     += r.red_cards      ?? 0;
         e.total_motm          += r.motm_count     ?? 0;
         e.total_tots          += r.tots_count     ?? 0;
         e.total_totw          += r.totw_count     ?? 0;
@@ -348,16 +437,22 @@ export async function buscarHallDaFama(
         const athleteMap = await enriquecerAtletas(supabase, aggRows.map((r) => r.athlete_id));
         const toEntry = (r: any, value: number): AthleteEntry => {
           const a = athleteMap.get(r.athlete_id);
-          return { athlete_id: r.athlete_id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value };
+          return { athlete_id: r.athlete_id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, team_abbreviation: a?.team_abbreviation ?? null, value };
         };
 
         artilharia       = [...aggRows].sort((a, b) => b.total_goals - a.total_goals).filter((r) => r.total_goals > 0).map((r) => toEntry(r, r.total_goals));
         assistencias     = [...aggRows].sort((a, b) => b.total_assists - a.total_assists).filter((r) => r.total_assists > 0).map((r) => toEntry(r, r.total_assists));
         partidas         = [...aggRows].sort((a, b) => b.total_matches - a.total_matches).filter((r) => r.total_matches > 0).map((r) => toEntry(r, r.total_matches));
         cartoes_amarelos = [...aggRows].sort((a, b) => b.total_yellow_cards - a.total_yellow_cards).filter((r) => r.total_yellow_cards > 0).map((r) => toEntry(r, r.total_yellow_cards));
+        red_cards        = [...aggRows].sort((a, b) => b.total_red_cards - a.total_red_cards).filter((r) => r.total_red_cards > 0).map((r) => toEntry(r, r.total_red_cards));
         motm             = [...aggRows].sort((a, b) => b.total_motm - a.total_motm).filter((r) => r.total_motm > 0).map((r) => toEntry(r, r.total_motm));
         tots             = [...aggRows].sort((a, b) => b.total_tots - a.total_tots).filter((r) => r.total_tots > 0).map((r) => toEntry(r, r.total_tots));
         totw             = [...aggRows].sort((a, b) => b.total_totw - a.total_totw).filter((r) => r.total_totw > 0).map((r) => toEntry(r, r.total_totw));
+        goal_assist      = [...aggRows]
+          .map((r) => ({ r, v: r.total_goals + r.total_assists }))
+          .filter(({ v }) => v > 0)
+          .sort((a, b) => b.v - a.v)
+          .map(({ r, v }) => toEntry(r, v));
         avg_rating       = [...aggRows].filter((r) => r.rating_count >= 10 && r.avg_rating != null).sort((a, b) => (b.avg_rating ?? 0) - (a.avg_rating ?? 0)).map((r) => toEntry(r, Math.round((r.avg_rating ?? 0) * 10) / 10));
         penalty_saves    = [...aggRows].sort((a, b) => b.total_penalty_saves - a.total_penalty_saves).filter((r) => r.total_penalty_saves > 0).map((r) => toEntry(r, r.total_penalty_saves));
       }
@@ -385,7 +480,7 @@ export async function buscarHallDaFama(
         const athleteMapMotw = await enriquecerAtletas(supabase, [...motwAgg.keys(), ...penAgg.keys()]);
         const toEntryFiltered = (id: string, value: number): AthleteEntry => {
           const a = athleteMapMotw.get(id);
-          return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value };
+          return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, team_abbreviation: a?.team_abbreviation ?? null, value };
         };
 
         motw = Array.from(motwAgg.entries()).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).map(([id, v]) => toEntryFiltered(id, v));
@@ -420,7 +515,7 @@ export async function buscarHallDaFama(
           const am = await enriquecerAtletas(supabase, ids);
           return [...counts.entries()].sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, v]) => {
             const a = am.get(id);
-            return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value: v };
+            return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, team_abbreviation: a?.team_abbreviation ?? null, value: v };
           });
         };
 
@@ -453,7 +548,7 @@ export async function buscarHallDaFama(
       const athleteMapHt = await enriquecerAtletas(supabase, htRows.map((r) => r.athlete_id));
       const toHtEntry = (r: any, value: number): AthleteEntry => {
         const a = athleteMapHt.get(r.athlete_id);
-        return { athlete_id: r.athlete_id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value };
+        return { athlete_id: r.athlete_id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, team_abbreviation: a?.team_abbreviation ?? null, value };
       };
       hat_tricks = [...htRows].sort((a, b) => (b.total_hat_tricks ?? 0) - (a.total_hat_tricks ?? 0)).filter((r) => (r.total_hat_tricks ?? 0) > 0).map((r) => toHtEntry(r, r.total_hat_tricks));
       pokers     = [...htRows].sort((a, b) => (b.total_pokers ?? 0) - (a.total_pokers ?? 0)).filter((r) => (r.total_pokers ?? 0) > 0).map((r) => toHtEntry(r, r.total_pokers));
@@ -499,7 +594,7 @@ export async function buscarHallDaFama(
       const athleteMap = await enriquecerAtletas(supabase, entries.map(([id]) => id));
       return entries.map(([id, count]) => {
         const a = athleteMap.get(id);
-        return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, value: count };
+        return { athlete_id: id, full_name: a?.full_name ?? "", surname: a?.surname ?? null, photo_url: a?.photo_url ?? null, team_name: a?.team_name ?? null, team_logo: a?.team_logo ?? null, team_abbreviation: a?.team_abbreviation ?? null, value: count };
       });
     };
 
@@ -509,6 +604,94 @@ export async function buscarHallDaFama(
       contarPorAtleta(mnRes.data ?? []),
       contarPorAtleta(gaRes.data ?? []),
     ]);
+  }
+
+  // ─── Atletas – Premiações (soma de todos edition_awards) ───────────────────
+
+  if (editionIdsAchiev.length > 0) {
+    let awardsQuery = supabase
+      .from("edition_awards")
+      .select("athlete_id, athletes!inner(gender)")
+      .in("edition_id", editionIdsAchiev)
+      .not("athlete_id", "is", null);
+    if (genderDb) awardsQuery = awardsQuery.eq("athletes.gender", genderDb);
+
+    const { data: allAwardsData } = await awardsQuery;
+    const awardCounts = new Map<string, number>();
+    for (const r of (allAwardsData ?? []) as any[]) {
+      if (!r.athlete_id) continue;
+      awardCounts.set(r.athlete_id, (awardCounts.get(r.athlete_id) ?? 0) + 1);
+    }
+
+    let awardEntries = [...awardCounts.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    if (filtros.teamId && awardEntries.length > 0) {
+      const { data: teamAthletes } = await supabase
+        .from("athlete_edition_stats")
+        .select("athlete_id")
+        .in("edition_id", editionIdsAchiev)
+        .eq("team_id", filtros.teamId);
+      const validIds = new Set((teamAthletes ?? []).map((a: { athlete_id: string }) => a.athlete_id));
+      awardEntries = awardEntries.filter(([id]) => validIds.has(id));
+    }
+
+    if (awardEntries.length > 0) {
+      const athleteMapAwards = await enriquecerAtletas(supabase, awardEntries.map(([id]) => id));
+      awards = awardEntries.map(([id, count]) => {
+        const a = athleteMapAwards.get(id);
+        return {
+          athlete_id: id,
+          full_name: a?.full_name ?? "",
+          surname: a?.surname ?? null,
+          photo_url: a?.photo_url ?? null,
+          team_name: a?.team_name ?? null,
+          team_logo: a?.team_logo ?? null,
+          team_abbreviation: a?.team_abbreviation ?? null,
+          value: count,
+        };
+      });
+    }
+  }
+
+  // ─── Atletas – Mais gols num jogo ───────────────────────────────────────────
+
+  if (editionIdsAchiev.length > 0) {
+    let bmgQuery = supabase
+      .from("athlete_match_achievements")
+      .select("athlete_id, value")
+      .in("achievement_type", ["hat_trick", "poker", "manita"])
+      .in("edition_id", editionIdsAchiev);
+    if (filtros.teamId) bmgQuery = bmgQuery.eq("team_id", filtros.teamId);
+
+    const { data: bmgData } = await bmgQuery;
+    const maxByAthlete = new Map<string, number>();
+    for (const r of (bmgData ?? []) as any[]) {
+      const cur = maxByAthlete.get(r.athlete_id) ?? 0;
+      if ((r.value ?? 0) > cur) maxByAthlete.set(r.athlete_id, r.value);
+    }
+
+    let bmgEntries = [...maxByAthlete.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+    if (genderDb && bmgEntries.length > 0) {
+      const { data: gd } = await supabase.from("athletes").select("id").in("id", bmgEntries.map(([id]) => id)).eq("gender", genderDb);
+      const validIds = new Set((gd ?? []).map((a: { id: string }) => a.id));
+      bmgEntries = bmgEntries.filter(([id]) => validIds.has(id));
+    }
+
+    if (bmgEntries.length > 0) {
+      const athleteMapBmg = await enriquecerAtletas(supabase, bmgEntries.map(([id]) => id));
+      best_match_goals = bmgEntries.map(([id, val]) => {
+        const a = athleteMapBmg.get(id);
+        return {
+          athlete_id: id,
+          full_name: a?.full_name ?? "",
+          surname: a?.surname ?? null,
+          photo_url: a?.photo_url ?? null,
+          team_name: a?.team_name ?? null,
+          team_logo: a?.team_logo ?? null,
+          team_abbreviation: a?.team_abbreviation ?? null,
+          value: val,
+        };
+      });
+    }
   }
 
   // ─── Atletas – Mais finais ────────────────────────────────────────────────────
@@ -568,6 +751,7 @@ export async function buscarHallDaFama(
                 photo_url: a?.photo_url ?? null,
                 team_name: a?.team_name ?? null,
                 team_logo: a?.team_logo ?? null,
+                team_abbreviation: a?.team_abbreviation ?? null,
                 value: count,
               };
             });
@@ -583,6 +767,8 @@ export async function buscarHallDaFama(
 
   let titulos: TeamEntry[]        = [];
   let vitorias: TeamEntry[]       = [];
+  let team_matches: TeamEntry[]   = [];
+  let team_points: TeamEntry[]    = [];
   let aproveitamento: TeamEntry[] = [];
   let gols_marcados: TeamEntry[]  = [];
   let runner_up: TeamEntry[]      = [];
@@ -595,7 +781,7 @@ export async function buscarHallDaFama(
       .from("team_career_stats")
       .select(`
         team_id, total_clean_sheets, total_totw_appearances,
-        teams!inner(full_name, logo_url, gender, organization_id)
+        teams!inner(full_name, abbreviation, logo_url, gender, organization_id)
       `)
       .eq("teams.organization_id", orgId)
       .eq("teams.is_virtual", false);
@@ -604,12 +790,8 @@ export async function buscarHallDaFama(
 
     const { data: tcData } = await tcQuery;
     const tcRows = (tcData ?? []) as any[];
-    const toTeamCareerEntry = (r: any, value: number): TeamEntry => ({
-      team_id: r.team_id,
-      full_name: r.teams?.full_name ?? "",
-      logo_url: r.teams?.logo_url ?? null,
-      value,
-    });
+    const toTeamCareerEntry = (r: any, value: number): TeamEntry =>
+      teamEntryFrom(r.team_id, r.teams, value);
     const sortTc = (field: string) =>
       [...tcRows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toTeamCareerEntry(r, r[field]));
 
@@ -620,22 +802,23 @@ export async function buscarHallDaFama(
   if (editionIdsEquipes.length > 0) {
     let teamStatsQuery = supabase
       .from("team_edition_stats")
-      .select("team_id, matches_played, wins, goals_scored")
+      .select("team_id, matches_played, wins, draws, goals_scored")
       .in("edition_id", editionIdsEquipes);
     if (filtros.teamId) teamStatsQuery = teamStatsQuery.eq("team_id", filtros.teamId);
 
     const { data: teamStatsData } = await teamStatsQuery;
     const teamAgg = new Map<string, any>();
     for (const r of (teamStatsData ?? []) as any[]) {
-      if (!teamAgg.has(r.team_id)) teamAgg.set(r.team_id, { total_matches: 0, total_wins: 0, total_goals: 0 });
+      if (!teamAgg.has(r.team_id)) teamAgg.set(r.team_id, { total_matches: 0, total_wins: 0, total_draws: 0, total_goals: 0 });
       const e = teamAgg.get(r.team_id)!;
       e.total_matches += r.matches_played ?? 0;
       e.total_wins    += r.wins           ?? 0;
+      e.total_draws   += r.draws          ?? 0;
       e.total_goals   += r.goals_scored   ?? 0;
     }
 
     const teamIds = Array.from(teamAgg.keys());
-    let teamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", teamIds).eq("organization_id", orgId).eq("is_virtual", false);
+    let teamsQuery = supabase.from("teams").select("id, full_name, abbreviation, logo_url, gender").in("id", teamIds).eq("organization_id", orgId).eq("is_virtual", false);
     if (genderDb) teamsQuery = teamsQuery.eq("gender", genderDb);
     const { data: teamsData } = await teamsQuery;
     const teamsMap = new Map((teamsData ?? []).map((t: any) => [t.id, t]));
@@ -677,14 +860,14 @@ export async function buscarHallDaFama(
 
     const awardTeamIdsForLookup = [...new Set(awardRows.map((a) => a.winning_team_id).filter(Boolean))];
     const { data: awardTeamsData } = awardTeamIdsForLookup.length > 0
-      ? await supabase.from("teams").select("id, full_name, logo_url").in("id", awardTeamIdsForLookup).eq("organization_id", orgId).eq("is_virtual", false)
+      ? await supabase.from("teams").select("id, full_name, abbreviation, logo_url").in("id", awardTeamIdsForLookup).eq("organization_id", orgId).eq("is_virtual", false)
       : { data: [] };
     const awardTeamsMap = new Map((awardTeamsData ?? []).map((t: any) => [t.id, t]));
 
     const toAwardTeamEntry = (entries: [string, number][]): TeamEntry[] =>
       entries.sort((a, b) => b[1] - a[1]).filter(([, v]) => v > 0).map(([id, count]) => {
         const t = awardTeamsMap.get(id);
-        return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
+        return teamEntryFrom(id, t, count);
       });
 
     titulos   = toAwardTeamEntry([...tituloCount.entries()]);
@@ -695,9 +878,15 @@ export async function buscarHallDaFama(
       .filter(([id]) => teamsMap.has(id))
       .map(([id, stats]) => ({ team_id: id, ...stats, team: teamsMap.get(id) }));
 
-    vitorias = [...aggArr].filter((t) => t.total_wins > 0).sort((a, b) => b.total_wins - a.total_wins).map((t) => ({ team_id: t.team_id, full_name: t.team?.full_name ?? "", logo_url: t.team?.logo_url ?? null, value: t.total_wins }));
-    aproveitamento = [...aggArr].filter((t) => t.total_matches >= 5).sort((a, b) => b.total_wins / b.total_matches - a.total_wins / a.total_matches).map((t) => ({ team_id: t.team_id, full_name: t.team?.full_name ?? "", logo_url: t.team?.logo_url ?? null, value: Math.round((t.total_wins / t.total_matches) * 100) }));
-    gols_marcados = [...aggArr].filter((t) => t.total_goals > 0).sort((a, b) => b.total_goals - a.total_goals).map((t) => ({ team_id: t.team_id, full_name: t.team?.full_name ?? "", logo_url: t.team?.logo_url ?? null, value: t.total_goals }));
+    vitorias = [...aggArr].filter((t) => t.total_wins > 0).sort((a, b) => b.total_wins - a.total_wins).map((t) => teamEntryFrom(t.team_id, t.team, t.total_wins));
+    team_matches = [...aggArr].filter((t) => t.total_matches > 0).sort((a, b) => b.total_matches - a.total_matches).map((t) => teamEntryFrom(t.team_id, t.team, t.total_matches));
+    team_points = [...aggArr]
+      .map((t) => ({ t, pts: t.total_wins * 3 + t.total_draws }))
+      .filter(({ pts }) => pts > 0)
+      .sort((a, b) => b.pts - a.pts)
+      .map(({ t, pts }) => teamEntryFrom(t.team_id, t.team, pts));
+    aproveitamento = [...aggArr].filter((t) => t.total_matches >= 5).sort((a, b) => b.total_wins / b.total_matches - a.total_wins / a.total_matches).map((t) => teamEntryFrom(t.team_id, t.team, Math.round((t.total_wins / t.total_matches) * 100)));
+    gols_marcados = [...aggArr].filter((t) => t.total_goals > 0).sort((a, b) => b.total_goals - a.total_goals).map((t) => teamEntryFrom(t.team_id, t.team, t.total_goals));
   }
 
   // ─── Equipes – Sequências (views) ────────────────────────────────────────────
@@ -739,7 +928,7 @@ export async function buscarHallDaFama(
 
     const [teamsStreakRes, editionsStreakRes] = await Promise.all([
       streakTeamIds.length > 0
-        ? supabase.from("teams").select("id, full_name, logo_url").in("id", streakTeamIds).eq("is_virtual", false)
+        ? supabase.from("teams").select("id, full_name, abbreviation, logo_url").in("id", streakTeamIds).eq("is_virtual", false)
         : Promise.resolve({ data: [] }),
       streakEditionIds.length > 0
         ? supabase.from("competition_editions").select("id, competitions(short_name, full_name), seasons(name)").in("id", streakEditionIds)
@@ -756,7 +945,7 @@ export async function buscarHallDaFama(
     const toStreakEntry = (r: any, value: number): TeamEntry => {
       const t = teamsStreakMap.get(r.team_id);
       const subtitle = editionsStreakMap.get(r.edition_id) ?? null;
-      return { team_id: r.team_id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value, subtitle };
+      return teamEntryFrom(r.team_id, t, value, subtitle);
     };
 
     sequencia_vitorias = (winStreakRes.data ?? [])
@@ -847,7 +1036,7 @@ export async function buscarHallDaFama(
         const edicaoLabel = goleadaEditionsMap.get(g.edition_id) ?? null;
         const placar = `${g.score_winner}×${g.score_loser} vs ${loserTeam?.full_name ?? "—"}`;
         const subtitle = edicaoLabel ? `${placar} · ${edicaoLabel}` : placar;
-        return { team_id: g.winner_team_id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: g.diff, subtitle };
+        return teamEntryFrom(g.winner_team_id, t, g.diff, subtitle);
       });
       }
     }
@@ -894,7 +1083,7 @@ export async function buscarHallDaFama(
 
       if (sortedCs.length > 0) {
         const csTeamIds = sortedCs.map(([id]) => id);
-        let csTeamsQuery = supabase.from("teams").select("id, full_name, logo_url, gender").in("id", csTeamIds).eq("is_virtual", false);
+        let csTeamsQuery = supabase.from("teams").select("id, full_name, abbreviation, logo_url, gender").in("id", csTeamIds).eq("is_virtual", false);
         if (genderDb) csTeamsQuery = csTeamsQuery.eq("gender", genderDb);
         const { data: csTeamsData } = await csTeamsQuery;
         const csTeamsMap = new Map((csTeamsData ?? []).map((t: any) => [t.id, t]));
@@ -903,7 +1092,7 @@ export async function buscarHallDaFama(
           .filter(([id]) => csTeamsMap.has(id))
           .map(([id, count]) => {
             const t = csTeamsMap.get(id);
-            return { team_id: id, full_name: t?.full_name ?? "", logo_url: t?.logo_url ?? null, value: count };
+            return teamEntryFrom(id, t, count);
           });
       }
     }
@@ -913,6 +1102,7 @@ export async function buscarHallDaFama(
   // ─── Comissão Técnica ─────────────────────────────────────────────────────
 
   let tecnicos_titulos: StaffEntry[]    = [];
+  let staff_wins: StaffEntry[]          = [];
   let tecnicos_premiacoes: StaffEntry[] = [];
   let staff_partidas: StaffEntry[]      = [];
   let staff_motw: StaffEntry[]          = [];
@@ -929,7 +1119,7 @@ export async function buscarHallDaFama(
     let scQuery = supabase
       .from("staff_career_stats")
       .select(`
-        staff_member_id, total_titles, total_best_coach, total_matches_attended, total_motw,
+        staff_member_id, total_titles, total_wins, total_best_coach, total_matches_attended, total_motw,
         staff_members!inner(full_name, surname, photo_url, gender)
       `)
       .eq("organization_id", orgId);
@@ -941,6 +1131,7 @@ export async function buscarHallDaFama(
       [...scRows].sort((a, b) => (b[field] ?? 0) - (a[field] ?? 0)).filter((r) => (r[field] ?? 0) > 0).map((r) => toStaffEntry(r, r[field], r.staff_members));
 
     tecnicos_titulos    = sortStaff("total_titles");
+    staff_wins          = sortStaff("total_wins");
     tecnicos_premiacoes = sortStaff("total_best_coach");
     staff_partidas      = sortStaff("total_matches_attended");
     staff_motw          = sortStaff("total_motw");
@@ -988,13 +1179,15 @@ export async function buscarHallDaFama(
   }
 
   return {
-    artilharia, assistencias, partidas, cartoes_amarelos, motm, tots, totw, avg_rating, penalty_saves,
+    artilharia, assistencias, partidas, cartoes_amarelos, red_cards, motm, tots, titles, awards,
+    goal_assist, penalty_goals, shootout_goals, best_match_goals, clean_sheets,
+    totw, avg_rating, penalty_saves,
     hat_tricks, pokers, manitas, participacoes_diretas,
     mvp, top_scorer, top_assists, best_goalkeeper, motw, penalty_conversion, mais_finais,
-    titulos, vitorias, aproveitamento, gols_marcados,
+    titulos, vitorias, team_matches, team_points, aproveitamento, gols_marcados,
     sequencia_vitorias, sequencia_invicto, maior_goleada, mais_cleansheets,
     runner_up, podios, totw_appearances,
-    tecnicos_titulos, tecnicos_premiacoes, staff_partidas, staff_motw,
+    tecnicos_titulos, staff_wins, tecnicos_premiacoes, staff_partidas, staff_motw,
   };
 }
 
@@ -1082,9 +1275,10 @@ export async function recalcularEstatisticas(): Promise<{ success: true } | { er
 // ─── Opções de filtro ─────────────────────────────────────────────────────────
 
 export interface FiltroOpcoes {
-  competitions: { id: string; full_name: string; short_name: string | null }[];
+  competitions: { id: string; full_name: string; short_name: string | null; logo_url: string | null }[];
   seasons: { id: string; name: string }[];
-  teams: { id: string; full_name: string; logo_url: string | null }[];
+  years: { id: string; value: number }[];
+  teams: { id: string; full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null }[];
 }
 
 export async function buscarOpcoesFiltro(): Promise<FiltroOpcoes | { error: string }> {
@@ -1094,14 +1288,16 @@ export async function buscarOpcoesFiltro(): Promise<FiltroOpcoes | { error: stri
   const { data: profile } = await supabase.from("user_profiles").select("organization_id").eq("auth_user_id", user.id).maybeSingle();
   if (!profile?.organization_id) return { error: "Organização não encontrada." };
   const orgId = profile.organization_id;
-  const [{ data: compsData }, { data: seasonsData }, { data: teamsData }] = await Promise.all([
-    supabase.from("competitions").select("id, full_name, short_name").eq("organization_id", orgId).order("full_name"),
+  const [{ data: compsData }, { data: seasonsData }, { data: yearsData }, { data: teamsData }] = await Promise.all([
+    supabase.from("competitions").select("id, full_name, short_name, logo_url").eq("organization_id", orgId).order("full_name"),
     supabase.from("seasons").select("id, name, display_order").eq("organization_id", orgId).order("display_order", { ascending: true }).order("name", { ascending: true }),
-    supabase.from("teams").select("id, full_name, logo_url").eq("organization_id", orgId).eq("is_virtual", false).order("full_name"),
+    supabase.from("years").select("id, value").eq("organization_id", orgId).order("value", { ascending: false }),
+    supabase.from("teams").select("id, full_name, short_name, abbreviation, logo_url").eq("organization_id", orgId).eq("is_virtual", false).order("full_name"),
   ]);
   return {
     competitions: (compsData ?? []) as FiltroOpcoes["competitions"],
     seasons: (seasonsData ?? []) as FiltroOpcoes["seasons"],
+    years: (yearsData ?? []) as FiltroOpcoes["years"],
     teams: (teamsData ?? []) as FiltroOpcoes["teams"],
   };
 }

@@ -5671,7 +5671,6 @@ const RANKING_GROUPS = [
   {
     label: "FASE ELIMINATÓRIA",
     categories: [
-      { code: "participation_knockout", label: "Participação em mata-mata" },
       { code: "win_in_knockout", label: "Vitória em mata-mata" },
       { code: "draw_in_knockout", label: "Empate em mata-mata" },
       { code: "loss_in_knockout", label: "Derrota em mata-mata" },
@@ -5702,7 +5701,12 @@ function RankingConfigTab({
   const [values, setValues] = useState<Record<string, string>>({});
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [recalculating, setRecalculating] = useState(false);
+
+  const hiddenRankingCategories = new Set(["participation_knockout", "advance_knockout"]);
+  const visibleRankingGroups = RANKING_GROUPS.map(group => ({
+    ...group,
+    categories: group.categories.filter(c => !hiddenRankingCategories.has(c.code)),
+  })).filter(group => group.categories.length > 0);
 
   useEffect(() => {
     if (!selectedEditionId) return;
@@ -5727,7 +5731,7 @@ function RankingConfigTab({
 
   async function handleSave() {
     setSaving(true);
-    const allCodes = RANKING_GROUPS.flatMap(g => g.categories.map(c => c.code));
+    const allCodes = visibleRankingGroups.flatMap(g => g.categories.map(c => c.code));
     const configs = allCodes.map(code => ({
       category_code: code,
       points_value: parseInt(values[code] ?? "0", 10) || 0,
@@ -5736,26 +5740,6 @@ function RankingConfigTab({
     setSaving(false);
     if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Configuração de ranking salva.");
-  }
-
-  async function handleRecalculate() {
-    setRecalculating(true);
-    const supabase = createClient();
-    const { data: edition } = await supabase
-      .from("competition_editions")
-      .select("competition_id, competitions(organization_id, gender, sport_slug)")
-      .eq("id", selectedEditionId)
-      .maybeSingle();
-    const comp = (edition?.competitions as any);
-    if (!comp) { toast("error", "Competição não encontrada."); setRecalculating(false); return; }
-    const { error } = await supabase.rpc("calculate_ranking", {
-      p_organization_id: comp.organization_id,
-      p_gender: comp.gender,
-      p_sport_slug: comp.sport_slug,
-    });
-    setRecalculating(false);
-    if (error) { toast("error", error.message); return; }
-    toast("success", "Ranking recalculado.");
   }
 
   if (!loaded) {
@@ -5773,7 +5757,7 @@ function RankingConfigTab({
       </p>
 
       <div className="flex flex-col gap-8">
-        {RANKING_GROUPS.map(group => (
+        {visibleRankingGroups.map(group => (
           <div key={group.label}>
             <p className="mb-3 font-mono text-xs font-bold tracking-widest uppercase"
               style={{ color: "var(--color-text-secondary)", fontSize: "10px", letterSpacing: "0.16em" }}>
@@ -5811,20 +5795,11 @@ function RankingConfigTab({
         <button
           type="button"
           onClick={handleSave}
-          disabled={saving || recalculating}
+          disabled={saving}
           className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg transition-opacity disabled:opacity-50"
           style={{ backgroundColor: "var(--color-brand)", color: "#0a0a0a" }}
         >
           {saving ? "SALVANDO..." : "SALVAR CONFIGURAÇÃO DE RANKING"}
-        </button>
-        <button
-          type="button"
-          onClick={handleRecalculate}
-          disabled={saving || recalculating}
-          className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg border transition-colors disabled:opacity-50"
-          style={{ borderColor: "var(--color-border)", color: "var(--color-brand)", backgroundColor: "transparent" }}
-        >
-          {recalculating ? "CALCULANDO..." : "↻ RECALCULAR"}
         </button>
       </div>
     </div>
