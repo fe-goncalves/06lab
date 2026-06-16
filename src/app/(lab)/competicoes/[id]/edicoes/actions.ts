@@ -1638,22 +1638,25 @@ export async function recalcularEstatisticasEdicao(
 
 export async function salvarAjustesPontosClassificacao(
   editionId: string,
+  phaseId: string,
   adjustments: { editionTeamId: string; awarded: number; deducted: number }[],
 ): Promise<{ success: true } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  const { addStandingsPointAdjustments, syncEditionStats } = await import("@/lib/edition-stats-sync");
+  if (!phaseId) return { error: "Fase não selecionada." };
+
+  const { addStandingsPointAdjustments, syncTeamEditionStandings } = await import("@/lib/edition-stats-sync");
 
   const deltas = adjustments
     .map((a) => ({ editionTeamId: a.editionTeamId, delta: a.awarded - a.deducted }))
     .filter((a) => a.delta !== 0);
 
-  const adjustResult = await addStandingsPointAdjustments(supabase, editionId, deltas);
+  const adjustResult = await addStandingsPointAdjustments(supabase, phaseId, deltas);
   if (adjustResult.error) return { error: adjustResult.error };
 
-  const syncResult = await syncEditionStats(supabase, editionId);
+  const syncResult = await syncTeamEditionStandings(supabase, editionId);
   if (syncResult.error) return { error: syncResult.error };
 
   return { success: true };

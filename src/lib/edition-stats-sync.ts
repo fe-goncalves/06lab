@@ -8,9 +8,54 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const FINISHED = "finished";
 
 type StandingsOverrideRow = {
+  phase_id: string;
   edition_team_id: string;
   points_adjustment: number;
 };
+
+async function getPhaseIdsForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("phases")
+    .select("id")
+    .eq("edition_id", editionId);
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((p) => p.id);
+}
+
+async function getDefaultPhaseIdForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("phases")
+    .select("id, is_current, display_order")
+    .eq("edition_id", editionId)
+    .order("display_order", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  const phases = data ?? [];
+  return phases.find((p) => p.is_current)?.id ?? phases[0]?.id ?? null;
+}
+
+async function countStandingsOverridesForEdition(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<number> {
+  const phaseIds = await getPhaseIdsForEdition(supabase, editionId);
+  if (phaseIds.length === 0) return 0;
+
+  const { count, error } = await supabase
+    .from("standings_overrides")
+    .select("id", { count: "exact", head: true })
+    .in("phase_id", phaseIds);
+
+  if (error) throw new Error(error.message);
+  return count ?? 0;
+}
 
 async function loadEditionTeamMaps(
   supabase: SupabaseClient,
@@ -62,23 +107,78 @@ async function loadStandingsOverrides(
   editionId: string,
 ): Promise<Map<string, number>> {
   const map = new Map<string, number>();
+  const phaseIds = await getPhaseIdsForEdition(supabase, editionId);
+  if (phaseIds.length === 0) return map;
+
   const [{ data, error }, { teamIdByEditionTeamId }] = await Promise.all([
     supabase
       .from("standings_overrides")
-      .select("edition_team_id, points_adjustment")
-      .eq("edition_id", editionId),
+      .select("phase_id, edition_team_id, points_adjustment")
+      .in("phase_id", phaseIds),
     loadEditionTeamMaps(supabase, editionId),
   ]);
 
-  if (error) return map;
+  if (error) throw new Error(error.message);
 
+  const adjByPhaseTeam = new Map<string, number>();
   for (const row of (data ?? []) as StandingsOverrideRow[]) {
-    const teamId = teamIdByEditionTeamId.get(row.edition_team_id);
+    const key = `${row.phase_id}:${row.edition_team_id}`;
+    adjByPhaseTeam.set(key, row.points_adjustment ?? 0);
+  }
+
+  for (const [key, adj] of adjByPhaseTeam) {
+    if (adj === 0) continue;
+    const editionTeamId = key.split(":")[1];
+    const teamId = teamIdByEditionTeamId.get(editionTeamId);
     if (!teamId) continue;
-    const adj = row.points_adjustment ?? 0;
-    if (adj !== 0) map.set(teamId, adj);
+    map.set(teamId, (map.get(teamId) ?? 0) + adj);
   }
   return map;
+}
+
+/** Grava ou atualiza override sem depender de UNIQUE no banco (insert/update por id). */
+async function saveStandingsOverride(
+  supabase: SupabaseClient,
+  phaseId: string,
+  editionTeamId: string,
+  pointsAdjustment: number,
+): Promise<{ error?: string }> {
+  const { data: rows, error: loadError } = await supabase
+    .from("standings_overrides")
+    .select("id")
+    .eq("phase_id", phaseId)
+    .eq("edition_team_id", editionTeamId);
+
+  if (loadError) return { error: loadError.message };
+
+  const existing = rows ?? [];
+
+  if (existing.length === 0) {
+    const { error } = await supabase.from("standings_overrides").insert({
+      phase_id: phaseId,
+      edition_team_id: editionTeamId,
+      points_adjustment: pointsAdjustment,
+    });
+    return error ? { error: error.message } : {};
+  }
+
+  const [keep, ...dupes] = existing;
+  const { error: updateError } = await supabase
+    .from("standings_overrides")
+    .update({ points_adjustment: pointsAdjustment })
+    .eq("id", keep.id);
+
+  if (updateError) return { error: updateError.message };
+
+  if (dupes.length > 0) {
+    const { error: deleteError } = await supabase
+      .from("standings_overrides")
+      .delete()
+      .in("id", dupes.map((d) => d.id));
+    if (deleteError) return { error: deleteError.message };
+  }
+
+  return {};
 }
 
 async function captureLegacyPointAdjustments(
@@ -86,22 +186,20 @@ async function captureLegacyPointAdjustments(
   editionId: string,
   pointsBeforeRecalc: Map<string, number>,
 ): Promise<void> {
-  const { count, error: countError } = await supabase
-    .from("standings_overrides")
-    .select("id", { count: "exact", head: true })
-    .eq("edition_id", editionId);
-
-  if (countError || (count ?? 0) > 0) return;
+  const overrideCount = await countStandingsOverridesForEdition(supabase, editionId);
+  if (overrideCount > 0) return;
 
   const { data: afterRows, error: afterError } = await supabase
     .from("team_edition_stats")
     .select("team_id, points")
     .eq("edition_id", editionId);
 
-  if (afterError) return;
+  if (afterError) throw new Error(afterError.message);
+
+  const defaultPhaseId = await getDefaultPhaseIdForEdition(supabase, editionId);
+  if (!defaultPhaseId) return;
 
   const { editionTeamIdByTeamId } = await loadEditionTeamMaps(supabase, editionId);
-  const upserts: { edition_id: string; edition_team_id: string; points_adjustment: number }[] = [];
 
   for (const row of afterRows ?? []) {
     const editionTeamId = editionTeamIdByTeamId.get(row.team_id);
@@ -110,19 +208,15 @@ async function captureLegacyPointAdjustments(
     const after = row.points ?? 0;
     const delta = before - after;
     if (delta !== 0) {
-      upserts.push({
-        edition_id: editionId,
-        edition_team_id: editionTeamId,
-        points_adjustment: delta,
-      });
+      const saveResult = await saveStandingsOverride(
+        supabase,
+        defaultPhaseId,
+        editionTeamId,
+        delta,
+      );
+      if (saveResult.error) throw new Error(saveResult.error);
     }
   }
-
-  if (upserts.length === 0) return;
-
-  await supabase
-    .from("standings_overrides")
-    .upsert(upserts, { onConflict: "edition_id,edition_team_id" });
 }
 
 async function applyStandingsOverrides(
@@ -148,11 +242,16 @@ async function applyStandingsOverrides(
 
   if (updates.length === 0) return null;
 
-  const { error } = await supabase
-    .from("team_edition_stats")
-    .upsert(updates, { onConflict: "id" });
+  for (const update of updates) {
+    const { error } = await supabase
+      .from("team_edition_stats")
+      .update({ points: update.points })
+      .eq("id", update.id);
 
-  return error?.message ?? null;
+    if (error) return error.message;
+  }
+
+  return null;
 }
 
 /** Reaplica ajustes manuais de pontos após recálculo de `team_edition_stats`. */
@@ -160,10 +259,26 @@ export async function reapplyStandingsOverridesForEdition(
   supabase: SupabaseClient,
   editionId: string,
 ): Promise<{ error?: string }> {
-  const overrides = await loadStandingsOverrides(supabase, editionId);
-  const applyError = await applyStandingsOverrides(supabase, editionId, overrides);
-  if (applyError) return { error: applyError };
-  return {};
+  try {
+    const overrides = await loadStandingsOverrides(supabase, editionId);
+    const applyError = await applyStandingsOverrides(supabase, editionId, overrides);
+    if (applyError) return { error: applyError };
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao reaplicar ajustes de classificação." };
+  }
+}
+
+/** Recalcula só a classificação (times) e reaplica overrides — sem artilharia. */
+export async function syncTeamEditionStandings(
+  supabase: SupabaseClient,
+  editionId: string,
+): Promise<{ error?: string }> {
+  const { error: teamError } = await supabase.rpc("recalculate_team_edition_stats", {
+    p_edition_id: editionId,
+  });
+  if (teamError) return { error: teamError.message };
+  return reapplyStandingsOverridesForEdition(supabase, editionId);
 }
 
 /** Recalcula artilharia + classificação da edição e reaplica ajustes manuais de pontos. */
@@ -172,49 +287,51 @@ export async function syncEditionStats(
   editionId: string,
   options?: EditionStatsSyncOptions,
 ): Promise<{ error?: string }> {
-  let legacyBefore: Map<string, number> | null = null;
+  try {
+    let legacyBefore: Map<string, number> | null = null;
 
-  const { count, error: countError } = await supabase
-    .from("standings_overrides")
-    .select("id", { count: "exact", head: true })
-    .eq("edition_id", editionId);
+    const overrideCount = await countStandingsOverridesForEdition(supabase, editionId);
+    if (overrideCount === 0) {
+      const { data: beforeRows, error: beforeError } = await supabase
+        .from("team_edition_stats")
+        .select("team_id, points")
+        .eq("edition_id", editionId);
 
-  if (!countError && (count ?? 0) === 0) {
-    const { data: beforeRows } = await supabase
-      .from("team_edition_stats")
-      .select("team_id, points")
-      .eq("edition_id", editionId);
-    legacyBefore = new Map(
-      (beforeRows ?? []).map((r) => [r.team_id, r.points ?? 0]),
-    );
+      if (beforeError) throw new Error(beforeError.message);
+      legacyBefore = new Map(
+        (beforeRows ?? []).map((r) => [r.team_id, r.points ?? 0]),
+      );
+    }
+
+    const [athleteResult, teamResult] = await Promise.all([
+      supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: editionId }),
+      supabase.rpc("recalculate_team_edition_stats", { p_edition_id: editionId }),
+    ]);
+
+    if (athleteResult.error) return { error: athleteResult.error.message };
+    if (teamResult.error) return { error: teamResult.error.message };
+
+    if (legacyBefore) {
+      await captureLegacyPointAdjustments(supabase, editionId, legacyBefore);
+    }
+
+    const overrides = await loadStandingsOverrides(supabase, editionId);
+    const applyError = await applyStandingsOverrides(supabase, editionId, overrides);
+    if (applyError) return { error: applyError };
+
+    if (options?.includeCareerStats && options.teamIds?.length) {
+      const uniqueTeamIds = [...new Set(options.teamIds.filter(Boolean))];
+      await Promise.all(
+        uniqueTeamIds.map((teamId) =>
+          supabase.rpc("recalculate_team_career_stats", { p_team_id: teamId }),
+        ),
+      );
+    }
+
+    return {};
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Erro ao sincronizar estatísticas da edição." };
   }
-
-  const [athleteResult, teamResult] = await Promise.all([
-    supabase.rpc("recalculate_athlete_edition_stats", { p_edition_id: editionId }),
-    supabase.rpc("recalculate_team_edition_stats", { p_edition_id: editionId }),
-  ]);
-
-  if (athleteResult.error) return { error: athleteResult.error.message };
-  if (teamResult.error) return { error: teamResult.error.message };
-
-  if (legacyBefore) {
-    await captureLegacyPointAdjustments(supabase, editionId, legacyBefore);
-  }
-
-  const overrides = await loadStandingsOverrides(supabase, editionId);
-  const applyError = await applyStandingsOverrides(supabase, editionId, overrides);
-  if (applyError) return { error: applyError };
-
-  if (options?.includeCareerStats && options.teamIds?.length) {
-    const uniqueTeamIds = [...new Set(options.teamIds.filter(Boolean))];
-    await Promise.all(
-      uniqueTeamIds.map((teamId) =>
-        supabase.rpc("recalculate_team_career_stats", { p_team_id: teamId }),
-      ),
-    );
-  }
-
-  return {};
 }
 
 export type MatchStatsSyncTrigger = {
@@ -248,10 +365,10 @@ export async function syncEditionStatsForMatch(
   return syncEditionStats(supabase, editionId, options);
 }
 
-/** Acumula ajuste manual de pontos (+/-) na tabela de overrides da edição. */
+/** Acumula ajuste manual de pontos (+/-) na tabela de overrides da fase. */
 export async function addStandingsPointAdjustments(
   supabase: SupabaseClient,
-  editionId: string,
+  phaseId: string,
   adjustments: { editionTeamId: string; delta: number }[],
 ): Promise<{ error?: string }> {
   const meaningful = adjustments.filter((a) => a.delta !== 0);
@@ -260,7 +377,7 @@ export async function addStandingsPointAdjustments(
   const { data: existing, error: loadError } = await supabase
     .from("standings_overrides")
     .select("edition_team_id, points_adjustment")
-    .eq("edition_id", editionId)
+    .eq("phase_id", phaseId)
     .in("edition_team_id", meaningful.map((a) => a.editionTeamId));
 
   if (loadError) return { error: loadError.message };
@@ -269,16 +386,16 @@ export async function addStandingsPointAdjustments(
     (existing ?? []).map((r) => [r.edition_team_id, r.points_adjustment ?? 0]),
   );
 
-  const upserts = meaningful.map((a) => ({
-    edition_id: editionId,
-    edition_team_id: a.editionTeamId,
-    points_adjustment: (current.get(a.editionTeamId) ?? 0) + a.delta,
-  }));
+  for (const a of meaningful) {
+    const pointsAdjustment = (current.get(a.editionTeamId) ?? 0) + a.delta;
+    const saveResult = await saveStandingsOverride(
+      supabase,
+      phaseId,
+      a.editionTeamId,
+      pointsAdjustment,
+    );
+    if (saveResult.error) return saveResult;
+  }
 
-  const { error } = await supabase
-    .from("standings_overrides")
-    .upsert(upserts, { onConflict: "edition_id,edition_team_id" });
-
-  if (error) return { error: error.message };
   return {};
 }

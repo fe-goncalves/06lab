@@ -24,14 +24,18 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
 
   if (!referee) notFound();
 
-  const { data: matchRefs } = await supabase
+  const { data: matchRefs, error: matchRefsError } = await supabase
     .from("match_referees")
-    .select("id, match_id, referee_role_id, referee_roles(name)")
+    .select("id, match_id, referee_role_id")
     .eq("referee_id", id);
+
+  if (matchRefsError) {
+    console.error("[arbitro] match_referees:", matchRefsError.message);
+  }
 
   const matchIds = [...new Set((matchRefs ?? []).map((r) => r.match_id))];
 
-  const { data: matchesData } = matchIds.length > 0
+  const { data: matchesData, error: matchesError } = matchIds.length > 0
     ? await supabase
         .from("matches")
         .select(`
@@ -42,7 +46,7 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
             edition_id,
             full_name,
             custom_label,
-            competition_editions (
+            competition_editions!phases_edition_id_fkey (
               id,
               competitions ( id, full_name, short_name, logo_url )
             )
@@ -50,7 +54,11 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
         `)
         .in("id", matchIds)
         .order("match_date", { ascending: false })
-    : { data: [] as any[] };
+    : { data: [] as any[], error: null };
+
+  if (matchesError) {
+    console.error("[arbitro] matches:", matchesError.message);
+  }
 
   const refByMatchId = new Map(
     (matchRefs ?? []).map((r) => [r.match_id, r]),

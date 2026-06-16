@@ -51,7 +51,7 @@ const sections: Section[] = [
     tab: "relatorios",
     items: [
       { href: "/relatorios",    icon: BarChart2, label: "Relatórios",   description: "Exportar dados em CSV e PDF" },
-      { href: "/rankings",      icon: Trophy,    label: "Ranking",      description: "Classificações históricas",         placeholder: true },
+      { href: "/rankings",      icon: Trophy,    label: "Ranking",      description: "Classificações históricas" },
       { href: "/hall-da-fama",  icon: Star,      label: "Hall da Fama", description: "Maiores destaques da organização" },
       { href: "/relatorios",    icon: FileText,  label: "Súmulas",      description: "Gerar e exportar súmulas oficiais" },
     ],

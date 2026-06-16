@@ -21,6 +21,7 @@ type CategoryItem = {
   label: string;
   dataKey: keyof HallDaFamaData;
   suffix: string;
+  gkOnly?: boolean;
   disabled?: boolean;
 };
 
@@ -39,14 +40,14 @@ const CATEGORIES: Record<"atletas" | "equipes" | "comissao", { label: string; it
       { key: "awards", label: "Premiações", dataKey: "awards", suffix: "prêmios" },
       { key: "goal_assist", label: "Participações em Gol", dataKey: "goal_assist", suffix: "G+A" },
       { key: "penalty_goals", label: "Gols de Pênalti", dataKey: "penalty_goals", suffix: "gols" },
-      { key: "penalty_conversion", label: "Aproveitamento Pênaltis", dataKey: "penalty_conversion", suffix: "%" },
       { key: "shootout_goals", label: "Gols de Shoot-out", dataKey: "shootout_goals", suffix: "gols" },
+      { key: "penalty_conversion", label: "Aproveitamento Pênaltis", dataKey: "penalty_conversion", suffix: "%" },
       { key: "shootout_conversion", label: "Aproveitamento Shoot-outs", dataKey: "shootout_conversion", suffix: "%" },
       { key: "hat_tricks", label: "Hat-tricks", dataKey: "hat_tricks", suffix: "hat-tricks" },
       { key: "best_match_goals", label: "Mais Gols num Jogo", dataKey: "best_match_goals", suffix: "gols" },
-      { key: "clean_sheets", label: "Clean Sheets", dataKey: "clean_sheets", suffix: "CS" },
-      { key: "penalty_saves", label: "Defesas de Pênalti", dataKey: "penalty_saves", suffix: "defesas", disabled: true },
-      { key: "shootout_saves", label: "Defesas de Shoot-out", dataKey: "penalty_saves", suffix: "defesas", disabled: true },
+      { key: "clean_sheets", label: "Clean Sheets", dataKey: "clean_sheets", suffix: "CS", gkOnly: true },
+      { key: "penalty_saves", label: "Defesas de Pênalti", dataKey: "penalty_saves", suffix: "defesas", gkOnly: true },
+      { key: "shootout_saves", label: "Defesas de Shoot-out", dataKey: "shootout_saves", suffix: "defesas", gkOnly: true },
     ],
   },
   equipes: {

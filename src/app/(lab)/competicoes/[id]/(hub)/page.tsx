@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
-import CompeticaoHub from "./competicao-hub";
+import CompeticaoHub from "../competicao-hub";
 
 export default async function CompeticaoPage({
   params,
@@ -27,7 +27,7 @@ export default async function CompeticaoPage({
   ] = await Promise.all([
     supabase.from("competitions").select("*").eq("id", id).maybeSingle(),
     supabase.from("competition_editions")
-      .select("id, season_id, status, custom_name, start_date, end_date, created_at, display_order, is_hidden, seasons(name, years(value))")
+      .select("id, season_id, status, is_current, custom_name, start_date, end_date, created_at, display_order, is_hidden, seasons(name, years(value))")
       .eq("competition_id", id)
       .order("display_order", { ascending: true }),
     supabase.from("seasons")
@@ -64,13 +64,13 @@ export default async function CompeticaoPage({
     created_at: e.created_at ?? "",
     display_order: e.display_order ?? 0,
     is_hidden: e.is_hidden ?? false,
+    is_current: e.is_current ?? false,
   }));
 
-  const visibleEditions = editionsList.filter((e) => !e.is_hidden);
-
   const defaultEdition =
-    visibleEditions.find((e) => e.status === "ongoing") ??
-    [...visibleEditions].sort(
+    editionsList.find((e) => e.is_current === true) ??
+    editionsList.find((e) => e.status === "ongoing") ??
+    [...editionsList].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )[0];
 

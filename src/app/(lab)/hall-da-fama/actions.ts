@@ -1,4 +1,4 @@
-﻿"use server";
+"use server";
 
 import { createClient } from "@/lib/supabase-server";
 import { buildHallCtx, queryCategoria } from "./categoria";
@@ -60,6 +60,7 @@ export interface HallDaFamaData {
   totw: AthleteEntry[];
   avg_rating: AthleteEntry[];
   penalty_saves: AthleteEntry[];
+  shootout_saves: AthleteEntry[];
   // â”€â”€ Atletas â€“ feitos especiais â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   hat_tricks: AthleteEntry[];
   pokers: AthleteEntry[];
@@ -103,7 +104,7 @@ function dadosVazios(): HallDaFamaData {
     artilharia: [], assistencias: [], partidas: [], cartoes_amarelos: [],
     red_cards: [], motm: [], tots: [], titles: [], awards: [], goal_assist: [],
     penalty_goals: [], shootout_goals: [], best_match_goals: [], clean_sheets: [],
-    totw: [], avg_rating: [], penalty_saves: [],
+    totw: [], avg_rating: [], penalty_saves: [], shootout_saves: [],
     hat_tricks: [], pokers: [], manitas: [], participacoes_diretas: [],
     mvp: [], top_scorer: [], top_assists: [], best_goalkeeper: [], motw: [], penalty_conversion: [], shootout_conversion: [], mais_finais: [],
     titulos: [], vitorias: [], team_matches: [], team_points: [], aproveitamento: [], gols_marcados: [],

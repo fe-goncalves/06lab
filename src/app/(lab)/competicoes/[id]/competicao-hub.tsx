@@ -21,7 +21,7 @@ type Edition = {
   id: string; season_id: string; status: string;
   season_name: string; year_value: number; custom_name: string | null;
   start_date: string | null; end_date: string | null; created_at: string;
-  display_order: number; is_hidden: boolean;
+  display_order: number; is_hidden: boolean; is_current: boolean;
 };
 type Season = { id: string; name: string; year_value: number };
 type Team = { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; is_virtual?: boolean };
@@ -374,6 +374,127 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     return (data ?? []).map((p: any) => p.id);
   }
 
+  const loadPhaseStandings = useCallback(async (phaseId: string) => {
+    if (!phaseId) {
+      setStandings([]);
+      return;
+    }
+    const supabase = createClient();
+    const [
+      { data: phaseMatches },
+      { data: overrides },
+      { data: phaseTeamsRows },
+    ] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("id, team_a_id, team_b_id, score_a, score_b, status")
+        .eq("phase_id", phaseId)
+        .eq("status", "finished"),
+      supabase
+        .from("standings_overrides")
+        .select("edition_team_id, points_adjustment")
+        .eq("phase_id", phaseId),
+      supabase
+        .from("phase_teams")
+        .select("edition_team_id")
+        .eq("phase_id", phaseId),
+    ]);
+
+    const statsMap: Record<string, {
+      team_id: string;
+      matches_played: number;
+      wins: number;
+      draws: number;
+      losses: number;
+      goals_scored: number;
+      goals_conceded: number;
+      points: number;
+    }> = {};
+
+    for (const pt of phaseTeamsRows ?? []) {
+      const et = editionTeams.find((e) => e.id === pt.edition_team_id);
+      const teamId = et?.team_id;
+      if (!teamId || statsMap[teamId]) continue;
+      statsMap[teamId] = {
+        team_id: teamId,
+        matches_played: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goals_scored: 0,
+        goals_conceded: 0,
+        points: 0,
+      };
+    }
+
+    for (const match of phaseMatches ?? []) {
+      if (!match.team_a_id || !match.team_b_id) continue;
+      for (const teamId of [match.team_a_id, match.team_b_id]) {
+        if (!statsMap[teamId]) {
+          statsMap[teamId] = {
+            team_id: teamId,
+            matches_played: 0,
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goals_scored: 0,
+            goals_conceded: 0,
+            points: 0,
+          };
+        }
+        const s = statsMap[teamId];
+        const isA = match.team_a_id === teamId;
+        const scored = isA ? (match.score_a ?? 0) : (match.score_b ?? 0);
+        const conceded = isA ? (match.score_b ?? 0) : (match.score_a ?? 0);
+        s.matches_played++;
+        s.goals_scored += scored;
+        s.goals_conceded += conceded;
+        if (scored > conceded) {
+          s.wins++;
+          s.points += 3;
+        } else if (scored === conceded) {
+          s.draws++;
+          s.points += 1;
+        } else {
+          s.losses++;
+        }
+      }
+    }
+
+    for (const ov of overrides ?? []) {
+      const et = editionTeams.find((e) => e.id === ov.edition_team_id);
+      const teamId = et?.team_id;
+      if (!teamId) continue;
+      if (!statsMap[teamId]) {
+        statsMap[teamId] = {
+          team_id: teamId,
+          matches_played: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          goals_scored: 0,
+          goals_conceded: 0,
+          points: 0,
+        };
+      }
+      statsMap[teamId].points += ov.points_adjustment ?? 0;
+    }
+
+    const phaseStats = Object.values(statsMap)
+      .map((row) => ({
+        ...row,
+        teams: editionTeams.find((et) => et.team_id === row.team_id)?.teams ?? null,
+      }))
+      .sort(
+        (a, b) =>
+          (b.points ?? 0) - (a.points ?? 0) ||
+          (b.goals_scored ?? 0) - (a.goals_scored ?? 0) ||
+          (a.goals_conceded ?? 0) - (b.goals_conceded ?? 0),
+      );
+
+    setStandings(phaseStats);
+  }, [editionTeams]);
+
   const loadEditionData = useCallback(async (editionId: string) => {
     if (!editionId) return;
     const supabase = createClient();
@@ -381,7 +502,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     const phaseIds = await getPhaseIds(supabase, editionId);
     const [
       { data: matchesData }, { data: phasesData }, { data: roundsData }, { data: teamsData },
-      { data: standingsData }, { data: scorersData }, { data: matchupsData }, { data: venuesData },
+      { data: scorersData }, { data: matchupsData }, { data: venuesData },
       { data: groupsData },
     ] = await Promise.all([
       phaseIds.length > 0
@@ -392,7 +513,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         ? supabase.from("rounds").select("id, name, custom_label, phase_id, display_order, is_current, legs, aggregate_score").in("phase_id", phaseIds).order("display_order")
         : Promise.resolve({ data: [] }),
         supabase.from("edition_teams").select("id, team_id, arrival_origin, is_free_agent_pool, teams(id, full_name, short_name, abbreviation, logo_url)").eq("edition_id", editionId).order("display_order"),
-      supabase.from("team_edition_stats").select("*, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("edition_id", editionId).order("points", { ascending: false }).order("goals_scored", { ascending: false }),
       supabase.from("athlete_edition_stats").select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)").eq("edition_id", editionId).not("athlete_id", "is", null).order("goals", { ascending: false }),
       phaseIds.length > 0
         ? supabase.from("matchups").select("id, round_label, display_order, is_completed, phase_id, team_a_id, team_b_id").in("phase_id", phaseIds).order("display_order")
@@ -410,7 +530,6 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setPhases(phasesResult);
     setRounds((roundsData as any) ?? []);
     setEditionTeams((teamsData as any) ?? []);
-    setStandings(standingsData ?? []);
     setScorers(scorersData ?? []);
 
     // Enriquece matchups com dados dos times
@@ -592,6 +711,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       loadYellowAlerts(selectedEditionId);
     }
   }, [selectedEditionId, loadEditionData]);
+
+  useEffect(() => {
+    if (selectedPhaseId) void loadPhaseStandings(selectedPhaseId);
+    else setStandings([]);
+  }, [selectedPhaseId, loadPhaseStandings]);
 
   useEffect(() => {
     if (selectedPhaseId) void loadMarkers(selectedPhaseId);
@@ -1007,6 +1131,10 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   
     // ── Barra de ações ────────────────────────────────────────────────────
     async function handleSavePoints(rows: any[]) {
+      if (!selectedPhaseId) {
+        toast("error", "Selecione uma fase antes de salvar os pontos.");
+        return;
+      }
       setSavingStandings(true);
       const adjustments = Object.entries(editedPoints)
         .filter(([, v]) => v.awarded > 0 || v.deducted > 0)
@@ -1015,7 +1143,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           return { editionTeamId: editionTeam?.id, awarded, deducted };
         })
         .filter((a): a is { editionTeamId: string; awarded: number; deducted: number } => !!a.editionTeamId);
-      const result = await salvarAjustesPontosClassificacao(selectedEditionId, adjustments);
+      const result = await salvarAjustesPontosClassificacao(selectedEditionId, selectedPhaseId, adjustments);
       setSavingStandings(false);
       if ("error" in result) {
         toast("error", result.error);
@@ -1023,7 +1151,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       }
       setStandingsMode("view");
       setEditedPoints({});
-      await loadEditionData(selectedEditionId);
+      await loadPhaseStandings(selectedPhaseId);
       toast("success", "Pontos atualizados.");
     }
   
@@ -1139,6 +1267,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               if ("error" in r) { toast("error", r.error); return; }
               toast("success", "Classificação recalculada.");
               await loadEditionData(selectedEditionId);
+              if (selectedPhaseId) await loadPhaseStandings(selectedPhaseId);
             }}
               style={{ padding: "8px 16px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
               Recalcular

@@ -75,7 +75,7 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
 
   let statsQuery = ctx.supabase
     .from("athlete_edition_stats")
-    .select("athlete_id, team_id, matches_played, goals, assists, yellow_cards, red_cards, motm_count, tots_count, totw_count, penalty_saves, avg_rating")
+    .select("athlete_id, team_id, matches_played, goals, assists, yellow_cards, red_cards, motm_count, tots_count, totw_count, penalty_saves, shootout_saves, avg_rating")
     .in("edition_id", editionIds);
   if (ctx.filtros.teamId) statsQuery = statsQuery.eq("team_id", ctx.filtros.teamId);
 
@@ -91,6 +91,7 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
     tots_count: number | null;
     totw_count: number | null;
     penalty_saves: number | null;
+    shootout_saves: number | null;
     avg_rating: number | null;
   }[];
 
@@ -112,6 +113,7 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
     total_tots: number;
     total_totw: number;
     total_penalty_saves: number;
+    total_shootout_saves: number;
     rating_sum: number;
     rating_count: number;
   }>();
@@ -130,6 +132,7 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
         total_tots: 0,
         total_totw: 0,
         total_penalty_saves: 0,
+        total_shootout_saves: 0,
         rating_sum: 0,
         rating_count: 0,
       });
@@ -144,6 +147,7 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
     e.total_tots += r.tots_count ?? 0;
     e.total_totw += r.totw_count ?? 0;
     e.total_penalty_saves += r.penalty_saves ?? 0;
+    e.total_shootout_saves += r.shootout_saves ?? 0;
     if (r.avg_rating != null) {
       e.rating_sum += r.avg_rating * (r.matches_played ?? 0);
       e.rating_count += r.matches_played ?? 0;
@@ -151,6 +155,27 @@ async function aggAthleteEditionStats(ctx: HallCtx) {
   }
 
   return Array.from(agregado.values());
+}
+
+async function rankingFromGkCareerField(ctx: HallCtx, field: string): Promise<AthleteEntry[]> {
+  let careerQuery = ctx.supabase
+    .from("athlete_career_stats")
+    .select(`
+      athlete_id, ${field},
+      athletes!inner(id, gender, position_id, player_positions(is_goalkeeper))
+    `)
+    .eq("organization_id", ctx.orgId)
+    .gt(field, 0)
+    .order(field, { ascending: false });
+  if (ctx.genderDb) careerQuery = careerQuery.eq("athletes.gender", ctx.genderDb);
+
+  const { data: careerData } = await careerQuery;
+  const rows = (careerData ?? []) as Record<string, unknown>[];
+  const gkRows = rows.filter((r) => isGoalkeeperRow(r as Parameters<typeof isGoalkeeperRow>[0]));
+  if (gkRows.length === 0) return [];
+
+  const athleteMap = await enriquecerAtletas(ctx.supabase, gkRows.map((r) => r.athlete_id as string));
+  return gkRows.map((r) => athleteToEntry(athleteMap, r.athlete_id as string, r[field] as number));
 }
 
 async function rankingFromCareerField(
@@ -621,9 +646,10 @@ const CAREER_ATHLETE_FIELDS: Record<string, string> = {
   penalty_goals: "total_penalties_scored",
   shootout_goals: "total_shootouts_scored",
   penalty_saves: "total_penalty_saves",
+  shootout_saves: "total_shootout_saves",
 };
 
-const EDITION_ATHLETE_FIELDS: Record<string, "total_goals" | "total_assists" | "total_matches" | "total_yellow_cards" | "total_red_cards" | "total_motm" | "total_tots" | "total_penalty_saves"> = {
+const EDITION_ATHLETE_FIELDS: Record<string, "total_goals" | "total_assists" | "total_matches" | "total_yellow_cards" | "total_red_cards" | "total_motm" | "total_tots" | "total_penalty_saves" | "total_shootout_saves"> = {
   goals: "total_goals",
   assists: "total_assists",
   matches: "total_matches",
@@ -632,6 +658,7 @@ const EDITION_ATHLETE_FIELDS: Record<string, "total_goals" | "total_assists" | "
   motm: "total_motm",
   tots: "total_tots",
   penalty_saves: "total_penalty_saves",
+  shootout_saves: "total_shootout_saves",
 };
 
 export async function queryCategoria(
@@ -639,6 +666,26 @@ export async function queryCategoria(
   categoryKey: string,
 ): Promise<AthleteEntry[] | TeamEntry[] | StaffEntry[]> {
   switch (categoryKey) {
+    case "penalty_goals":
+    case "shootout_goals":
+      if (ctx.usarCareerStats) {
+        return rankingFromCareerField(ctx, CAREER_ATHLETE_FIELDS[categoryKey]);
+      }
+      if (EDITION_ATHLETE_FIELDS[categoryKey]) {
+        return rankingFromEditionField(ctx, EDITION_ATHLETE_FIELDS[categoryKey]);
+      }
+      return [];
+
+    case "penalty_saves":
+    case "shootout_saves":
+      if (ctx.usarCareerStats) {
+        return rankingFromGkCareerField(ctx, CAREER_ATHLETE_FIELDS[categoryKey]);
+      }
+      if (EDITION_ATHLETE_FIELDS[categoryKey]) {
+        return rankingFromEditionField(ctx, EDITION_ATHLETE_FIELDS[categoryKey]);
+      }
+      return [];
+
     case "goals":
     case "assists":
     case "matches":
@@ -647,9 +694,6 @@ export async function queryCategoria(
     case "motm":
     case "tots":
     case "titles":
-    case "penalty_goals":
-    case "shootout_goals":
-    case "penalty_saves":
       if (ctx.usarCareerStats) {
         return rankingFromCareerField(ctx, CAREER_ATHLETE_FIELDS[categoryKey]);
       }
@@ -678,9 +722,6 @@ export async function queryCategoria(
 
     case "shootout_conversion":
       return fetchConversion(ctx, "shootout");
-
-    case "shootout_saves":
-      return [];
 
     case "team_titles":
       return fetchTeamTitles(ctx);
