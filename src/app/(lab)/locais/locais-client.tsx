@@ -1,9 +1,11 @@
 "use client";
 
+import { memo, useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { MapPinned, Plus, Search } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { NovoLocalModal } from "./novo-local-modal";
-import { Plus, SquarePen, Eye } from "lucide-react";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Venue = {
   id: string;
@@ -14,183 +16,138 @@ type Venue = {
   display_order: number | null;
 };
 
-function VenueRow({ venue, isFirst }: { venue: Venue; isFirst: boolean }) {
-  const [hovered, setHovered] = useState(false);
+type SortBy = "name" | "display_order";
+
+const SORT_OPTIONS = [
+  { value: "name", label: "Nome (A–Z)" },
+  { value: "display_order", label: "Ordem de exibição" },
+];
+
+function getShortLabel(venue: Venue): string {
+  return (venue.short_name ?? venue.full_name.split(" ")[0] ?? venue.full_name).toUpperCase();
+}
+
+const VenueListItem = memo(function VenueListItem({ venue }: { venue: Venue }) {
+  const logoLabel = (venue.short_name ?? venue.full_name).slice(0, 2).toUpperCase();
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        borderTop: isFirst ? "none" : "1px solid var(--color-border)",
-        opacity: hovered ? 1 : 0.82,
-        transition: "opacity 0.15s ease",
-      }}
-    >
-      <Link
-        href={`/locais/${venue.id}`}
-        className="flex items-center gap-6 py-4 pr-4"
-        style={{ textDecoration: "none" }}
-      >
-        <div style={{
-          width: 38, height: 38, borderRadius: 10, overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.1)",
-          backgroundColor: "rgba(255,255,255,0.04)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          {venue.logo_url ? (
-            <img src={venue.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-          ) : (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
-              {(venue.short_name ?? venue.full_name).slice(0, 2).toUpperCase()}
-            </span>
-          )}
-        </div>
+    <div className={styles.athleteListRow}>
+      <div className={styles.athleteListRowInner}>
+        <Link href={`/locais/${venue.id}`} className={styles.athleteListRowLink}>
+          <div className={styles.hubListTeamLogoMain} title={venue.full_name}>
+            {venue.logo_url ? (
+              <img src={venue.logo_url} alt="" loading="lazy" decoding="async" />
+            ) : (
+              <span className={styles.hubListTeamLogoFallback}>{logoLabel}</span>
+            )}
+          </div>
 
-        <span style={{
-          fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
-          color: "var(--color-text-primary)", minWidth: "4rem", flexShrink: 0,
-        }}>
-          {(venue.short_name ?? venue.full_name).toUpperCase()}
-        </span>
-
-        <span style={{
-          fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 400,
-          color: "var(--color-text-secondary)", flex: 1,
-        }}>
-          {venue.full_name.toUpperCase()}
-        </span>
-
-        <div className="flex items-center gap-4 shrink-0" onClick={e => e.preventDefault()}>
-          {venue.address && (
-            <span
-              style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)" }}
-              className="hidden lg:block"
-            >
-              {venue.address}
-            </span>
-          )}
-          <Link
-            href={`/locais/${venue.id}`}
-            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
-            onClick={e => e.stopPropagation()}
-          >
-            <SquarePen size={16} strokeWidth={1.8} />
-          </Link>
-          <Link
-            href="#"
-            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
-            onClick={e => e.stopPropagation()}
-          >
-            <Eye size={16} strokeWidth={1.8} />
-          </Link>
-        </div>
-      </Link>
+          <div className={styles.athleteListDetails}>
+            <p className={styles.athleteListNickname}>{getShortLabel(venue)}</p>
+            <p className={styles.athleteListFullName}>{venue.full_name}</p>
+          </div>
+        </Link>
+      </div>
     </div>
   );
-}
+});
 
 export default function LocaisClient({ venues: initialVenues }: { venues: Venue[] }) {
   const [venues] = useState(initialVenues);
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [sortBy, setSortBy] = useState<SortBy | "">("");
   const [modalOpen, setModalOpen] = useState(false);
 
-  const filtered = venues.filter(v =>
-    !search ||
-    v.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    (v.short_name ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    const result = venues.filter((venue) => {
+      if (!q) return true;
+      const haystack = `${venue.full_name} ${venue.short_name ?? ""} ${venue.address ?? ""}`.toLowerCase();
+      return haystack.includes(q);
+    });
+
+    const effectiveSort = sortBy || "name";
+
+    result.sort((a, b) => {
+      if (effectiveSort === "display_order") {
+        const orderA = a.display_order ?? Number.POSITIVE_INFINITY;
+        const orderB = b.display_order ?? Number.POSITIVE_INFINITY;
+        if (orderA !== orderB) return orderA - orderB;
+      }
+      return a.full_name.localeCompare(b.full_name);
+    });
+
+    return result;
+  }, [venues, deferredSearch, sortBy]);
+
+  const hasFilters = search.trim() || sortBy;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
+    <div className={`${styles.entityHub} ${styles.page} ${styles.hubListPage} ${styles.personListHub}`}>
+      <div className={`${styles.content} ${styles.hubListContent}`}>
+        <div className={styles.hubListFilters}>
+          <div className={styles.hubListFiltersRow}>
+            <div className={styles.hubListFilterField}>
+              <LabSelect
+                value={sortBy}
+                onChange={(v) => setSortBy(v as SortBy | "")}
+                placeholder="Ordenar por"
+                menuSans
+                triggerSans
+                options={SORT_OPTIONS}
+              />
+            </div>
+          </div>
 
-      <div style={{
-        display: "flex", alignItems: "center", height: 52, flexShrink: 0,
-        borderBottom: "1px solid var(--color-border)",
-        backgroundColor: "var(--color-surface)",
-        paddingLeft: 32, paddingRight: 32,
-        justifyContent: "space-between",
-      }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
-          {filtered.length} {filtered.length === 1 ? "local" : "locais"}
-        </span>
-
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          style={{
-            display: "flex", alignItems: "center", gap: 7,
-            padding: "7px 14px", borderRadius: 9, border: "none",
-            backgroundColor: "#BFF205", color: "#0a0a0a",
-            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-            letterSpacing: "0.08em", textTransform: "uppercase",
-            cursor: "pointer", transition: "opacity 0.12s",
-          }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-        >
-          <Plus size={13} strokeWidth={2.5} />
-          Novo local
-        </button>
-      </div>
-
-      <div style={{ flex: 1, padding: "24px 32px" }}>
-        <div style={{ marginBottom: 24 }}>
-          <input
-            type="text"
-            placeholder="Buscar local…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              fontFamily: "var(--font-mono)", fontSize: 12,
-              padding: "8px 14px", borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.08)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-primary)",
-              outline: "none", width: 280,
-            }}
-            onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-            onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
-          />
+          <div className={styles.hubListSearchRow}>
+            <div className={styles.newsSearchWrap}>
+              <Search size={15} strokeWidth={2} className={styles.newsSearchIcon} aria-hidden />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nome ou endereço…"
+                className={styles.newsSearchInput}
+                aria-label="Buscar locais"
+              />
+            </div>
+            <div className={styles.hubListSearchActions}>
+              <button type="button" onClick={() => setModalOpen(true)} className={styles.saveBtn}>
+                <Plus size={14} strokeWidth={2.5} />
+                Novo local
+              </button>
+            </div>
+          </div>
         </div>
 
-        {filtered.length === 0 ? (
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", padding: "80px 0", textAlign: "center",
-            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
-            backgroundColor: "var(--color-surface)",
-          }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              border: "1px dashed rgba(255,255,255,0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              marginBottom: 14, fontSize: 20,
-            }}>
-              🏟️
+        <div className={`${styles.hubListBare} ${styles.athleteListStack}`}>
+          {filtered.length === 0 ? (
+            <div className={styles.listPanelEmpty}>
+              <MapPinned size={32} strokeWidth={1.5} className={styles.newsEmptyIcon} />
+              <p className={styles.listPanelEmptyTitle}>
+                {hasFilters ? "Nenhum local encontrado" : "Nenhum local cadastrado"}
+              </p>
+              <p className={styles.newsEmptyDesc}>
+                {hasFilters
+                  ? "Ajuste os filtros ou tente outra busca."
+                  : "Adicione locais usando o botão acima."}
+              </p>
+              {!hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(true)}
+                  className={`${styles.saveBtn} ${styles.newsEmptyCta}`}
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  Novo local
+                </button>
+              )}
             </div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-              {search ? "Nenhum local encontrado" : "Nenhum local cadastrado"}
-            </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>
-              {search ? "Tente outro nome." : "Adicione locais usando o botão acima."}
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
-            backgroundColor: "var(--color-surface)", overflow: "hidden",
-          }}>
-            {filtered.map((venue, idx) => (
-              <VenueRow key={venue.id} venue={venue} isFirst={idx === 0} />
-            ))}
-          </div>
-        )}
+          ) : (
+            filtered.map((venue) => <VenueListItem key={venue.id} venue={venue} />)
+          )}
+        </div>
       </div>
 
       <NovoLocalModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />

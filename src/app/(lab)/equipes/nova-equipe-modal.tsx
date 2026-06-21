@@ -8,6 +8,7 @@ import {
 } from "react";
 import { criarEquipe, editarEquipe } from "./actions";
 import { X } from "lucide-react";
+import { inputBaseStyle } from "@/lib/lab-ui-styles";
 import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
 import { parseSupabaseError } from "@/lib/error-messages";
 
@@ -22,6 +23,7 @@ type Team = {
   secondary_color: string | null;
   founded_year: number | null;
   is_hidden?: boolean | null;
+  is_virtual?: boolean | null;
 };
 
 type NovaEquipeModalProps = {
@@ -164,7 +166,12 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
   }
 
   async function handleSubmit(ev: FormEvent<HTMLFormElement>) {
-    ev.preventDefault(); setError(null); setLoading(true);
+    ev.preventDefault(); setError(null);
+    if (isEditing && editingTeam?.is_virtual) {
+      setError("\"Sem Clube\" não pode ser editado.");
+      return;
+    }
+    setLoading(true);
     try {
       const formData = new FormData();
       formData.append("full_name", fullName.trim());
@@ -193,41 +200,34 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
 
   if (!isOpen) return null;
 
-  const border = "1px solid rgba(255,255,255,0.08)";
-  const inputBaseStyle: React.CSSProperties = {
-    width: "100%", padding: "10px 12px",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9,
-    fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)",
-    outline: "none", transition: "border-color 0.15s", colorScheme: "dark" as any,
-  };
+  const border = "1px solid var(--color-input-border)";
 
   const slotLabels = ["Primária", "Secundária", "Terciária"];
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(0,0,0,0.78)" }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "var(--color-modal-scrim)" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
 
       <div
         role="dialog" aria-modal="true" aria-labelledby="nova-equipe-title"
-        style={{ width: "100%", maxWidth: 440, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}
+        style={{ width: "100%", maxWidth: 440, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)", maxHeight: "92vh", display: "flex", flexDirection: "column" }}
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
           <div>
-            <p id="nova-equipe-title" style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>
+            <p id="nova-equipe-title" style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>
               {isEditing ? "Editar equipe" : "Nova equipe"}
             </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-faint)", margin: 0, marginTop: 2 }}>
               {isEditing ? editingTeam.full_name : "Preencha as informações básicas"}
             </p>
           </div>
           <button type="button" onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"; e.currentTarget.style.color = "#BFF205"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>
+            style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-brand-border)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-icon-muted)"; }}>
             <X size={14} />
           </button>
         </div>
@@ -251,16 +251,16 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
               {/* Cores — mostra paleta se novo arquivo foi carregado, ou mostra cores existentes em modo edição */}
               {hexColors.length > 0 ? (
                 <div>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 10 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)", display: "block", marginBottom: 10 }}>
                     Cores detectadas — selecione para cada posição
                   </span>
 
                   {/* Slots de posição */}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 12 }}>
                     {slotLabels.map((label, slotIdx) => (
-                      <div key={slotIdx} style={{ borderRadius: 10, border: `1px solid ${selectedColors[slotIdx] ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.06)"}`, backgroundColor: selectedColors[slotIdx] ? "rgba(191,242,5,0.04)" : "rgba(255,255,255,0.02)", padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: selectedColors[slotIdx] ?? "rgba(255,255,255,0.06)", border: selectedColors[slotIdx] ? "2px solid rgba(255,255,255,0.2)" : "2px dashed rgba(255,255,255,0.1)", transition: "background 0.15s" }} />
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: selectedColors[slotIdx] ? "#BFF205" : "rgba(255,255,255,0.25)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>{label}</span>
+                      <div key={slotIdx} style={{ borderRadius: 10, border: `1px solid ${selectedColors[slotIdx] ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: selectedColors[slotIdx] ? "rgba(191,242,5,0.04)" : "var(--color-hover-bg-subtle)", padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: selectedColors[slotIdx] ?? "var(--color-divider-strong)", border: selectedColors[slotIdx] ? "2px solid rgba(255,255,255,0.2)" : "2px dashed rgba(255,255,255,0.1)", transition: "background 0.15s" }} />
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: selectedColors[slotIdx] ? "var(--color-brand)" : "rgba(255,255,255,0.25)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>{label}</span>
                         {selectedColors[slotIdx] && (
                           <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: selectedColors[slotIdx]! }}>{selectedColors[slotIdx]}</span>
                         )}
@@ -284,14 +284,14 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
                                 if (emptySlot !== -1) toggleColorForSlot(hex, emptySlot);
                               }
                             }}
-                            style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: hex, border: `2px solid ${isSelected ? "rgba(191,242,5,0.7)" : "rgba(255,255,255,0.1)"}`, cursor: "pointer", transition: "border-color 0.12s", position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            style={{ width: 36, height: 36, borderRadius: "50%", backgroundColor: hex, border: `2px solid ${isSelected ? "rgba(191,242,5,0.7)" : "var(--color-input-border-strong)"}`, cursor: "pointer", transition: "border-color 0.12s", position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" }}>
                             {isSelected && (
-                              <span style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: "50%", backgroundColor: "#BFF205", border: "1.5px solid #0e0e0e", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, color: "#0a0a0a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <span style={{ position: "absolute", bottom: -2, right: -2, width: 14, height: 14, borderRadius: "50%", backgroundColor: "var(--color-brand)", border: "1.5px solid #0e0e0e", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, color: "var(--color-on-brand)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                                 {slotIdx + 1}
                               </span>
                             )}
                           </button>
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, color: "rgba(255,255,255,0.25)" }}>{hex}</span>
+                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, color: "var(--color-text-hint)" }}>{hex}</span>
                         </div>
                       );
                     })}
@@ -300,14 +300,14 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
               ) : isEditing && (selectedColors[0] || selectedColors[1]) ? (
                 /* Em modo edição sem novo logo: mostra as cores atuais como preview estático */
                 <div>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 10 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)", display: "block", marginBottom: 10 }}>
                     Cores atuais — substitua o logo para alterar
                   </span>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                     {slotLabels.map((label, slotIdx) => (
-                      <div key={slotIdx} style={{ borderRadius: 10, border: `1px solid ${selectedColors[slotIdx] ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.06)"}`, backgroundColor: selectedColors[slotIdx] ? "rgba(191,242,5,0.04)" : "rgba(255,255,255,0.02)", padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: selectedColors[slotIdx] ?? "rgba(255,255,255,0.06)", border: selectedColors[slotIdx] ? "2px solid rgba(255,255,255,0.2)" : "2px dashed rgba(255,255,255,0.1)" }} />
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: selectedColors[slotIdx] ? "#BFF205" : "rgba(255,255,255,0.25)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>{label}</span>
+                      <div key={slotIdx} style={{ borderRadius: 10, border: `1px solid ${selectedColors[slotIdx] ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: selectedColors[slotIdx] ? "rgba(191,242,5,0.04)" : "var(--color-hover-bg-subtle)", padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", backgroundColor: selectedColors[slotIdx] ?? "var(--color-divider-strong)", border: selectedColors[slotIdx] ? "2px solid rgba(255,255,255,0.2)" : "2px dashed rgba(255,255,255,0.1)" }} />
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: selectedColors[slotIdx] ? "var(--color-brand)" : "rgba(255,255,255,0.25)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>{label}</span>
                         {selectedColors[slotIdx] && (
                           <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: selectedColors[slotIdx]! }}>{selectedColors[slotIdx]}</span>
                         )}
@@ -319,21 +319,21 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
 
               {/* Nome completo */}
               <div>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nome completo *</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)", display: "block", marginBottom: 5 }}>Nome completo *</span>
                 <input id="nova-equipe-nome" type="text" required value={fullName} onChange={e => setFullName(e.target.value)}
                   placeholder="Ex: Dourados United FC"
                   style={inputBaseStyle}
-                  onFocus={e => e.target.style.borderColor = "rgba(191,242,5,0.4)"}
-                  onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
+                  onFocus={e => e.target.style.borderColor = "var(--color-brand-border)"}
+                  onBlur={e => e.target.style.borderColor = "var(--color-input-border)"} />
               </div>
 
               {/* Gênero */}
               <div>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Gênero *</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)", display: "block", marginBottom: 7 }}>Gênero *</span>
                 <div style={{ display: "flex", gap: 8 }}>
                   {[{ v: "male", l: "Masculino" }, { v: "female", l: "Feminino" }].map(opt => (
                     <button key={opt.v} type="button" onClick={() => setGender(opt.v)}
-                      style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: `1px solid ${gender === opt.v ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: gender === opt.v ? "rgba(191,242,5,0.08)" : "transparent", color: gender === opt.v ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                      style={{ flex: 1, padding: "9px 0", borderRadius: 9, border: `1px solid ${gender === opt.v ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: gender === opt.v ? "var(--color-brand-selected-bg)" : "transparent", color: gender === opt.v ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                       {opt.l}
                     </button>
                   ))}
@@ -341,12 +341,12 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
               </div>
 
               {/* Visibilidade pública */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 9, border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 9, border, backgroundColor: "var(--color-hover-bg-subtle)" }}>
                 <div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-primary)", display: "block" }}>
                     Ocultar no site público
                   </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginTop: 2 }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-faint)", display: "block", marginTop: 2 }}>
                     A equipe não aparecerá no site público
                   </span>
                 </div>
@@ -362,7 +362,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
                     border: "none",
                     padding: 2,
                     cursor: "pointer",
-                    backgroundColor: isHidden ? "#BFF205" : "rgba(255,255,255,0.12)",
+                    backgroundColor: isHidden ? "var(--color-brand)" : "var(--color-dashed-border)",
                     transition: "background-color 0.15s",
                     flexShrink: 0,
                   }}
@@ -383,7 +383,7 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
 
               {/* Erro */}
               {error && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", backgroundColor: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", backgroundColor: "var(--color-danger-muted-bg)", border: "1px solid var(--color-danger-muted-border)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
                   {error}
                 </p>
               )}
@@ -392,13 +392,13 @@ export function NovaEquipeModal({ isOpen, onClose, defaultGender, editingTeam }:
         </div>
 
         {/* Footer */}
-        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid var(--color-hover-bg)", flexShrink: 0 }}>
           <button type="button" onClick={onClose}
-            style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+            style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
             Cancelar
           </button>
           <button type="submit" form="nova-equipe-form" disabled={loading || !fullName.trim() || !gender}
-            style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: loading || !fullName.trim() || !gender ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: loading || !fullName.trim() || !gender ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+            style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: loading || !fullName.trim() || !gender ? "var(--color-brand-muted-bg)" : "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: loading || !fullName.trim() || !gender ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
             {loading ? (isEditing ? "Salvando…" : "Criando…") : (isEditing ? "Salvar alterações" : "Criar equipe")}
           </button>
         </div>

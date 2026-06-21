@@ -3,14 +3,25 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
-import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
-import { TeamPicker } from "@/app/(lab)/components/team-picker";
-import { editarAtleta, vincularAtleta, adicionarStint, removerStint, editarStint, toggleStintAtivo, encerrarVinculoAtual } from "../actions";
+import { StintTimelinePanel } from "@/app/(lab)/components/stint-timeline-panel";
+import type { StintRecord } from "@/app/(lab)/components/stint-timeline-utils";
+import { EntityHubShell } from "@/app/(lab)/components/entity-hub-shell";
+import { EntityHubSectionHeader } from "@/app/(lab)/components/entity-hub-section-header";
+import { EntityLogoUpload } from "@/app/(lab)/components/entity-logo-upload";
+import { GenderSwitch, normalizePersonGender } from "@/app/(lab)/components/gender-switch";
+import { BirthDatePicker } from "@/app/(lab)/components/birth-date-picker";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
+import {
+  editarAtleta, editarStintCompleto, excluirAtleta, removerStint, toggleAtletaAtivo,
+  transferirAtleta, verificarPodeExcluirAtleta,
+} from "../actions";
+import { LabSwitch } from "@/app/(lab)/components/lab-switch";
+import { isPersonActive } from "@/app/(lab)/components/person-list-toolbar";
 import { useParams, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 type AthleteRow = {
   id: string;
@@ -23,20 +34,12 @@ type AthleteRow = {
   rg: string | null;
   cpf: string | null;
   birth_date: string | null;
+  is_active: boolean | null;
 };
 
 type Position = { id: string; full_name: string; abbreviation: string };
 type Team = { id: string; full_name: string; short_name: string | null; logo_url?: string | null; primary_color?: string | null; gender?: string | null };
-type StintHistory = {
-  id: string;
-  team_id: string;
-  started_at: string;
-  ended_at: string | null;
-  is_current: boolean;
-  is_active: boolean;
-  movement_type: string | null;
-  teams: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null; primary_color?: string | null } | null;
-};
+type StintHistory = StintRecord;
 type EditionStat = {
   edition_id: string;
   team_id: string | null;
@@ -105,34 +108,21 @@ function initialsFromName(name: string): string {
   if (parts.length >= 2) return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
   return name.slice(0, 2).toUpperCase() || "?";
 }
-function parseDateToISO(br: string): string | null {
-  const clean = br.replace(/\D/g, "");
-  if (clean.length !== 8) return null;
-  return `${clean.slice(4, 8)}-${clean.slice(2, 4)}-${clean.slice(0, 2)}`;
-}
-
-function SectionHeader({ title, color }: { title: string; color?: string | null }) {
-  const c = color ?? "#BFF205";
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: c }}>
-        {title}
-      </span>
-      <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${c}44, transparent)` }} />
-    </div>
-  );
-}
 
 export default function AtletaPage() {
   const params = useParams();
   const router = useRouter();
   const id = typeof params.id === "string" ? params.id : "";
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState<"informacoes" | "historico">("informacoes");
+  const [activeTab, setActiveTab] = useState<"informacao" | "linha_do_tempo" | "inscricoes">("informacao");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isActive, setIsActive] = useState(true);
+  const [togglingActive, setTogglingActive] = useState(false);
+  const [canDelete, setCanDelete] = useState(false);
+  const [deleteReasons, setDeleteReasons] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -143,7 +133,7 @@ export default function AtletaPage() {
 
   const [fullName, setFullName] = useState("");
   const [surname, setSurname] = useState("");
-  const [gender, setGender] = useState("");
+  const [gender, setGender] = useState<"male" | "female">("male");
   const [positionId, setPositionId] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [rg, setRg] = useState("");
@@ -152,23 +142,7 @@ export default function AtletaPage() {
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const [currentTeam, setCurrentTeam] = useState<{ name: string; logo: string | null; color: string | null } | null>(null);
-  const [showTransfer, setShowTransfer] = useState(false);
-  const [transferTeamId, setTransferTeamId] = useState("");
-  const [transferring, setTransferring] = useState(false);
-
-  const [editingStintId, setEditingStintId] = useState<string | null>(null);
-  const [editStintStarted, setEditStintStarted] = useState("");
-  const [editStintEnded, setEditStintEnded] = useState("");
-  const [savingStint, setSavingStint] = useState(false);
-
-  const [showAddStint, setShowAddStint] = useState(false);
-  const [addStintTeamId, setAddStintTeamId] = useState("");
-  const [addStintStarted, setAddStintStarted] = useState("");
-  const [addStintEnded, setAddStintEnded] = useState("");
-  const [addingStint, setAddingStint] = useState(false);
-  const [endingVinculo, setEndingVinculo] = useState(false);
-
+  const [currentTeam, setCurrentTeam] = useState<{ name: string; logo: string | null } | null>(null);
   const [tournamentSearch, setTournamentSearch] = useState("");
 
   // ── Filtros de estatísticas ──────────────────────────────────────────
@@ -200,7 +174,7 @@ export default function AtletaPage() {
       supabase.from("player_positions").select("id, full_name, abbreviation").eq("sport_slug", "football7").order("display_order"),
       supabase.from("teams").select("id, full_name, short_name, logo_url, primary_color, gender, is_virtual").eq("organization_id", profile.organization_id).eq("is_virtual", false).order("full_name"),
       supabase.from("athlete_team_stints").select("id, team_id, teams(id, full_name, logo_url, primary_color)").eq("athlete_id", id).eq("is_current", true).maybeSingle(),
-      supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, is_active, movement_type, teams(id, full_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
+      supabase.from("athlete_team_stints").select("id, team_id, started_at, ended_at, is_current, is_active, hide_free_after, teams(id, full_name, short_name, abbreviation, logo_url, primary_color)").eq("athlete_id", id).order("started_at", { ascending: false }),
       // team_id e years(value) adicionados para suportar os filtros
       supabase.from("athlete_edition_stats").select("edition_id, team_id, goals, assists, yellow_cards, red_cards, matches_played, motm_count, competition_editions(seasons(name, years(value)), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
       supabase.from("edition_awards").select("id, award_type, edition_id, competition_editions(seasons(name), competitions(full_name, short_name))").eq("athlete_id", id).order("edition_id", { ascending: false }),
@@ -211,16 +185,20 @@ export default function AtletaPage() {
     const a = athlete as AthleteRow;
     setFullName(a.full_name ?? "");
     setSurname(a.surname ?? "");
-    setGender(a.gender ?? "");
+    setGender(normalizePersonGender(a.gender));
     setPositionId(a.position_id ?? "");
     setBirthDate(formatDateToBR(a.birth_date));
     setRg(a.rg ?? "");
     setCpf(a.cpf ?? "");
+    setIsActive(isPersonActive(a.is_active));
     setPhotoUrl(a.photo_url);
+    const deleteCheck = await verificarPodeExcluirAtleta(id);
+    setCanDelete(deleteCheck.canDelete);
+    setDeleteReasons(deleteCheck.reasons);
     setPositions((posData ?? []) as Position[]);
     setTeams((teamsData ?? []) as Team[]);
     const cs = currentStintData as any;
-    setCurrentTeam(cs?.teams ? { name: cs.teams.full_name, logo: cs.teams.logo_url ?? null, color: cs.teams.primary_color ?? null } : null);
+    setCurrentTeam(cs?.teams ? { name: cs.teams.full_name, logo: cs.teams.logo_url ?? null } : null);
     setStintHistory((historyData ?? []) as StintHistory[]);
     setEditionStats((statsData ?? []) as EditionStat[]);
     setAwards((awardsData ?? []) as Award[]);
@@ -231,11 +209,12 @@ export default function AtletaPage() {
   useEffect(() => { void load(); }, [load]);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setPendingPhoto(f);
-    setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(f); });
+  function handlePendingPhotoChange(file: File | null) {
+    setPendingPhoto(file);
+    setPreviewUrl((old) => {
+      if (old) URL.revokeObjectURL(old);
+      return file ? URL.createObjectURL(file) : null;
+    });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -259,93 +238,68 @@ export default function AtletaPage() {
     } finally { setSaving(false); }
   }
 
-  async function handleVincular() {
-    if (!transferTeamId) return;
-    setTransferring(true);
-    const result = await vincularAtleta(id, transferTeamId);
-    setTransferring(false);
-    if ("error" in result) { toast("error", result.error); return; }
+  async function handleEditStint(
+    stintId: string,
+    data: {
+      startedAt: string;
+      endedAt: string | null;
+      isCurrent: boolean;
+      isActive: boolean;
+      hideFreeAfter?: boolean;
+    },
+  ) {
+    const result = await editarStintCompleto(stintId, data);
+    if ("error" in result) return { error: result.error };
     toast("success", "Vínculo atualizado.");
-    setShowTransfer(false); setTransferTeamId("");
     await load();
+    return {};
   }
 
-  function openEditStint(stint: StintHistory) {
-    setEditingStintId(stint.id);
-    setEditStintStarted(formatDateToBR(stint.started_at));
-    setEditStintEnded(formatDateToBR(stint.ended_at));
-  }
-
-  async function handleSaveStint(stintId: string) {
-    setSavingStint(true);
-    const started = parseDateToISO(editStintStarted);
-    const ended = editStintEnded ? parseDateToISO(editStintEnded) : null;
-    if (!started) { toast("error", "Data de início inválida."); setSavingStint(false); return; }
-    const result = await editarStint(stintId, started, ended);
-    setSavingStint(false);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Vínculo atualizado.");
-    setEditingStintId(null);
+  async function handleTransfer(startedAt: string, teamId: string | null, leaveFree: boolean) {
+    const result = await transferirAtleta(id, startedAt, teamId, leaveFree);
+    if ("error" in result) return { error: result.error };
+    toast("success", leaveFree ? "Atleta sem clube." : "Transferência registrada.");
     await load();
+    return {};
   }
 
-  async function handleAddStint() {
-    if (!addStintTeamId || !addStintStarted) { toast("error", "Equipe e data de início são obrigatórios."); return; }
-    const started = parseDateToISO(addStintStarted);
-    if (!started) { toast("error", "Data de início inválida."); return; }
-    const ended = addStintEnded ? parseDateToISO(addStintEnded) : null;
-    setAddingStint(true);
-    const result = await adicionarStint(id, addStintTeamId, started, ended);
-    setAddingStint(false);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Vínculo adicionado.");
-    setShowAddStint(false);
-    setAddStintTeamId(""); setAddStintStarted(""); setAddStintEnded("");
-    await load();
-  }
-
-  async function handleEncerrarVinculo() {
-    if (!confirm("Encerrar o vínculo atual? O atleta ficará sem clube.")) return;
-    setEndingVinculo(true);
-    const result = await encerrarVinculoAtual(id);
-    setEndingVinculo(false);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Vínculo encerrado.");
-    setShowAddStint(false);
-    await load();
-  }
-
-  async function handleToggleStintAtivo(stintId: string, currentValue: boolean) {
-    const result = await toggleStintAtivo(stintId, !currentValue);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", !currentValue ? "Passagem exibida." : "Passagem ocultada.");
-    await load();
-  }
-
-  async function handleRemoveStint(stintId: string) {
-    if (!confirm("Remover este vínculo da linha do tempo?")) return;
+  async function handleDeleteStint(stintId: string) {
     const result = await removerStint(stintId);
-    if ("error" in result) { toast("error", result.error); return; }
-    toast("success", "Vínculo removido.");
+    if ("error" in result) return { error: result.error };
+    toast("success", "Vínculo excluído.");
     await load();
+    return {};
+  }
+
+  async function handleToggleActive(next: boolean) {
+    setTogglingActive(true);
+    try {
+      const result = await toggleAtletaAtivo(id, next);
+      if ("error" in result) { toast("error", result.error); return; }
+      setIsActive(next);
+      toast("success", next ? "Atleta reativado." : "Atleta desativado.");
+    } finally {
+      setTogglingActive(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!canDelete) return;
+    if (!window.confirm("Excluir este atleta permanentemente? Esta ação não pode ser desfeita.")) return;
+    setDeleting(true);
+    try {
+      const result = await excluirAtleta(id);
+      if ("error" in result) { toast("error", result.error); return; }
+      toast("success", "Atleta excluído.");
+      router.push("/atletas");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const displayPhoto = previewUrl ?? photoUrl;
-  const positionAbbr = positions.find(p => p.id === positionId)?.abbreviation ?? null;
   const positionFull = positions.find(p => p.id === positionId)?.full_name ?? null;
-  const teamColor = currentTeam?.color ?? null;
-  const accentColor = teamColor ?? "#BFF205";
-  const border = "1px solid rgba(255,255,255,0.08)";
   const availableTeams = teams.filter((t) => t.gender === gender);
-  const hasCurrentStint = stintHistory.some((s) => s.ended_at === null);
-
-  const inputBaseStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9,
-    fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)",
-    outline: "none", transition: "border-color 0.15s", colorScheme: "dark" as any,
-  };
 
   // Agrupa por editionId — preserva todas as logos (uma por entry aprovada)
   const tournamentsMap = new Map<string, {
@@ -441,525 +395,250 @@ export default function AtletaPage() {
     setFilterCompetition("");
   }
 
-  if (loading) return (
-    <div style={{ padding: "48px 32px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
-      Carregando…
-    </div>
-  );
-  if (loadError) return (
-    <div style={{ padding: "48px 32px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)" }}>
-      {loadError}
-    </div>
-  );
+  const titleBase = surname.trim() || fullName.trim() || "Atleta";
+  const headerTitle = titleBase.toUpperCase();
+  const positionAndTeam = [positionFull, currentTeam?.name].filter(Boolean).join(" | ");
+  const headerDetail = surname.trim()
+    ? (fullName.trim() || "—")
+    : (positionAndTeam || "—");
+  const tabs = [
+    { key: "informacao", label: "INFORMAÇÃO" },
+    { key: "linha_do_tempo", label: "LINHA DO TEMPO" },
+    { key: "inscricoes", label: "INSCRIÇÕES" },
+  ];
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column", backgroundColor: "var(--color-background)" }}>
-
-      {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div style={{ borderBottom: "1px solid var(--color-border)", position: "relative", overflow: "hidden" }}>
-        {/* Degradê com a cor do time atual */}
-        <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          background: teamColor
-            ? `linear-gradient(135deg, ${teamColor}22 0%, transparent 55%)`
-            : `linear-gradient(135deg, rgba(191,242,5,0.05) 0%, transparent 55%)`,
-        }} />
-        <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.88, pointerEvents: "none" }} />
-
-        <div style={{ padding: "20px 32px 0", position: "relative", zIndex: 1 }}>
-          <Breadcrumb items={[{ label: "Atletas", href: "/atletas" }, { label: surname || fullName || "Atleta" }]} />
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            {/* Foto circular */}
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div style={{
-                width: 60, height: 60, borderRadius: "50%", overflow: "hidden",
-                border: `2px solid ${teamColor ? teamColor + "66" : "rgba(255,255,255,0.12)"}`,
-                backgroundColor: "rgba(255,255,255,0.06)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {displayPhoto
-                  ? <img src={displayPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800, color: accentColor }}>
-                      {initialsFromName(fullName || "?")}
-                    </span>
-                }
+    <EntityHubShell
+      breadcrumb={[{ label: "Atletas", href: "/atletas" }, { label: headerTitle }]}
+      avatar={
+        <div className={styles.avatarSlot}>
+          {displayPhoto
+            ? <img src={displayPhoto} alt="" className={styles.avatarImg} />
+            : (
+              <div className={styles.avatarPlaceholderFill}>
+                <PersonAvatarPlaceholder fill className={styles.avatarPlaceholderIcon} />
               </div>
-              {/* Botão câmera */}
-              <button type="button" onClick={() => fileInputRef.current?.click()}
-                style={{ position: "absolute", bottom: -2, right: -2, width: 20, height: 20, borderRadius: "50%", backgroundColor: "#BFF205", border: "2px solid var(--color-background)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <Camera size={9} strokeWidth={2.5} color="#0a0a0a" />
-              </button>
-              <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handlePhotoChange} />
+            )
+          }
+        </div>
+      }
+      title={headerTitle}
+      subtitle={headerDetail}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(key) => setActiveTab(key as "informacao" | "linha_do_tempo" | "inscricoes")}
+      showSave={activeTab === "informacao"}
+      saveFormId="form-atleta"
+      saving={saving}
+      loading={loading}
+      loadError={loadError}
+    >
+      {activeTab === "informacao" && (
+        <form id="form-atleta" onSubmit={handleSubmit} className={styles.formWrap}>
+          <EntityHubSectionHeader title="Atleta" subtitle="Dados pessoais e status no laboratório" />
+
+          <EntityLogoUpload
+            value={pendingPhoto}
+            onChange={handlePendingPhotoChange}
+            existingUrl={photoUrl}
+            label="Foto do atleta"
+            hint="PNG, JPG ou WebP · proporção 1:1 recomendada"
+            round
+          />
+
+          <div className={styles.fieldStack}>
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="athlete-full-name">Nome completo *</label>
+              <input
+                id="athlete-full-name"
+                type="text"
+                required
+                value={fullName}
+                onChange={e => setFullName(e.target.value)}
+                className={styles.input}
+              />
             </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Pills */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" as const }}>
-                {positionAbbr && (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", padding: "2px 8px", borderRadius: 20, border: `1px solid ${accentColor}44`, color: accentColor, backgroundColor: `${accentColor}11` }}>
-                    {positionAbbr}
-                  </span>
-                )}
-                {currentTeam && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.04)" }}>
-                    {currentTeam.logo && <img src={currentTeam.logo} alt="" style={{ width: 13, height: 13, objectFit: "contain" }} />}
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>
-                      {currentTeam.name}
-                    </span>
-                  </div>
-                )}
-                {birthDate && (() => {
-                  const iso = parseDateToISO(birthDate);
-                  if (!iso) return null;
-                  const age = Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
-                  return (
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.07)" }}>
-                      {age} anos
-                    </span>
-                  );
-                })()}
-              </div>
-
-              {/* Nome */}
-              <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 900, color: "var(--color-text-primary)", letterSpacing: "0.01em", lineHeight: 1.1, margin: 0 }}>
-                {surname || fullName || "Atleta"}
-              </h1>
-              {surname && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.25)", marginTop: 2 }}>
-                  {fullName}
-                </p>
-              )}
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="athlete-surname">Apelido / nome de jogo</label>
+              <input
+                id="athlete-surname"
+                type="text"
+                value={surname}
+                onChange={e => setSurname(e.target.value.toUpperCase())}
+                className={styles.inputUppercase}
+              />
             </div>
 
-            {/* Botão salvar */}
-            {activeTab === "informacoes" && (
-              <button type="submit" form="form-atleta" disabled={saving}
-                style={{ flexShrink: 0, padding: "9px 22px", borderRadius: 9, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: saving ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}>
-                {saving ? "Salvando…" : "Salvar"}
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Gênero</span>
+              <GenderSwitch value={gender} onChange={setGender} />
+            </div>
+
+            <div className={styles.fieldRow2}>
+              <div className={styles.field}>
+                <span className={styles.fieldLabel}>Posição</span>
+                <div className={styles.glassSelect}>
+                  <LabSelect
+                    value={positionId}
+                    onChange={setPositionId}
+                    placeholder="—"
+                    options={positions.map((p) => ({ value: p.id, label: p.full_name }))}
+                  />
+                </div>
+              </div>
+              <div className={styles.field}>
+                <span className={styles.fieldLabel}>Data de nascimento</span>
+                <BirthDatePicker
+                  id="athlete-birth-date"
+                  value={birthDate}
+                  onChange={setBirthDate}
+                />
+              </div>
+            </div>
+
+            <div className={styles.fieldRow2}>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel} htmlFor="athlete-rg">RG</label>
+                <input
+                  id="athlete-rg"
+                  type="text"
+                  value={rg}
+                  onChange={e => setRg(e.target.value.replace(/[^\d.\-]/g, ""))}
+                  className={styles.input}
+                />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel} htmlFor="athlete-cpf">CPF</label>
+                <input
+                  id="athlete-cpf"
+                  type="text"
+                  value={cpf}
+                  onChange={e => setCpf(e.target.value.replace(/[^\d.\-\/]/g, ""))}
+                  placeholder="000.000.000-00"
+                  className={styles.input}
+                />
+              </div>
+            </div>
+
+            <div className={styles.toggleRow}>
+              <div>
+                <span className={styles.toggleTitle}>Ativo</span>
+                <span className={styles.toggleDesc}>Atletas inativos ficam ocultos na listagem padrão</span>
+              </div>
+              <LabSwitch checked={isActive} onChange={handleToggleActive} disabled={togglingActive} />
+            </div>
+          </div>
+
+          <div className={styles.dangerZone}>
+            <p className={styles.dangerTitle}>Zona de perigo</p>
+            {canDelete ? (
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={deleting}
+                className={styles.dangerBtn}
+              >
+                {deleting ? "Excluindo…" : "Excluir atleta"}
               </button>
+            ) : (
+              <p className={styles.dangerDesc}>
+                Exclusão indisponível{deleteReasons.length > 0 ? `: ${deleteReasons.join(", ")}.` : "."}
+              </p>
             )}
           </div>
+        </form>
+      )}
 
-          {/* Faixa colorida */}
-          {teamColor && (
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, ${teamColor}80 0%, transparent 60%)`, pointerEvents: "none" }} />
-          )}
-
-          {/* Abas */}
-          <div style={{ display: "flex", gap: 0 }}>
-            {[
-              { key: "informacoes", label: "INFORMAÇÕES" },
-              { key: "historico", label: "HISTÓRICO" },
-            ].map(tab => (
-              <button key={tab.key} type="button"
-                onClick={() => setActiveTab(tab.key as any)}
-                style={{ padding: "11px 18px", border: "none", borderBottom: `2px solid ${activeTab === tab.key ? accentColor : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: activeTab === tab.key ? accentColor : "#666", cursor: "pointer", transition: "color 0.12s" }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
+      {activeTab === "linha_do_tempo" && (
+        <div className={styles.contentWide}>
+          <StintTimelinePanel
+            stints={stintHistory}
+            teams={availableTeams.map((t) => ({
+              id: t.id,
+              full_name: t.full_name,
+              short_name: t.short_name,
+              logo_url: t.logo_url ?? null,
+            }))}
+            accentColor="var(--color-brand)"
+            onEditStint={handleEditStint}
+            onTransfer={handleTransfer}
+            onDeleteStint={handleDeleteStint}
+          />
         </div>
-      </div>
+      )}
 
-      {/* ── Conteúdo ────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, padding: "24px 32px" }}>
-
-        {/* ── ABA INFORMAÇÕES ─────────────────────────────────────────── */}
-        {activeTab === "informacoes" && (
-          <form id="form-atleta" onSubmit={handleSubmit}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 860 }}>
-
-              {/* Card Foto */}
-              <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-                <SectionHeader title="Foto" color={accentColor} />
-
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ width: 110, height: 110, borderRadius: "50%", overflow: "hidden", border: `2px dashed ${teamColor ? teamColor + "55" : "rgba(255,255,255,0.12)"}`, backgroundColor: "rgba(255,255,255,0.03)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "border-color 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor = accentColor + "88"}
-                    onMouseLeave={e => e.currentTarget.style.borderColor = teamColor ? teamColor + "55" : "rgba(255,255,255,0.12)"}>
-                    {displayPhoto
-                      ? <img src={displayPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : <div style={{ textAlign: "center" as const }}>
-                          <Camera size={22} color="rgba(255,255,255,0.15)" />
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(255,255,255,0.2)", marginTop: 4 }}>Trocar foto</p>
-                        </div>
-                    }
-                  </div>
-                </div>
-
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", textAlign: "center" as const, marginBottom: 24 }}>
-                  JPG, PNG ou WebP
-                </p>
-
-                {/* Vínculo com equipe */}
-                <SectionHeader title="Vínculo atual" color={accentColor} />
-                <div style={{ borderRadius: 10, border, backgroundColor: currentTeam ? `${accentColor}08` : "rgba(255,255,255,0.02)", padding: "12px 14px", marginBottom: 12 }}>
-                  {currentTeam ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      {currentTeam.logo
-                        ? <img src={currentTeam.logo} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
-                        : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
-                      }
-                      <div>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{currentTeam.name}</p>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: accentColor, margin: 0, marginTop: 1 }}>Equipe atual</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.25)", fontStyle: "italic", margin: 0 }}>Sem clube</p>
-                  )}
-                </div>
-
-                {!showTransfer ? (
-                  <button type="button" onClick={() => setShowTransfer(true)}
-                    style={{ width: "100%", padding: "8px", borderRadius: 9, border: `1px solid ${accentColor}33`, backgroundColor: "transparent", color: accentColor, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${accentColor}10`; e.currentTarget.style.borderColor = `${accentColor}66`; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.borderColor = `${accentColor}33`; }}>
-                    {currentTeam ? "Transferir" : "Vincular equipe"}
-                  </button>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    <LabSelect value={transferTeamId} onChange={setTransferTeamId} placeholder="Selecione a equipe…"
-                      options={availableTeams.map((t) => ({ value: t.id, label: t.short_name ?? t.full_name }))} />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button type="button" onClick={handleVincular} disabled={!transferTeamId || transferring}
-                        style={{ flex: 2, padding: "8px", borderRadius: 8, border: "none", backgroundColor: !transferTeamId || transferring ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: !transferTeamId || transferring ? "not-allowed" : "pointer" }}>
-                        {transferring ? "Salvando…" : "Confirmar"}
-                      </button>
-                      <button type="button" onClick={() => { setShowTransfer(false); setTransferTeamId(""); }}
-                        style={{ flex: 1, padding: "8px", borderRadius: 8, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                )}
+      {activeTab === "inscricoes" && (
+        <div className={styles.contentWide}>
+          <div className={styles.listPanel}>
+            <div className={styles.listPanelHeader}>
+              <div className={styles.listPanelTitle}>
+                <span className={styles.listPanelName}>Inscrições</span>
+                <span className={styles.listPanelCount}>{tournaments.length}</span>
               </div>
-
-              {/* Card Dados */}
-              <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-                <SectionHeader title="Dados pessoais" color={accentColor} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nome completo *</span>
-                    <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)}
-                      style={inputBaseStyle}
-                      onFocus={e => e.target.style.borderColor = `${accentColor}55`}
-                      onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                  </div>
-
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Apelido / nome de jogo</span>
-                    <input type="text" value={surname} onChange={e => setSurname(e.target.value)}
-                      style={inputBaseStyle}
-                      onFocus={e => e.target.style.borderColor = `${accentColor}55`}
-                      onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                  </div>
-
-                  {/* Gênero — pill buttons */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Gênero</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {[{ v: "male", l: "Masculino" }, { v: "female", l: "Feminino" }, { v: "", l: "—" }].map(opt => (
-                        <button key={opt.v} type="button" onClick={() => setGender(opt.v)}
-                          style={{ flex: 1, padding: "7px 0", borderRadius: 9, border: `1px solid ${gender === opt.v ? `${accentColor}55` : "rgba(255,255,255,0.08)"}`, backgroundColor: gender === opt.v ? `${accentColor}10` : "transparent", color: gender === opt.v ? accentColor : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
-                          {opt.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Posição */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Posição</span>
-                    <LabSelect value={positionId} onChange={setPositionId} placeholder="—"
-                      options={positions.map((p) => ({ value: p.id, label: p.full_name }))} />
-                  </div>
-
-                  {/* Data de nascimento */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Data de nascimento</span>
-                    <input type="text" placeholder="DD/MM/AAAA" value={birthDate}
-                      onChange={e => setBirthDate(applyDateMask(e.target.value))}
-                      onPaste={e => { e.preventDefault(); setBirthDate(applyDateMask(e.clipboardData.getData("text"))); }}
-                      maxLength={10} style={inputBaseStyle}
-                      onFocus={e => e.target.style.borderColor = `${accentColor}55`}
-                      onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                  </div>
-
-                  {/* RG + CPF */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>RG</span>
-                      <input type="text" value={rg} onChange={e => setRg(e.target.value.replace(/[^\d.\-]/g, ""))}
-                        style={inputBaseStyle}
-                        onFocus={e => e.target.style.borderColor = `${accentColor}55`}
-                        onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>CPF</span>
-                      <input type="text" value={cpf} onChange={e => setCpf(e.target.value.replace(/[^\d.\-\/]/g, ""))}
-                        placeholder="000.000.000-00" style={inputBaseStyle}
-                        onFocus={e => e.target.style.borderColor = `${accentColor}55`}
-                        onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <input
+                type="text"
+                placeholder="Buscar…"
+                value={tournamentSearch}
+                onChange={e => setTournamentSearch(e.target.value)}
+                className={styles.listPanelSearch}
+              />
             </div>
-          </form>
-        )}
-
-        {/* ── ABA HISTÓRICO ────────────────────────────────────────────── */}
-        {activeTab === "historico" && (
-          <div style={{ maxWidth: 720, display: "flex", flexDirection: "column", gap: 24 }}>
-
-            {/* Linha do tempo */}
-            <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-              {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                <SectionHeader title="Linha do tempo" color={accentColor} />
-                <button type="button" onClick={() => setShowAddStint(v => !v)}
-                  style={{ padding: "6px 14px", borderRadius: 8, border: `1px solid ${accentColor}33`, backgroundColor: showAddStint ? `${accentColor}10` : "transparent", color: accentColor, fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s", flexShrink: 0 }}>
-                  + Adicionar
-                </button>
-              </div>
-
-              {/* Formulário adicionar stint */}
-              {showAddStint && (
-                <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                    <div style={{ gridColumn: "1 / -1" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Equipe *</span>
-                      <TeamPicker
-                        teams={availableTeams.map((t) => ({
-                          id: t.id,
-                          full_name: t.full_name,
-                          short_name: t.short_name,
-                          logo_url: t.logo_url ?? null,
-                        }))}
-                        value={addStintTeamId}
-                        onChange={setAddStintTeamId}
-                        placeholder="Selecione…"
-                      />
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Início *</span>
-                      <input type="text" placeholder="DD/MM/AAAA" value={addStintStarted}
-                        onChange={e => setAddStintStarted(applyDateMask(e.target.value))}
-                        maxLength={10} style={inputBaseStyle} />
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Fim</span>
-                      <input type="text" placeholder="DD/MM/AAAA" value={addStintEnded}
-                        onChange={e => setAddStintEnded(applyDateMask(e.target.value))}
-                        maxLength={10} style={inputBaseStyle} />
-                    </div>
-                  </div>
-                  {hasCurrentStint && (
-                    <button
-                      type="button"
-                      onClick={handleEncerrarVinculo}
-                      disabled={endingVinculo}
-                      style={{
-                        width: "100%",
-                        marginBottom: 10,
-                        padding: "9px 14px",
-                        borderRadius: 9,
-                        border: "1px solid rgba(255,68,68,0.25)",
-                        backgroundColor: "rgba(255,68,68,0.06)",
-                        color: "rgba(255,120,120,0.9)",
-                        fontFamily: "var(--font-mono)",
-                        fontSize: 10,
-                        fontWeight: 700,
-                        cursor: endingVinculo ? "not-allowed" : "pointer",
-                        opacity: endingVinculo ? 0.6 : 1,
-                      }}
-                    >
-                      {endingVinculo ? "Encerrando…" : "Ficou sem clube (encerrar vínculo atual)"}
-                    </button>
-                  )}
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={handleAddStint} disabled={addingStint}
-                      style={{ padding: "8px 18px", borderRadius: 8, border: "none", backgroundColor: addingStint ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: addingStint ? "not-allowed" : "pointer" }}>
-                      {addingStint ? "Adicionando…" : "Confirmar"}
-                    </button>
-                    <button type="button" onClick={() => setShowAddStint(false)}
-                      style={{ padding: "8px 14px", borderRadius: 8, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                      Cancelar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {stintHistory.length === 0 ? (
-                <p style={{ padding: "20px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-                  Nenhum vínculo registrado.
-                </p>
-              ) : (
-                stintHistory.map((stint, idx) => (
-                  <div key={stint.id} style={{ borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
-                    {editingStintId === stint.id ? (
-                      <div style={{ padding: "14px 18px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                          {stint.teams?.logo_url
-                            ? <img src={stint.teams.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }} />
-                            : <div style={{ width: 24, height: 24, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
-                          }
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)" }}>
-                            {stint.teams?.full_name ?? "Equipe"}
-                          </span>
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                          <div>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Início</span>
-                            <input type="text" placeholder="DD/MM/AAAA" value={editStintStarted}
-                              onChange={e => setEditStintStarted(applyDateMask(e.target.value))}
-                              maxLength={10} style={inputBaseStyle} />
-                          </div>
-                          <div>
-                            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 4 }}>Fim</span>
-                            <input type="text" placeholder="DD/MM/AAAA" value={editStintEnded}
-                              onChange={e => setEditStintEnded(applyDateMask(e.target.value))}
-                              maxLength={10} style={inputBaseStyle} />
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button type="button" onClick={() => handleSaveStint(stint.id)} disabled={savingStint}
-                            style={{ padding: "7px 16px", borderRadius: 8, border: "none", backgroundColor: savingStint ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, cursor: "pointer" }}>
-                            {savingStint ? "Salvando…" : "Salvar"}
-                          </button>
-                          <button type="button" onClick={() => setEditingStintId(null)}
-                            style={{ padding: "7px 12px", borderRadius: 8, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
-                            Cancelar
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 18px", opacity: stint.is_active !== false ? 0.85 : 0.35, transition: "opacity 0.1s" }}
-                        onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                        onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = stint.is_active !== false ? "0.85" : "0.35"}>
-
-                        {/* Logo do time */}
-                        <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          {stint.teams?.logo_url
-                            ? <img src={stint.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", filter: stint.is_active !== false ? "none" : "grayscale(1)" }} />
-                            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
-                                  {(stint.teams?.abbreviation ?? stint.teams?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                                </span>
-                              </div>
-                          }
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                            {stint.teams?.full_name ?? "Equipe desconhecida"}
-                          </p>
-                          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>
-                            {new Date(stint.started_at + "T00:00:00").toLocaleDateString("pt-BR")}
-                            {" → "}
-                            {stint.ended_at ? new Date(stint.ended_at + "T00:00:00").toLocaleDateString("pt-BR") : "atual"}
-                          </p>
-                        </div>
-
-                        {stint.ended_at === null && (
-                          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, backgroundColor: `${accentColor}18`, color: accentColor, border: `1px solid ${accentColor}33`, flexShrink: 0 }}>
-                            atual
-                          </span>
-                        )}
-
-                        {/* Ações */}
-                        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                          <button type="button" onClick={() => openEditStint(stint)}
-                            style={{ padding: "4px 10px", borderRadius: 7, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
-                            onMouseEnter={e => { e.currentTarget.style.borderColor = `${accentColor}44`; e.currentTarget.style.color = accentColor; }}
-                            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>
-                            Editar
-                          </button>
-                          <button type="button" onClick={() => handleToggleStintAtivo(stint.id, stint.is_active !== false)}
-                            style={{ padding: "4px 10px", borderRadius: 7, border: `1px solid ${stint.is_active !== false ? "rgba(255,255,255,0.1)" : "rgba(191,242,5,0.25)"}`, background: "none", color: stint.is_active !== false ? "rgba(255,255,255,0.3)" : "rgba(191,242,5,0.7)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
-                            onMouseEnter={e => { e.currentTarget.style.opacity = "1"; }}
-                            onMouseLeave={e => { e.currentTarget.style.opacity = "0.85"; }}>
-                            {stint.is_active !== false ? "Ocultar" : "Exibir"}
-                          </button>
-                          {stint.ended_at !== null && (
-                            <button type="button" onClick={() => handleRemoveStint(stint.id)}
-                              style={{ padding: "4px 10px", borderRadius: 7, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "rgba(255,68,68,0.5)", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, cursor: "pointer", transition: "all 0.1s" }}
-                              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.5)"; e.currentTarget.style.color = "#FF4444"; }}
-                              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.2)"; e.currentTarget.style.color = "rgba(255,68,68,0.5)"; }}>
-                              Remover
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
-
-            {/* Inscrições */}
-            <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: accentColor }}>
-                    Inscrições
-                  </span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)" }}>{tournaments.length}</span>
-                </div>
-                <input type="text" placeholder="Buscar…" value={tournamentSearch}
-                  onChange={e => setTournamentSearch(e.target.value)}
-                  style={{ ...inputBaseStyle, width: 150, padding: "6px 10px" }}
-                  onFocus={e => e.target.style.borderColor = `${accentColor}44`}
-                  onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-              </div>
-              {tournaments.length === 0 ? (
-                <p style={{ padding: "16px 18px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.25)" }}>
-                  {tournamentSearch ? "Nenhum resultado." : "Nenhuma inscrição registrada."}
-                </p>
-              ) : (
-                tournaments.map((t, idx) => (
-                  <div key={t.editionId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", opacity: 0.85, transition: "opacity 0.1s" }}
-                    onMouseEnter={e => (e.currentTarget as HTMLElement).style.opacity = "1"}
-                    onMouseLeave={e => (e.currentTarget as HTMLElement).style.opacity = "0.85"}>
-
-                    {/* Logos das equipes pelas quais foi inscrito */}
+            {tournaments.length === 0 ? (
+              <p className={styles.loadingMono} style={{ padding: "16px 18px" }}>
+                {tournamentSearch ? "Nenhum resultado." : "Nenhuma inscrição registrada."}
+              </p>
+            ) : (
+              <div>
+                {tournaments.map((t) => (
+                  <div key={t.editionId} className={styles.listRow}>
                     {t.logos.length > 0 && (
                       <div style={{ display: "flex", alignItems: "center", gap: -4, flexShrink: 0 }}>
                         {t.logos.map((logo, i) => (
-                          <div key={i} title={logo.full_name} style={{ width: 26, height: 26, borderRadius: "50%", border: "2px solid var(--color-surface)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", marginLeft: i > 0 ? -8 : 0, position: "relative", zIndex: t.logos.length - i }}>
+                          <div
+                            key={i}
+                            title={logo.full_name}
+                            style={{
+                              width: 26,
+                              height: 26,
+                              borderRadius: "50%",
+                              border: "2px solid var(--color-surface)",
+                              backgroundColor: "var(--color-input-bg)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              overflow: "hidden",
+                              marginLeft: i > 0 ? -8 : 0,
+                              position: "relative",
+                              zIndex: t.logos.length - i,
+                            }}
+                          >
                             {logo.logo_url
                               ? <img src={logo.logo_url} alt={logo.full_name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-                              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.4)" }}>
+                              : (
+                                <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 800, color: "var(--color-icon-muted)" }}>
                                   {(logo.abbreviation ?? logo.full_name).slice(0, 2).toUpperCase()}
                                 </span>
+                              )
                             }
                           </div>
                         ))}
                       </div>
                     )}
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                        {t.competition}
-                      </p>
-                      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>{t.season}</p>
+                    <div className={styles.listRowMain}>
+                      <p className={styles.listRowTitle}>{t.competition}</p>
+                      <p className={styles.listRowSub}>{t.season}</p>
                     </div>
-
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 20, flexShrink: 0, backgroundColor: t.status === "approved" ? `${accentColor}18` : "rgba(255,255,255,0.06)", color: t.status === "approved" ? accentColor : "#A6A6A6", border: `1px solid ${t.status === "approved" ? accentColor + "33" : "rgba(255,255,255,0.08)"}` }}>
+                    <span className={`${styles.statusBadge} ${t.status === "approved" ? styles.statusBadgeApproved : ""}`.trim()}>
                       {t.status === "approved" ? "Aprovado" : "Pendente"}
                     </span>
                   </div>
-                ))
-              )}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </EntityHubShell>
   );
 }

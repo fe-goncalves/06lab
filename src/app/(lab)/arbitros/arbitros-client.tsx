@@ -1,9 +1,12 @@
 "use client";
 
+import { memo, useDeferredValue, useMemo, useState } from "react";
 import Link from "next/link";
-import { useState } from "react";
+import { Flag, Plus, Search } from "lucide-react";
+import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
 import { NovoArbitroModal } from "./novo-arbitro-modal";
-import { Plus, SquarePen, Eye } from "lucide-react";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Referee = {
   id: string;
@@ -15,229 +18,199 @@ type Referee = {
   referee_role_id: string | null;
 };
 
+type SortBy = "name" | "age_asc" | "age_desc";
+
 const ROLE_TABS = [
   { id: "e9bd3156-58b3-4758-8c6e-5d48e53228e0", label: "ÁRBITRO" },
   { id: "556252c8-8365-466b-9a8e-464364a09902", label: "ASSISTENTE" },
   { id: "4dba8c5a-025f-4487-b4e8-60a16c104b2d", label: "MESÁRIO" },
   { id: "0833c834-6548-4775-affb-48bd095d8cde", label: "STAFF" },
+] as const;
+
+const SORT_OPTIONS = [
+  { value: "name", label: "Nome (A–Z)" },
+  { value: "age_asc", label: "Idade (menor → maior)" },
+  { value: "age_desc", label: "Idade (maior → menor)" },
 ];
 
-function RefereeRow({ referee, isFirst }: { referee: Referee; isFirst: boolean }) {
-  const [hovered, setHovered] = useState(false);
+function getNickname(fullName: string, surname: string | null): string {
+  return (surname ?? fullName.split(" ")[0] ?? fullName).toUpperCase();
+}
 
+function getAgeNumber(birth_date: string | null): number | null {
+  if (!birth_date) return null;
+  const diff = Date.now() - new Date(birth_date).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
+}
+
+const RefereeListItem = memo(function RefereeListItem({ referee }: { referee: Referee }) {
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        borderTop: isFirst ? "none" : "1px solid var(--color-border)",
-        opacity: hovered ? 1 : 0.82,
-        transition: "opacity 0.15s ease",
-      }}
-    >
-      <Link href={`/arbitros/${referee.id}`} className="flex items-center gap-6 py-4 pr-4" style={{ textDecoration: "none" }}>
-        <div
-          style={{
-            width: 38, height: 38, borderRadius: "50%", overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.1)",
-            backgroundColor: "rgba(255,255,255,0.04)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0,
-          }}
-        >
-          {referee.photo_url ? (
-            <img src={referee.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          ) : (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
-              {(referee.surname ?? referee.full_name).slice(0, 2).toUpperCase()}
-            </span>
-          )}
-        </div>
-
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", minWidth: "4rem", flexShrink: 0 }}>
-          {(referee.surname ?? referee.full_name.split(" ")[0]).toUpperCase()}
-        </span>
-
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 400, color: "var(--color-text-secondary)", flex: 1 }}>
-          {referee.full_name.toUpperCase()}
-        </span>
-
-        <div className="flex items-center gap-4 shrink-0" onClick={e => e.preventDefault()}>
-          {referee.profile_public && (
-            <span style={{
-              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
-              letterSpacing: "0.06em", padding: "3px 8px", borderRadius: 20,
-              backgroundColor: "rgba(191,242,5,0.1)", color: "#BFF205",
-              border: "1px solid rgba(191,242,5,0.2)",
-            }}>
-              público
-            </span>
-          )}
-          <Link href={`/arbitros/${referee.id}`}
-            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
-            onClick={e => e.stopPropagation()}>
-            <SquarePen size={16} strokeWidth={1.8} />
-          </Link>
-          <Link href="#"
-            style={{ color: "var(--color-text-secondary)", transition: "color 0.12s" }}
-            onMouseEnter={e => (e.currentTarget.style.color = "#BFF205")}
-            onMouseLeave={e => (e.currentTarget.style.color = "var(--color-text-secondary)")}
-            onClick={e => e.stopPropagation()}>
-            <Eye size={16} strokeWidth={1.8} />
-          </Link>
-        </div>
-      </Link>
+    <div className={styles.athleteListRow}>
+      <div className={styles.athleteListRowInner}>
+        <Link href={`/arbitros/${referee.id}`} className={styles.athleteListRowLink}>
+          <PersonAvatar
+            photoUrl={referee.photo_url}
+            size={36}
+            className={styles.athleteListAvatar}
+          />
+          <div className={styles.athleteListDetails}>
+            <p className={styles.athleteListNickname}>{getNickname(referee.full_name, referee.surname)}</p>
+            <p className={styles.athleteListFullName}>{referee.full_name}</p>
+            {referee.profile_public && (
+              <span className={`${styles.statusBadge} ${styles.statusBadgeApproved}`}>Público</span>
+            )}
+          </div>
+        </Link>
+      </div>
     </div>
   );
-}
+});
 
 export default function ArbitrosClient({ referees: initialReferees }: { referees: Referee[] }) {
   const [referees] = useState(initialReferees);
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [activeTab, setActiveTab] = useState<string>(ROLE_TABS[0].id);
+  const [sortBy, setSortBy] = useState<SortBy | "">("");
   const [modalOpen, setModalOpen] = useState(false);
 
-  const filtered = referees.filter(r => {
-    const name = `${r.full_name} ${r.surname ?? ""}`.toLowerCase();
-    const matchSearch = !search || name.includes(search.toLowerCase());
-    const matchRole = r.referee_role_id === activeTab;
-    return matchSearch && matchRole;
-  });
+  const activeTabLabel = ROLE_TABS.find((tab) => tab.id === activeTab)?.label ?? "ÁRBITRO";
 
-  const countByRole = Object.fromEntries(
-    ROLE_TABS.map(tab => [tab.id, referees.filter(r => r.referee_role_id === tab.id).length])
-  );
+  const { counts, filtered } = useMemo(() => {
+    const q = deferredSearch.trim().toLowerCase();
+    const countsMap: Record<string, number> = {};
+    const result: Referee[] = [];
+
+    for (const tab of ROLE_TABS) {
+      countsMap[tab.id] = 0;
+    }
+
+    for (const referee of referees) {
+      const roleId = referee.referee_role_id ?? "";
+      if (roleId in countsMap) countsMap[roleId] += 1;
+
+      if (referee.referee_role_id !== activeTab) continue;
+
+      if (q) {
+        const haystack = `${referee.full_name} ${referee.surname ?? ""}`.toLowerCase();
+        if (!haystack.includes(q)) continue;
+      }
+
+      result.push(referee);
+    }
+
+    const effectiveSort = sortBy || "name";
+
+    result.sort((a, b) => {
+      if (effectiveSort === "age_asc" || effectiveSort === "age_desc") {
+        const ageA = getAgeNumber(a.birth_date);
+        const ageB = getAgeNumber(b.birth_date);
+        const fallbackA = ageA ?? (effectiveSort === "age_asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+        const fallbackB = ageB ?? (effectiveSort === "age_asc" ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+        return effectiveSort === "age_asc" ? fallbackA - fallbackB : fallbackB - fallbackA;
+      }
+      return a.full_name.localeCompare(b.full_name);
+    });
+
+    return { counts: countsMap, filtered: result };
+  }, [referees, activeTab, deferredSearch, sortBy]);
+
+  const hasFilters = search.trim() || sortBy;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
-
-      {/* Header bar com abas */}
-      <div style={{
-        display: "flex", alignItems: "center", height: 52, flexShrink: 0,
-        borderBottom: "1px solid var(--color-border)",
-        backgroundColor: "var(--color-surface)",
-        paddingLeft: 32, paddingRight: 32, gap: 0,
-      }}>
-        {/* Abas de função */}
-        <div style={{ display: "flex", flex: 1, alignItems: "center", gap: 4 }}>
-          {ROLE_TABS.map(tab => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 7,
-                padding: "6px 12px", borderRadius: 8, border: "none",
-                backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.08)" : "transparent",
-                cursor: "pointer", transition: "all 0.12s",
-              }}
-            >
-              <span style={{
-                fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-                letterSpacing: "0.12em",
-                color: activeTab === tab.id ? "#BFF205" : "rgba(255,255,255,0.3)",
-                transition: "color 0.12s",
-              }}>
+    <div className={`${styles.entityHub} ${styles.page} ${styles.hubListPage} ${styles.personListHub}`}>
+      <div className={`${styles.header} ${styles.orgHubHeaderTabsOnly}`}>
+        <div className={styles.headerGlow} />
+        <div className={styles.headerSurface} />
+        <div className={styles.headerInner}>
+          <div className={styles.tabBar}>
+            {ROLE_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`${styles.tab} ${activeTab === tab.id ? styles.tabActive : ""}`}
+              >
                 {tab.label}
-              </span>
-              <span style={{
-                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700,
-                padding: "2px 6px", borderRadius: 10,
-                backgroundColor: activeTab === tab.id ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                color: activeTab === tab.id ? "#BFF205" : "rgba(255,255,255,0.2)",
-                transition: "all 0.12s",
-              }}>
-                {countByRole[tab.id] ?? 0}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Botão novo árbitro */}
-        <button
-          type="button"
-          onClick={() => setModalOpen(true)}
-          style={{
-            display: "flex", alignItems: "center", gap: 7,
-            padding: "7px 14px", borderRadius: 9, border: "none",
-            backgroundColor: "#BFF205", color: "#0a0a0a",
-            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-            letterSpacing: "0.08em", textTransform: "uppercase",
-            cursor: "pointer", transition: "opacity 0.12s",
-          }}
-          onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
-          onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-        >
-          <Plus size={13} strokeWidth={2.5} />
-          Novo árbitro
-        </button>
-      </div>
-
-      {/* Conteúdo */}
-      <div style={{ flex: 1, padding: "24px 32px" }}>
-
-        {/* Busca + contagem */}
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
-          <input
-            type="text"
-            placeholder="Buscar árbitro…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            style={{
-              fontFamily: "var(--font-mono)", fontSize: 12,
-              padding: "8px 14px", borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.08)",
-              backgroundColor: "var(--color-surface)",
-              color: "var(--color-text-primary)",
-              outline: "none", width: 280,
-            }}
-            onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-            onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
-          />
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>
-            {filtered.length} {filtered.length === 1 ? "árbitro" : "árbitros"}
-          </span>
-        </div>
-
-        {/* Lista */}
-        {filtered.length === 0 ? (
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", padding: "80px 0", textAlign: "center",
-            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
-            backgroundColor: "var(--color-surface)",
-          }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: 12,
-              border: "1px dashed rgba(255,255,255,0.1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              marginBottom: 14, fontSize: 20,
-            }}>
-              🧑‍⚖️
-            </div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-              {search ? "Nenhum árbitro encontrado" : "Nenhum árbitro nesta função"}
-            </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>
-              {search ? "Tente outro nome." : "Adicione árbitros usando o botão acima."}
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)",
-            backgroundColor: "var(--color-surface)",
-            overflow: "hidden",
-          }}>
-            {filtered.map((ref, idx) => (
-              <RefereeRow key={ref.id} referee={ref} isFirst={idx === 0} />
+                <span className={styles.tabBadge}>{counts[tab.id] ?? 0}</span>
+              </button>
             ))}
           </div>
-        )}
+        </div>
       </div>
 
-      <NovoArbitroModal isOpen={modalOpen} onClose={() => setModalOpen(false)} defaultRoleId={activeTab} />
+      <div className={`${styles.content} ${styles.hubListContent}`}>
+        <div className={styles.hubListFilters}>
+          <div className={styles.hubListFiltersRow}>
+            <div className={styles.hubListFilterField}>
+              <LabSelect
+                value={sortBy}
+                onChange={(v) => setSortBy(v as SortBy | "")}
+                placeholder="Ordenar por"
+                menuSans
+                triggerSans
+                options={SORT_OPTIONS}
+              />
+            </div>
+          </div>
+
+          <div className={styles.hubListSearchRow}>
+            <div className={styles.newsSearchWrap}>
+              <Search size={15} strokeWidth={2} className={styles.newsSearchIcon} aria-hidden />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nome ou apelido…"
+                className={styles.newsSearchInput}
+                aria-label="Buscar árbitros"
+              />
+            </div>
+            <div className={styles.hubListSearchActions}>
+              <button type="button" onClick={() => setModalOpen(true)} className={styles.saveBtn}>
+                <Plus size={14} strokeWidth={2.5} />
+                Novo árbitro
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className={`${styles.hubListBare} ${styles.athleteListStack}`}>
+          {filtered.length === 0 ? (
+            <div className={styles.listPanelEmpty}>
+              <Flag size={32} strokeWidth={1.5} className={styles.newsEmptyIcon} />
+              <p className={styles.listPanelEmptyTitle}>
+                {hasFilters
+                  ? "Nenhum árbitro encontrado"
+                  : `Nenhum cadastro em ${activeTabLabel.toLowerCase()}`}
+              </p>
+              <p className={styles.newsEmptyDesc}>
+                {hasFilters
+                  ? "Ajuste os filtros ou tente outra busca."
+                  : "Adicione árbitros usando o botão acima."}
+              </p>
+              {!hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => setModalOpen(true)}
+                  className={`${styles.saveBtn} ${styles.newsEmptyCta}`}
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  Novo árbitro
+                </button>
+              )}
+            </div>
+          ) : (
+            filtered.map((referee) => <RefereeListItem key={referee.id} referee={referee} />)
+          )}
+        </div>
+      </div>
+
+      <NovoArbitroModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        defaultRoleId={activeTab}
+      />
     </div>
   );
 }

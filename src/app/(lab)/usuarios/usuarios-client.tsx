@@ -77,7 +77,7 @@ export default function UsuariosClient({
       <div className="flex justify-end">
         <button type="button" onClick={() => setShowForm(v => !v)}
           className="rounded-lg px-4 py-2.5 text-sm font-medium"
-          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
           {showForm ? "Cancelar" : "Novo usuário"}
         </button>
       </div>
@@ -109,7 +109,7 @@ export default function UsuariosClient({
           {createError && <p className="mt-3 text-sm" style={{ color: "var(--color-danger)" }}>{createError}</p>}
           <button type="button" onClick={handleCreate} disabled={creating}
             className="mt-4 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
             {creating ? "Criando…" : "Criar usuário"}
           </button>
         </div>

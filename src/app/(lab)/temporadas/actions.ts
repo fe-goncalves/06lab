@@ -65,6 +65,40 @@ export async function editarAno(
   return { success: true };
 }
 
+export async function deletarAno(
+  id: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+
+  const { data: seasons } = await supabase
+    .from("seasons")
+    .select("id")
+    .eq("year_id", id)
+    .eq("organization_id", profile.organization_id)
+    .limit(1);
+
+  if (seasons && seasons.length > 0) {
+    return { error: "Este ano possui temporadas vinculadas. Remova-as antes de excluir o ano." };
+  }
+
+  const { error } = await supabase
+    .from("years")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", profile.organization_id);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function criarTemporada(formData: FormData): Promise<{ id: string } | { error: string }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

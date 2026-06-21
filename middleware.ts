@@ -29,16 +29,34 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const pathname = request.nextUrl.pathname;
-  const isPublicRoute = PUBLIC_ROUTES.some((route) =>
-    pathname.startsWith(route)
-  );
+  const isPublicRoute = PUBLIC_ROUTES.some(route => pathname.startsWith(route));
+
+  if (user) {
+    const { data: rep } = await supabase
+      .from("representatives")
+      .select("id, status")
+      .eq("auth_user_id", user.id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    const isRepRoute = pathname.startsWith("/rep");
+    const isAdminRoute = !isRepRoute && !isPublicRoute && pathname !== "/login";
+
+    if (rep && isAdminRoute) {
+      return NextResponse.redirect(new URL("/rep", request.url));
+    }
+
+    if (!rep && isRepRoute) {
+      return NextResponse.redirect(new URL("/", request.url));
+    }
+
+    if (pathname === "/login") {
+      return NextResponse.redirect(new URL(rep ? "/rep" : "/", request.url));
+    }
+  }
 
   if (!user && !isPublicRoute) {
     return NextResponse.redirect(new URL("/login", request.url));
-  }
-
-  if (user && pathname === "/login") {
-    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return supabaseResponse;

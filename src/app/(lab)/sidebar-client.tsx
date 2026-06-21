@@ -14,6 +14,7 @@ import {
   Menu,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
+import { ThemeToggle } from "./components/theme-toggle";
 
 type PinnedCompetition = {
   id: string;
@@ -89,7 +90,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
         className="fixed left-4 top-4 z-40 flex h-9 w-9 items-center justify-center rounded md:hidden"
         style={{
           backgroundColor: "var(--color-surface)",
-          color: "#F2F2F2",
+          color: "var(--color-text-primary)",
           border: "1px solid var(--color-border)",
         }}
         aria-label="Abrir menu"
@@ -102,7 +103,8 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
       ───────────────────────────────────────── */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 md:hidden"
+          className="fixed inset-0 z-40 md:hidden"
+          style={{ backgroundColor: "var(--color-overlay)" }}
           onClick={() => setMobileOpen(false)}
           aria-hidden
         />
@@ -157,7 +159,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
               <span
                 className="font-mono font-bold leading-tight truncate"
                 style={{
-                  color: "#F2F2F2",
+                  color: "var(--color-text-primary)",
                   fontSize: nameFontSize,
                   wordBreak: "break-word",
                   maxWidth: "120px",
@@ -177,7 +179,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
               isCollapsed ? "h-7 w-7 mt-1" : "h-6 w-6",
             ].join(" ")}
             style={{
-              backgroundColor: "rgba(215,242,5,0.1)",
+              backgroundColor: "var(--color-brand-muted-bg)",
               color: "var(--color-brand-alt)",
             }}
             title={isCollapsed ? "Expandir sidebar" : "Recolher sidebar"}
@@ -208,7 +210,7 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
                 >
                   <span
                     className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded"
-                    style={{ backgroundColor: "rgba(215,242,5,0.1)" }}
+                    style={{ backgroundColor: "var(--color-brand-muted-bg)" }}
                   >
                     {comp.logo_url ? (
                       <img
@@ -314,13 +316,15 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
           />
         )}
 
-        {/* ── SEÇÃO 5 — Sair ── */}
+        {/* ── SEÇÃO 5 — Tema + Sair ── */}
         <div
           className={[
             "mt-auto flex flex-col gap-3 pb-7",
             isCollapsed ? "items-center px-0" : "px-5",
           ].join(" ")}
         >
+          <ThemeToggle collapsed={isCollapsed} />
+
           <button
             type="button"
             onClick={handleSignOut}
@@ -328,14 +332,14 @@ export default function LabSidebarClient({ pinnedCompetitions, orgInfo }: Props)
               "flex items-center gap-3 font-mono font-normal transition-opacity hover:opacity-70",
               isCollapsed ? "justify-center" : "",
             ].join(" ")}
-            style={{ color: "#FF4444", fontSize: "15px" }}
+            style={{ color: "var(--color-danger)", fontSize: "15px" }}
             title={isCollapsed ? "Sair" : undefined}
           >
             <span
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded"
               style={{ backgroundColor: "rgba(255,68,68,0.15)" }}
             >
-              <LogOut size={14} strokeWidth={2.5} style={{ color: "#FF4444" }} />
+              <LogOut size={14} strokeWidth={2.5} style={{ color: "var(--color-danger)" }} />
             </span>
             {!isCollapsed && "SAIR"}
           </button>
@@ -367,19 +371,19 @@ function SidebarIconItem({
         "flex items-center gap-3 font-mono font-normal transition-opacity hover:opacity-70",
         collapsed ? "justify-center" : "",
       ].join(" ")}
-      style={{ color: "#F2F2F2", fontSize: "15px" }}
+      style={{ color: "var(--color-text-primary)", fontSize: "15px" }}
       title={collapsed ? label : undefined}
     >
       <span
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded"
         style={{
-          backgroundColor: "rgba(215,242,5,0.1)",
+          backgroundColor: "var(--color-brand-muted-bg)",
           color: "var(--color-brand-alt)",
         }}
       >
         {icon}
       </span>
-      {!collapsed && <span style={{ color: "#F2F2F2" }}>{label}</span>}
+      {!collapsed && <span style={{ color: "var(--color-text-primary)" }}>{label}</span>}
     </Link>
   );
 }
@@ -395,10 +399,10 @@ function SidebarTextItem({
     <Link
       href={href}
       className="flex items-center justify-between font-mono font-normal transition-opacity hover:opacity-70"
-      style={{ color: "#A6A6A6", fontSize: "15px" }}
+      style={{ color: "var(--color-text-secondary)", fontSize: "15px" }}
     >
       {label}
-      <span style={{ color: "#A6A6A6", fontSize: "12px" }}>›</span>
+      <span style={{ color: "var(--color-text-secondary)", fontSize: "12px" }}>›</span>
     </Link>
   );
 }

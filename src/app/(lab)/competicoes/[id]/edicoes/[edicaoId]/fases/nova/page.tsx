@@ -235,7 +235,7 @@ export default function NovaFasePage() {
                   <div className="flex gap-2">
                     <button type="button" onClick={() => handleSaveTemplate(t.id)} disabled={savingTemplate}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                       {savingTemplate ? "Salvando…" : "Salvar"}
                     </button>
                     <button type="button" onClick={() => setEditingTemplateId(null)}
@@ -267,7 +267,7 @@ export default function NovaFasePage() {
                     </button>
                     <button type="button" onClick={() => handleUseTemplate(t)} disabled={loading}
                       className="rounded-lg px-3 py-1.5 text-xs font-medium disabled:opacity-50"
-                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                       Usar
                     </button>
                     <button type="button" onClick={() => startEditTemplate(t)}
@@ -291,7 +291,7 @@ export default function NovaFasePage() {
 
       {selectedTemplateId && (
         <div className="mb-4 flex items-center gap-2 rounded-lg border px-4 py-2"
-          style={{ borderColor: "rgba(191,242,5,0.3)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+          style={{ borderColor: "var(--color-brand-muted-bg)", backgroundColor: "var(--color-brand-hover-bg)" }}>
           <span className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
             ● Fase será vinculada ao template "{templates.find(t => t.id === selectedTemplateId)?.name}"
           </span>
@@ -378,7 +378,7 @@ export default function NovaFasePage() {
 
         <button type="submit" disabled={loading}
           className="rounded-lg px-6 py-2.5 text-sm font-medium disabled:opacity-50"
-          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
           {loading ? "Criando…" : "Criar fase"}
         </button>
       </form>

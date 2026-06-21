@@ -1,13 +1,18 @@
 "use client";
 
-import { useState } from "react";
-import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { Ban } from "lucide-react";
+import { LabPicker } from "@/app/(lab)/components/lab-picker";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Edition = { id: string; name: string; competition_name: string };
 type Suspension = {
   id: string;
   athlete_id: string;
   athlete_name: string;
+  athlete_surname: string | null;
   scope_type: string;
   scope_edition_id: string;
   edition_label: string | null;
@@ -18,151 +23,167 @@ type Suspension = {
   reason: string;
 };
 
-export default function SuspensoesClient({ suspensions, editions }: {
+const STATUS_TABS = [
+  { id: "active" as const, label: "ATIVAS" },
+  { id: "all" as const, label: "TODAS" },
+];
+
+export default function SuspensoesClient({
+  suspensions,
+  editions,
+}: {
   suspensions: Suspension[];
   editions: Edition[];
 }) {
   const [activeFilter, setActiveFilter] = useState<"active" | "all">("active");
-  const [editionFilter, setEditionFilter] = useState<string>("all");
+  const [editionFilter, setEditionFilter] = useState("");
 
-  const filtered = suspensions
-    .filter(s => activeFilter === "all" || s.is_active)
-    .filter(s => editionFilter === "all" || s.scope_edition_id === editionFilter);
+  const filtered = useMemo(
+    () =>
+      suspensions
+        .filter((s) => activeFilter === "all" || s.is_active)
+        .filter((s) => !editionFilter || s.scope_edition_id === editionFilter),
+    [suspensions, activeFilter, editionFilter],
+  );
 
-  const activeCount = suspensions.filter(s => s.is_active).length;
+  const counts = useMemo(
+    () => ({
+      active: suspensions.filter((s) => s.is_active).length,
+      all: suspensions.length,
+    }),
+    [suspensions],
+  );
+
+  const temFiltroAtivo = !!editionFilter;
 
   return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
-      {/* Header bar */}
-      <div className="flex h-14 shrink-0 items-center justify-between border-b px-8"
-        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <div className="flex items-center gap-4">
-          <button type="button" onClick={() => setActiveFilter("active")}
-            className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeFilter === "active" ? "var(--color-brand)" : "#A6A6A6" }}>
-            ATIVAS
-            <span className="font-mono text-xs rounded px-1.5 py-0.5"
-              style={{
-                backgroundColor: activeFilter === "active" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                color: activeFilter === "active" ? "var(--color-brand)" : "#555",
-              }}>
-              {activeCount}
-            </span>
-          </button>
-          <button type="button" onClick={() => setActiveFilter("all")}
-            className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeFilter === "all" ? "var(--color-brand)" : "#A6A6A6" }}>
-            TODAS
-            <span className="font-mono text-xs rounded px-1.5 py-0.5"
-              style={{
-                backgroundColor: activeFilter === "all" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                color: activeFilter === "all" ? "var(--color-brand)" : "#555",
-              }}>
-              {suspensions.length}
-            </span>
-          </button>
+    <div className={`${styles.entityHub} ${styles.page} ${styles.hubListPage} ${styles.personListHub} ${styles.adminHub} ${styles.adminHubTabs}`}>
+      <div className={`${styles.header} ${styles.orgHubHeaderTabsOnly}`}>
+        <div className={styles.headerGlow} />
+        <div className={styles.headerSurface} />
+        <div className={styles.headerInner}>
+          <div className={styles.tabBar}>
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveFilter(tab.id)}
+                className={`${styles.tab} ${activeFilter === tab.id ? styles.tabActive : ""}`}
+              >
+                {tab.label}
+                <span className={styles.tabBadge}>{counts[tab.id]}</span>
+              </button>
+            ))}
+          </div>
         </div>
-
-        {/* Filtro por edição */}
-        {editions.length > 0 && (
-          <LabSelect
-            value={editionFilter}
-            onChange={setEditionFilter}
-            options={[
-              { value: "all", label: "Todas as competições" },
-              ...editions.map((e) => ({ value: e.id, label: `${e.competition_name} — ${e.name}` })),
-            ]}
-          />
-        )}
       </div>
 
-      {/* Lista */}
-      <div className="flex-1 px-8 py-6">
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border py-16 gap-2"
-            style={{ backgroundColor: "var(--color-surface)", borderColor: "var(--color-border)" }}>
-            <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
-              {activeFilter === "active" ? "Nenhuma suspensão ativa." : "Nenhuma suspensão registrada."}
-            </p>
-            <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)", opacity: 0.6 }}>
-              Para criar uma suspensão, acesse o hub da competição.
-            </p>
+      <div className={`${styles.content} ${styles.hubListContent}`}>
+        <main className={styles.hallMain}>
+          <h2 className={styles.hallCategoryTitle}>Suspensões</h2>
+          <p className={styles.sectionSubtitle}>
+            {activeFilter === "active"
+              ? "Suspensões em vigor. Para criar ou editar, acesse o hub da competição."
+              : "Histórico completo de suspensões da organização."}
+          </p>
+
+          <div className={styles.adminFiltersBlock}>
+            <div className={styles.hallFiltersRow}>
+              {editions.length > 0 && (
+                <div className={styles.hallFilterField}>
+                  <LabPicker
+                    value={editionFilter}
+                    onChange={setEditionFilter}
+                    emptyLabel="Competição"
+                    searchPlaceholder="Buscar edição…"
+                    menuSans
+                    triggerSans
+                    options={editions.map((edition) => ({
+                      id: edition.id,
+                      label: `${edition.competition_name} · ${edition.name}`,
+                      searchText: `${edition.competition_name} ${edition.name}`,
+                    }))}
+                  />
+                </div>
+              )}
+              {temFiltroAtivo && (
+                <button type="button" onClick={() => setEditionFilter("")} className={styles.hallClearBtn}>
+                  Limpar filtros
+                </button>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-            {filtered.map((s, idx) => {
+
+          <div className={`${styles.hubListBare} ${styles.athleteListStack} ${styles.adminListSection}`}>
+          {filtered.length === 0 ? (
+            <div className={styles.listPanelEmpty}>
+              <Ban size={32} strokeWidth={1.5} className={styles.newsEmptyIcon} />
+              <p className={styles.listPanelEmptyTitle}>
+                {activeFilter === "active" ? "Nenhuma suspensão ativa" : "Nenhuma suspensão registrada"}
+              </p>
+              <p className={styles.newsEmptyDesc}>
+                {temFiltroAtivo
+                  ? "Tente ajustar os filtros."
+                  : "As suspensões aparecerão aqui quando forem registradas."}
+              </p>
+            </div>
+          ) : (
+            filtered.map((s) => {
               const cumpridos = s.games_total - s.games_remaining;
               const completa = s.games_remaining === 0;
               const pct = s.games_total > 0 ? (cumpridos / s.games_total) * 100 : 0;
+              const displayLabel = (s.athlete_surname ?? s.athlete_name.split(" ")[0] ?? s.athlete_name).toUpperCase();
 
               return (
-                <div key={s.id} className="flex items-center gap-6 px-5 py-4"
-                  style={{
-                    borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-                    opacity: s.is_active ? 1 : 0.45,
-                  }}>
-                  {/* Atleta + metadados */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
-                      {s.athlete_name}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      {s.edition_label ? (
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded"
-                          style={{ backgroundColor: "rgba(255,255,255,0.06)", color: "var(--color-text-secondary)" }}>
-                          {s.edition_label}
-                        </span>
-                      ) : (
-                        <span className="font-mono text-xs px-1.5 py-0.5 rounded"
-                          style={{ backgroundColor: "rgba(255,100,100,0.1)", color: "rgba(255,100,100,0.7)" }}>
-                          Global
-                        </span>
-                      )}
-                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>·</span>
-                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                        {new Date(s.starts_at + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </span>
-                      {s.reason && (
-                        <>
-                          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>·</span>
-                          <span className="font-mono text-xs truncate" style={{ color: "var(--color-text-secondary)" }}>{s.reason}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
+                <div
+                  key={s.id}
+                  className={`${styles.athleteListRow} ${!s.is_active ? styles.athleteListRowInactive : ""}`}
+                >
+                  <div className={styles.athleteListRowInner}>
+                    <Link href={`/atletas/${s.athlete_id}`} className={styles.athleteListRowLink}>
+                      <PersonAvatar size={36} className={styles.athleteListAvatar} />
+                      <div className={styles.athleteListDetails}>
+                        <p className={styles.athleteListNickname}>{displayLabel}</p>
+                        <div className={styles.hubChipRow}>
+                          {s.edition_label ? (
+                            <span className={styles.hubChip}>{s.edition_label}</span>
+                          ) : (
+                            <span className={`${styles.hubChip} ${styles.hubChipWarning}`}>Global</span>
+                          )}
+                          <span className={styles.hubChip}>
+                            {new Date(`${s.starts_at}T00:00:00`).toLocaleDateString("pt-BR")}
+                          </span>
+                          {s.reason && <span className={styles.hubChip}>{s.reason}</span>}
+                        </div>
+                      </div>
+                    </Link>
 
-                  {/* Progresso */}
-                  <div className="shrink-0 w-32">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                        {cumpridos}/{s.games_total} jogos
-                      </span>
-                      {completa && (
-                        <span className="font-mono text-xs" style={{ color: "var(--color-success)" }}>completa</span>
-                      )}
+                    <div className={styles.hubProgressWrap}>
+                      <div className={styles.hubProgressLabel}>
+                        <span>{cumpridos}/{s.games_total} jogos</span>
+                        {completa && <span style={{ color: "var(--color-success)" }}>completa</span>}
+                      </div>
+                      <div className={styles.hubProgressTrack}>
+                        <div
+                          className={`${styles.hubProgressFill} ${completa ? styles.hubProgressFillDone : ""}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: "var(--color-border)" }}>
-                      <div className="h-full rounded-full transition-all"
-                        style={{
-                          width: `${pct}%`,
-                          backgroundColor: completa ? "var(--color-success)" : "var(--color-brand)",
-                        }} />
-                    </div>
-                  </div>
 
-                  {/* Restantes */}
-                  <div className="shrink-0 w-12 text-center">
-                    <p className="font-display text-xl font-bold"
-                      style={{ color: s.games_remaining === 0 ? "var(--color-success)" : "var(--color-danger)" }}>
-                      {s.games_remaining}
-                    </p>
-                    <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>rest.</p>
+                    <div className={styles.hallRankStat}>
+                      <span className={`${styles.hubStatDanger} ${completa ? styles.hubStatSuccess : ""}`}>
+                        {s.games_remaining}
+                      </span>
+                      <span className={styles.hubStatSuffix}>rest.</span>
+                    </div>
                   </div>
                 </div>
               );
-            })}
-          </div>
-        )}
+            })
+          )}
+        </div>
+        </main>
       </div>
     </div>
   );

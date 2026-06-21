@@ -53,13 +53,13 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
   const fieldLabel: React.CSSProperties = {
     fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
     letterSpacing: "0.12em", textTransform: "uppercase",
-    color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5,
+    color: "var(--color-text-faint)", display: "block", marginBottom: 5,
   };
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px", borderRadius: 9,
-    border: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--color-input-border)",
+    backgroundColor: "var(--color-input-bg)",
     color: "var(--color-text-primary)",
     fontFamily: "var(--font-mono)", fontSize: 12,
     outline: "none", boxSizing: "border-box",
@@ -71,17 +71,17 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
       style={{
         position: "fixed", inset: 0, zIndex: 50,
         display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 16, backgroundColor: "rgba(0,0,0,0.78)",
+        padding: 16, backgroundColor: "var(--color-modal-scrim)",
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
         width: "100%", maxWidth: 440,
         borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.1)",
-        backgroundColor: "#0e0e0e",
+        border: "1px solid var(--color-input-border-strong)",
+        backgroundColor: "var(--color-modal-bg)",
         overflow: "hidden",
-        boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+        boxShadow: "var(--color-modal-shadow)",
         maxHeight: "92vh",
         display: "flex", flexDirection: "column",
       }}>
@@ -89,16 +89,16 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
         {/* Header */}
         <div style={{
           padding: "14px 18px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid var(--color-divider-strong)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           backgroundColor: "rgba(191,242,5,0.03)",
           flexShrink: 0,
         }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-brand)", margin: 0 }}>
               Novo local
             </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-faint)", margin: 0, marginTop: 2 }}>
               Preencha os dados do espaço esportivo
             </p>
           </div>
@@ -107,14 +107,14 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
             onClick={onClose}
             style={{
               width: 28, height: 28, borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--color-input-border-strong)",
               backgroundColor: "transparent",
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: "rgba(255,255,255,0.4)",
+              cursor: "pointer", color: "var(--color-icon-muted)",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-divider-strong)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--color-icon-muted)"; }}
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -142,8 +142,8 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
               onChange={e => setFullName(e.target.value)}
               placeholder="Ex: Arena Central"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
@@ -156,8 +156,8 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
               onChange={e => setShortName(e.target.value)}
               placeholder="Ex: ARENA"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
@@ -170,8 +170,8 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
               onChange={e => setAddress(e.target.value)}
               placeholder="Rua, número, bairro"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
@@ -183,13 +183,13 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
               value={displayOrder}
               onChange={e => setDisplayOrder(e.target.value)}
               style={{ ...inputStyle, width: 100 }}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
           {error && (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", margin: 0 }} role="alert">
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", margin: 0 }} role="alert">
               {error}
             </p>
           )}
@@ -199,7 +199,7 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
         <div style={{
           display: "flex", gap: 8,
           padding: "12px 18px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
+          borderTop: "1px solid var(--color-hover-bg)",
           flexShrink: 0,
         }}>
           <button
@@ -207,9 +207,9 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
             onClick={onClose}
             style={{
               flex: 1, padding: 10, borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--color-input-border-strong)",
               backgroundColor: "transparent",
-              color: "rgba(255,255,255,0.4)",
+              color: "var(--color-icon-muted)",
               fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
               letterSpacing: "0.08em", textTransform: "uppercase",
               cursor: "pointer",
@@ -223,8 +223,8 @@ export function NovoLocalModal({ isOpen, onClose }: { isOpen: boolean; onClose: 
             disabled={loading || !fullName.trim()}
             style={{
               flex: 2, padding: 10, borderRadius: 9, border: "none",
-              backgroundColor: loading || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205",
-              color: "#0a0a0a",
+              backgroundColor: loading || !fullName.trim() ? "var(--color-brand-muted-bg)" : "var(--color-brand)",
+              color: "var(--color-on-brand)",
               fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
               letterSpacing: "0.08em", textTransform: "uppercase",
               cursor: loading || !fullName.trim() ? "not-allowed" : "pointer",

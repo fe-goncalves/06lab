@@ -6,9 +6,11 @@ import { adicionarAcao, editarAcao, deletarAcao, editarPartida, salvarFormacoes,
 
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { LAB_HEADER_GRADIENT } from "@/lib/lab-theme";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -80,14 +82,14 @@ const ACTION_LABELS: Record<string, string> = {
 };
 
 const ACTION_COLORS: Record<string, string> = {
-  goal: "#BFF205",
-  yellow_card: "#F2C005",
-  red_card: "#FF4444",
+  goal: "var(--color-brand)",
+  yellow_card: "var(--color-warning)",
+  red_card: "var(--color-danger)",
   red_yellow_card: "#FF8C00",
-  penalty_missed: "#FF4444",
-  shootout_missed: "#FF4444",
-  foul: "#A6A6A6",
-  fifth_foul: "#A6A6A6",
+  penalty_missed: "var(--color-danger)",
+  shootout_missed: "var(--color-danger)",
+  foul: "var(--color-text-secondary)",
+  fifth_foul: "var(--color-text-secondary)",
 };
 
 const ACTION_EMOJI: Record<string, string> = {
@@ -135,9 +137,9 @@ function ActionIcon({ actionType, goalType, size = 20 }: { actionType: string; g
 
   if (actionType === "goal" && goalType === "own_goal") return (
     <svg width={s} height={s} viewBox="0 0 175.29 191.85" fill="none">
-      <path d="M93.06,21.3c-16.94-.86-33.43,4.91-46.2,16.37l11.21,6.73-8.08,30.37-24.56,8.79c-.2,8.48,1.15,16.99,4.36,25.15l-18.42,11.5c-5.14-11.66-7.56-24-7.24-36.55.38-22.67,10.1-44.07,25.97-59.48,35.15-34.13,91.72-31.83,123.96,5.07,14.92,16.88,22.72,39.57,20.99,62.54-6.02-4.58-13.7-6.15-21.12-4.16.57-18.55-6.65-36.01-20.36-49.04l-10.76,9.9-33.29-14.08,3.54-13.11Z" fill="#FF4444"/>
-      <path d="M33.35,189.17L1.77,152.43c-2.81-3.27-2.24-8.18,1.48-10.5l40.83-25.49c4.05-2.53,9.46-1.16,12.39,2.26,2.59,3.24,2.23,7.96-1.36,10.22l-23.61,14.83,52.41,7.97c12.11,1.34,24.19-.21,35.35-4.94,16.5-7.03,29.57-21.02,32.44-38.98.38-2.4,1.48-4.33,3.6-5.57,4-2.33,9.12-1.61,12.27,1.74,1.92,2.05,2.27,4.39,1.79,7.09-2.17,12.28-7.99,23.46-16.64,32.5-14.87,15.54-36.34,23.64-57.73,23.99-5.38.06-10.34-.17-15.65-.98l-50.14-7.63,18.03,21.03c2.67,3.4,1.91,7.95-1.69,10.33-3.79,2.42-8.63,1.95-12.19-1.14Z" fill="#FF4444"/>
-      <polygon points="111.98 130.38 86.46 120.49 86.45 83.51 120.26 71.25 137.29 102.35 111.98 130.38" fill="#FF4444"/>
+      <path d="M93.06,21.3c-16.94-.86-33.43,4.91-46.2,16.37l11.21,6.73-8.08,30.37-24.56,8.79c-.2,8.48,1.15,16.99,4.36,25.15l-18.42,11.5c-5.14-11.66-7.56-24-7.24-36.55.38-22.67,10.1-44.07,25.97-59.48,35.15-34.13,91.72-31.83,123.96,5.07,14.92,16.88,22.72,39.57,20.99,62.54-6.02-4.58-13.7-6.15-21.12-4.16.57-18.55-6.65-36.01-20.36-49.04l-10.76,9.9-33.29-14.08,3.54-13.11Z" fill="var(--color-danger)"/>
+      <path d="M33.35,189.17L1.77,152.43c-2.81-3.27-2.24-8.18,1.48-10.5l40.83-25.49c4.05-2.53,9.46-1.16,12.39,2.26,2.59,3.24,2.23,7.96-1.36,10.22l-23.61,14.83,52.41,7.97c12.11,1.34,24.19-.21,35.35-4.94,16.5-7.03,29.57-21.02,32.44-38.98.38-2.4,1.48-4.33,3.6-5.57,4-2.33,9.12-1.61,12.27,1.74,1.92,2.05,2.27,4.39,1.79,7.09-2.17,12.28-7.99,23.46-16.64,32.5-14.87,15.54-36.34,23.64-57.73,23.99-5.38.06-10.34-.17-15.65-.98l-50.14-7.63,18.03,21.03c2.67,3.4,1.91,7.95-1.69,10.33-3.79,2.42-8.63,1.95-12.19-1.14Z" fill="var(--color-danger)"/>
+      <polygon points="111.98 130.38 86.46 120.49 86.45 83.51 120.26 71.25 137.29 102.35 111.98 130.38" fill="var(--color-danger)"/>
     </svg>
   );
 
@@ -254,9 +256,9 @@ function SumulaButtons({ matchId }: { matchId: string }) {
       ]).map(({ label, icon, onClick }, i) => (
         <button key={i} type="button" onClick={onClick} disabled={generating}
           style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: generating ? "not-allowed" : "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const, opacity: generating ? 0.5 : 1,
-            borderColor: i === 1 ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.1)",
-            backgroundColor: i === 1 ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
-            color: i === 1 ? "#BFF205" : "rgba(255,255,255,0.4)",
+            borderColor: i === 1 ? "var(--color-brand-border)" : "var(--color-input-border-strong)",
+            backgroundColor: i === 1 ? "var(--color-brand-hover-bg)" : "var(--color-divider-faint)",
+            color: i === 1 ? "var(--color-brand)" : "var(--color-icon-muted)",
           }}>
           {icon}{label}
         </button>
@@ -692,7 +694,7 @@ export default function PartidaClient({
         {/* Degradê suave com as cores dos times */}
         <div style={{
           position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
-          background: `linear-gradient(135deg, ${teamA?.primary_color ?? "#141414"}12 0%, transparent 45%, transparent 55%, ${teamB?.primary_color ?? "#141414"}12 100%)`,
+          background: LAB_HEADER_GRADIENT,
         }} />
         <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.75, pointerEvents: "none", zIndex: 0 }} />
 
@@ -712,11 +714,11 @@ export default function PartidaClient({
                 style={{ width: 20, height: 20, objectFit: "contain", borderRadius: 4 }}
               />
             ) : null}
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ffffff" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 600, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
               {competitionName}
             </span>
-            <span style={{ color: "#2a2a2a", fontSize: 10 }}>·</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "#var(--color-text-secondary)" }}>
+            <span style={{ color: "var(--color-text-muted)", fontSize: 10 }}>·</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-text-secondary)" }}>
               {roundName}
             </span>
           </div>
@@ -734,7 +736,7 @@ export default function PartidaClient({
               <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {teamA?.logo_url
                   ? <img src={teamA.logo_url} alt="" style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, objectFit: "contain" }} />
-                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--color-kbd-muted)" }}>
                       {(teamA?.short_name ?? teamA?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                 }
@@ -747,7 +749,7 @@ export default function PartidaClient({
               <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 36 : 56, fontWeight: 700, lineHeight: 1, width: isMobile ? 32 : 44, textAlign: "center", color: "var(--color-brand)" }}>
                   {scoreA}
                 </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 18 : 24, color: "#222", lineHeight: 1 }}>:</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 18 : 24, color: "var(--color-text-muted)", lineHeight: 1 }}>:</span>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 36 : 56, fontWeight: 700, lineHeight: 1, width: isMobile ? 32 : 44, textAlign: "center", color: "var(--color-brand)" }}>
                   {scoreB}
                 </span>
@@ -761,15 +763,15 @@ export default function PartidaClient({
                 )}
                 {status === "ongoing" && (
                   <>
-                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "#2a2a2a", flexShrink: 0 }} />
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, backgroundColor: "rgba(191,242,5,0.12)", color: "var(--color-brand)", border: "1px solid rgba(191,242,5,0.2)" }}>
+                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "var(--color-text-muted)", flexShrink: 0 }} />
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", padding: "3px 8px", borderRadius: 4, backgroundColor: "var(--color-brand-glow)", color: "var(--color-brand)", border: "1px solid var(--color-brand-border-light)" }}>
                       Ao vivo
                     </span>
                   </>
                 )}
                 {match.venues?.full_name && (
                   <>
-                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "#2a2a2a", flexShrink: 0 }} />
+                    <span style={{ width: 2, height: 2, borderRadius: "50%", backgroundColor: "var(--color-text-muted)", flexShrink: 0 }} />
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)" }}>
                       {match.venues.full_name}
                     </span>
@@ -783,7 +785,7 @@ export default function PartidaClient({
             <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {teamB?.logo_url
                   ? <img src={teamB.logo_url} alt="" style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, objectFit: "contain" }} />
-                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#333" }}>
+                  : <div style={{ width: isMobile ? 44 : 72, height: isMobile ? 44 : 72, borderRadius: 12, border: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "var(--color-kbd-muted)" }}>
                       {(teamB?.short_name ?? teamB?.full_name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                 }
@@ -962,14 +964,14 @@ function TimePicker({ value, onChange, onClose }: {
     return (
       <div style={{ position: "relative", height: ITEM_H * 3, width: 72, overflow: "hidden" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to bottom, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
-        <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "rgba(191,242,5,0.07)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
+        <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "var(--color-brand-selected-bg)", border: "1px solid var(--color-brand-border-subtle)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to top, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
         <div style={{ display: "flex", flexDirection: "column", transform: `translateY(${-items.indexOf(selected) * ITEM_H + ITEM_H}px)`, transition: "transform 0.2s cubic-bezier(.4,0,.2,1)" }}>
           {items.map(v => (
             <div key={v} onClick={() => onSelect(v)} style={{
               height: ITEM_H, width: 72, display: "flex", alignItems: "center", justifyContent: "center",
               fontFamily: "var(--font-mono)", fontSize: 32, fontWeight: 700, cursor: "pointer",
-              color: v === selected ? "var(--color-brand)" : Math.abs(items.indexOf(v) - items.indexOf(selected)) === 1 ? "#3a3a3a" : "#1e1e1e",
+              color: v === selected ? "var(--color-brand)" : Math.abs(items.indexOf(v) - items.indexOf(selected)) === 1 ? "var(--color-text-muted)" : "var(--color-text-primary)",
               transition: "color 0.15s", position: "relative", zIndex: 3, userSelect: "none",
             }}>
               {String(v).padStart(2, "0")}
@@ -981,14 +983,14 @@ function TimePicker({ value, onChange, onClose }: {
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-overlay-heavy)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: 300, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" }}>
+      <div style={{ width: 300, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "var(--color-shadow-panel)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--color-border)" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#555" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-kbd-text)" }}>
             Horário da partida
           </span>
-          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid var(--color-border)", background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid var(--color-border)", background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ padding: "24px 20px", display: "flex", alignItems: "center", justifyContent: "center", gap: 0 }}>
           <Drum items={hours} selected={selH} onSelect={setSelH} />
@@ -999,7 +1001,7 @@ function TimePicker({ value, onChange, onClose }: {
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border: "1px solid var(--color-border)", background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
             Cancelar
           </button>
-          <button type="button" onClick={confirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+          <button type="button" onClick={confirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
             Confirmar
           </button>
         </div>
@@ -1059,10 +1061,10 @@ function InfoTab({
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
-          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)" }}>{title}</span>
+          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
         </div>
-        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+        <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
       </div>
     );
   }
@@ -1076,7 +1078,7 @@ function InfoTab({
   const labelBase: React.CSSProperties = {
     fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
     letterSpacing: "0.14em", textTransform: "uppercase" as const,
-    color: "rgba(255,255,255,0.3)",
+    color: "var(--color-text-faint)",
     display: "flex", alignItems: "center", gap: 5,
   };
   const valueBase: React.CSSProperties = {
@@ -1087,7 +1089,7 @@ function InfoTab({
   };
   const focusBar: React.CSSProperties = {
     position: "absolute", bottom: 0, left: 0, right: 0, height: 1.5,
-    background: "#BFF205", transform: "scaleX(0)", transition: "transform 0.2s",
+    background: "var(--color-brand)", transform: "scaleX(0)", transition: "transform 0.2s",
     transformOrigin: "left", pointerEvents: "none",
   };
 
@@ -1140,7 +1142,7 @@ function InfoTab({
               <span style={labelBase}><IconCalendar /> Data</span>
               <input type="date" defaultValue={match.match_date ?? ""}
                 onChange={e => setMatchDate(e.target.value)}
-                style={{ ...valueBase, colorScheme: "dark" }} />
+                style={{ ...valueBase }} />
               <div className="fbar" style={focusBar} />
             </div>
 
@@ -1149,7 +1151,7 @@ function InfoTab({
               onClick={() => setShowClock(true)}>
               <span style={labelBase}><IconClock /> Horário</span>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: matchTime ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: matchTime ? "var(--color-text-primary)" : "var(--color-text-ghost)" }}>
                   {matchTime || "—"}
                 </span>
                 <IconChevron />
@@ -1164,7 +1166,7 @@ function InfoTab({
               onClick={() => { setShowVenueDropdown(v => !v); setVenueSearch(""); }}>
               <span style={labelBase}><IconStadium /> Estádio / Arena</span>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: selectedVenue ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, color: selectedVenue ? "var(--color-text-primary)" : "var(--color-text-ghost)" }}>
                   {selectedVenue?.full_name ?? "Selecionar…"}
                 </span>
                 <IconChevron />
@@ -1173,8 +1175,8 @@ function InfoTab({
             </div>
 
             {showVenueDropdown && (
-              <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, boxShadow: "0 24px 64px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ position: "absolute", top: "calc(100% + 2px)", left: 0, right: 0, zIndex: 200, backgroundColor: "var(--color-modal-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 12, boxShadow: "var(--color-shadow-elevated)", overflow: "hidden" }}>
+                <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-divider-strong)" }}>
                   <input autoFocus type="text" value={venueSearch} onChange={e => setVenueSearch(e.target.value)}
                     placeholder="Buscar estádio…"
                     style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
@@ -1183,24 +1185,24 @@ function InfoTab({
                   {[{ id: "", full_name: "Nenhum" }, ...filteredVenues].map((v: any, i: number) => (
                     <div key={v.id || "none"}
                       onClick={() => { setVenueId(v.id); setShowVenueDropdown(false); setVenueSearch(""); }}
-                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: venueId === v.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
-                      onMouseEnter={e => { if (venueId !== v.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = venueId === v.id ? "rgba(191,242,5,0.07)" : "transparent"; }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer", borderTop: i > 0 ? "1px solid var(--color-divider)" : "none", backgroundColor: venueId === v.id ? "var(--color-brand-selected-bg)" : "transparent", transition: "background 0.1s" }}
+                      onMouseEnter={e => { if (venueId !== v.id) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = venueId === v.id ? "var(--color-brand-selected-bg)" : "transparent"; }}
                     >
                       {/* Ícone estádio */}
-                      <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "var(--color-hover-bg)", border: "1px solid var(--color-hover-bg)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         <svg width="14" height="14" viewBox="0 0 10 10" fill="none">
-                          <path d="M1 9V5C1 3.5 2.5 2.5 5 2.5S9 3.5 9 5V9" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" strokeLinecap="round"/>
-                          <path d="M1 6h8M3 2.5V9M7 2.5V9" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1" strokeLinecap="round"/>
-                          <ellipse cx="5" cy="2.5" rx="2.5" ry="1" stroke="rgba(255,255,255,0.35)" strokeWidth="1.1"/>
+                          <path d="M1 9V5C1 3.5 2.5 2.5 5 2.5S9 3.5 9 5V9" stroke="var(--color-text-muted)" strokeWidth="1.1" strokeLinecap="round"/>
+                          <path d="M1 6h8M3 2.5V9M7 2.5V9" stroke="var(--color-text-muted)" strokeWidth="1.1" strokeLinecap="round"/>
+                          <ellipse cx="5" cy="2.5" rx="2.5" ry="1" stroke="var(--color-text-muted)" strokeWidth="1.1"/>
                         </svg>
                       </div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: venueId === v.id ? "#BFF205" : "var(--color-text-primary)", flex: 1 }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: venueId === v.id ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1 }}>
                         {v.full_name}
                       </span>
                       {venueId === v.id && (
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                       )}
                     </div>
@@ -1233,40 +1235,37 @@ function InfoTab({
           {/* Lista de árbitros */}
           {matchReferees.length === 0 && (
             <div style={{ padding: "20px 16px", textAlign: "center" }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.15)" }}>Nenhum árbitro adicionado.</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-dashed-border)" }}>Nenhum árbitro adicionado.</p>
             </div>
           )}
           {matchReferees.map((r, idx) => (
             <div key={r.referee_id}
               style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", borderBottom: border, transition: "background 0.1s" }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.02)")}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-hover-bg-subtle)")}
               onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}
             >
               {/* Avatar */}
-              <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                {r.referees?.photo_url
-                  ? <img src={(r.referees as any).photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#555" }}>
-                      {(r.referees?.surname ?? r.referees?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                    </div>
-                }
-              </div>
+              <PersonAvatar
+                photoUrl={r.referees?.photo_url ?? null}
+                size={38}
+                style={{ backgroundColor: "var(--color-surface-raised)", border: "1px solid var(--color-input-border)" }}
+              />
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
                   {r.referees?.surname ?? r.referees?.full_name ?? "—"}
                 </p>
-                <span style={{ display: "inline-block", marginTop: 3, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "#BFF205", backgroundColor: "rgba(191,242,5,0.08)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 4, padding: "2px 6px" }}>
+                <span style={{ display: "inline-block", marginTop: 3, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-brand)", backgroundColor: "var(--color-brand-selected-bg)", border: "1px solid var(--color-brand-border-subtle)", borderRadius: 4, padding: "2px 6px" }}>
                   {REFEREE_ROLES.find(x => x.id === r.referee_role_id)?.label ?? "—"}
                 </span>
               </div>
 
               {/* Remover */}
               <button type="button" onClick={() => handleRemoveReferee(r.referee_id)}
-                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.4)"; e.currentTarget.style.color = "#FF4444"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,100,100,0.5)"; }}
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-danger-icon)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-danger-border-hover)"; e.currentTarget.style.color = "var(--color-danger)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-danger-icon)"; }}
               >×</button>
             </div>
           ))}
@@ -1277,66 +1276,60 @@ function InfoTab({
             {/* Dropdown de árbitro */}
             <div style={{ position: "relative" }}>
               <div onClick={() => { setShowRefereeDropdown(v => !v); setRefereeSearch(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 13px", backgroundColor: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)")}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 13px", backgroundColor: "var(--color-hover-bg-subtle)", border: "1px solid var(--color-input-border)", borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-dashed-border)")}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
               >
                 {selectedRefereeForAdd ? (
                   <>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
-                      {selectedRefereeForAdd.photo_url
-                        ? <img src={selectedRefereeForAdd.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
-                            {(selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name).slice(0, 2).toUpperCase()}
-                          </div>
-                      }
-                    </div>
+                    <PersonAvatar
+                      photoUrl={selectedRefereeForAdd.photo_url}
+                      size={28}
+                      style={{ backgroundColor: "var(--color-surface-raised)" }}
+                    />
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
                       {selectedRefereeForAdd.surname ?? selectedRefereeForAdd.full_name}
                     </span>
                   </>
                 ) : (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.2)", flex: 1 }}>Selecionar árbitro…</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-ghost)", flex: 1 }}>Selecionar árbitro…</span>
                 )}
                 <IconChevron />
               </div>
 
               {showRefereeDropdown && (
-                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, boxShadow: "0 24px 64px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                  <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "var(--color-modal-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 12, boxShadow: "var(--color-shadow-elevated)", overflow: "hidden" }}>
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-divider-strong)" }}>
                     <input autoFocus type="text" value={refereeSearch} onChange={e => setRefereeSearch(e.target.value)}
                       placeholder="Buscar árbitro…"
                       style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
                   </div>
                   <div style={{ maxHeight: 260, overflowY: "auto" }}>
                     {filteredReferees.length === 0
-                      ? <p style={{ padding: "16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
+                      ? <p style={{ padding: "16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-secondary)", textAlign: "center" }}>Nenhum resultado.</p>
                       : filteredReferees.map((r, idx) => (
                         <div key={r.id}
                           onClick={() => { setAddRefereeId(r.id); setShowRefereeDropdown(false); setRefereeSearch(""); }}
-                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: addRefereeId === r.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
-                          onMouseEnter={e => { if (addRefereeId !== r.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = addRefereeId === r.id ? "rgba(191,242,5,0.07)" : "transparent"; }}
+                          style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-divider)" : "none", backgroundColor: addRefereeId === r.id ? "var(--color-brand-selected-bg)" : "transparent", transition: "background 0.1s" }}
+                          onMouseEnter={e => { if (addRefereeId !== r.id) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = addRefereeId === r.id ? "var(--color-brand-selected-bg)" : "transparent"; }}
                         >
-                          <div style={{ width: 28, height: 28, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
-                            {r.photo_url
-                              ? <img src={r.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
-                                  {(r.surname ?? r.full_name).slice(0, 2).toUpperCase()}
-                                </div>
-                            }
-                          </div>
+                          <PersonAvatar
+                            photoUrl={r.photo_url}
+                            size={28}
+                            style={{ backgroundColor: "var(--color-surface-raised)" }}
+                          />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: addRefereeId === r.id ? "#BFF205" : "var(--color-text-primary)", margin: 0 }}>
+                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: addRefereeId === r.id ? "var(--color-brand)" : "var(--color-text-primary)", margin: 0 }}>
                               {r.surname ?? r.full_name}
                             </p>
                             {r.surname && r.full_name !== r.surname && (
-                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 1 }}>{r.full_name}</p>
+                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", margin: 0, marginTop: 1 }}>{r.full_name}</p>
                             )}
                           </div>
                           {addRefereeId === r.id && (
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                              <path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                             </svg>
                           )}
                         </div>
@@ -1354,15 +1347,15 @@ function InfoTab({
                 options={REFEREE_ROLES.map((r) => ({ value: r.id, label: r.label }))} />
 
               <button type="button" onClick={handleAddReferee}
-                style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.12s" }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}
+                style={{ padding: "10px 18px", borderRadius: 9, border: "1px solid var(--color-brand-border-medium)", backgroundColor: "var(--color-brand-hover-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", whiteSpace: "nowrap" as const, transition: "all 0.12s" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-glow)"; e.currentTarget.style.borderColor = "var(--color-brand-glow-strong)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-hover-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}
               >+ Adicionar</button>
             </div>
 
             {matchReferees.length > 0 && (
               <button type="button" onClick={handleSaveReferees} disabled={savingReferees}
-                style={{ alignSelf: "flex-start", padding: "8px 18px", borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", opacity: savingReferees ? 0.5 : 1 }}>
+                style={{ alignSelf: "flex-start", padding: "8px 18px", borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, cursor: "pointer", opacity: savingReferees ? 0.5 : 1 }}>
                 {savingReferees ? "Salvando…" : "Salvar árbitros"}
               </button>
             )}
@@ -1377,7 +1370,7 @@ function InfoTab({
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" as const, gap: 10 }}>
             <div>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Súmula da partida</p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 3 }}>PDF · máx. 5 MB</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", margin: 0, marginTop: 3 }}>PDF · máx. 5 MB</p>
             </div>
             <SumulaButtons matchId={match.id} />
           </div>
@@ -1387,7 +1380,7 @@ function InfoTab({
       {/* ══ SALVAR ══ */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button type="button" onClick={handleSaveInfo} disabled={saving}
-          style={{ padding: isMobile ? "12px 0" : "12px 40px", width: isMobile ? "100%" : "auto", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
+          style={{ padding: isMobile ? "12px 0" : "12px 40px", width: isMobile ? "100%" : "auto", borderRadius: 10, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, cursor: "pointer", opacity: saving ? 0.5 : 1 }}>
           {saving ? "Salvando…" : "Salvar alterações"}
         </button>
       </div>
@@ -1547,10 +1540,10 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
         <div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
-          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)" }}>{title}</span>
+          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>}
         </div>
-        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+        <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
       </div>
     );
   }
@@ -1560,13 +1553,13 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
       <div style={{
         padding: "14px 16px",
         borderLeft: border, borderRight: border, borderBottom: border,
-        backgroundColor: "rgba(191,242,5,0.04)",
-        borderTop: "1px solid rgba(191,242,5,0.12)",
+        backgroundColor: "var(--color-brand-hover-bg)",
+        borderTop: "1px solid var(--color-brand-glow)",
       }}>
         <p style={{
           fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
           letterSpacing: "0.14em", textTransform: "uppercase" as const,
-          color: "rgba(191,242,5,0.55)", margin: "0 0 8px",
+          color: "var(--color-brand-text-muted)", margin: "0 0 8px",
         }}>
           Média da equipe
         </p>
@@ -1579,7 +1572,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           </span>
           <span style={{
             fontFamily: "var(--font-mono)", fontSize: 11,
-            color: "rgba(255,255,255,0.35)",
+            color: "var(--color-text-muted)",
           }}>
             ({media.avaliados} {media.avaliados === 1 ? "avaliado" : "avaliados"})
           </span>
@@ -1648,51 +1641,47 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           style={{
             display: "flex", alignItems: "center", gap: 10,
             padding: "9px 14px",
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            borderBottom: "1px solid var(--color-divider)",
             backgroundColor: isPresent
-              ? isCaptain ? "rgba(191,242,5,0.03)" : isGK ? "rgba(242,192,5,0.03)" : "transparent"
+              ? isCaptain ? "var(--color-brand-faint-bg)" : isGK ? "var(--color-warning-faint-bg)" : "transparent"
               : "transparent",
             transition: "background 0.12s",
             position: "relative" as const,
           }}
-          onMouseEnter={e => { if (!isPresent) return; e.currentTarget.style.backgroundColor = isCaptain ? "rgba(191,242,5,0.05)" : isGK ? "rgba(242,192,5,0.05)" : "rgba(255,255,255,0.03)"; }}
-          onMouseLeave={e => { e.currentTarget.style.backgroundColor = isPresent ? isCaptain ? "rgba(191,242,5,0.03)" : isGK ? "rgba(242,192,5,0.03)" : "transparent" : "transparent"; }}
+          onMouseEnter={e => { if (!isPresent) return; e.currentTarget.style.backgroundColor = isCaptain ? "var(--color-brand-hover-bg)" : isGK ? "var(--color-warning-muted-bg)" : "var(--color-divider-faint)"; }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = isPresent ? isCaptain ? "var(--color-brand-faint-bg)" : isGK ? "var(--color-warning-faint-bg)" : "transparent" : "transparent"; }}
         >
           {/* Barra lateral de status */}
           <div style={{
             position: "absolute", left: 0, top: 6, bottom: 6, width: 2, borderRadius: 1,
-            backgroundColor: isCaptain ? "#BFF205" : isGK ? "#F2C005" : "transparent",
+            backgroundColor: isCaptain ? "var(--color-brand)" : isGK ? "var(--color-warning)" : "transparent",
             transition: "background 0.15s",
           }} />
 
           {/* Avatar */}
-          <div style={{
-            width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-            backgroundColor: "rgba(255,255,255,0.06)",
-            border: `1.5px solid ${isCaptain ? "rgba(191,242,5,0.4)" : isGK ? "rgba(242,192,5,0.35)" : "rgba(255,255,255,0.08)"}`,
-            opacity: isPresent ? 1 : 0.3,
-            transition: "all 0.15s",
-          }}>
-            {athlete.photo_url
-              ? <img src={athlete.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
-                  {name.slice(0, 2).toUpperCase()}
-                </div>
-            }
-          </div>
+          <PersonAvatar
+            photoUrl={athlete.photo_url}
+            size={36}
+            style={{
+              backgroundColor: "var(--color-surface-raised)",
+              border: `1.5px solid ${isCaptain ? "var(--color-brand-border)" : isGK ? "var(--color-warning-border)" : "var(--color-input-border)"}`,
+              opacity: isPresent ? 1 : 0.3,
+              transition: "all 0.15s",
+            }}
+          />
 
           {/* Número — placeholder */}
           <div style={{
             width: 20, flexShrink: 0, textAlign: "center",
             fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
-            color: "rgba(255,255,255,0.15)",
+            color: "var(--color-dashed-border)",
           }}>—</div>
 
           {/* Nome + badges */}
           <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{
               fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
-              color: isPresent ? "var(--color-text-primary)" : "rgba(255,255,255,0.25)",
+              color: isPresent ? "var(--color-text-primary)" : "var(--color-field-line-strong)",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
               transition: "color 0.15s",
             }}>{name}</span>
@@ -1700,16 +1689,16 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
             {isCaptain && (
               <span style={{
                 fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
-                letterSpacing: "0.06em", color: "#BFF205",
-                backgroundColor: "rgba(191,242,5,0.1)", border: "1px solid rgba(191,242,5,0.25)",
+                letterSpacing: "0.06em", color: "var(--color-brand)",
+                backgroundColor: "var(--color-brand-muted-bg)", border: "1px solid var(--color-brand-border-medium)",
                 borderRadius: 4, padding: "1px 5px", flexShrink: 0,
               }}>CAP</span>
             )}
             {isGK && (
               <span style={{
                 fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
-                letterSpacing: "0.06em", color: "#F2C005",
-                backgroundColor: "rgba(242,192,5,0.1)", border: "1px solid rgba(242,192,5,0.25)",
+                letterSpacing: "0.06em", color: "var(--color-warning)",
+                backgroundColor: "var(--color-warning-badge-bg)", border: "1px solid var(--color-warning-border-medium)",
                 borderRadius: 4, padding: "1px 5px", flexShrink: 0,
               }}>GK</span>
             )}
@@ -1735,9 +1724,9 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
                 maxLength={4}
                 style={{
                   width: 44, height: 28, borderRadius: 7,
-                  border: `1px solid ${ratings[athlete.id] ? "rgba(191,242,5,0.35)" : "rgba(255,255,255,0.1)"}`,
-                  backgroundColor: ratings[athlete.id] ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.03)",
-                  color: ratings[athlete.id] ? "var(--color-brand)" : "rgba(255,255,255,0.3)",
+                  border: `1px solid ${ratings[athlete.id] ? "var(--color-brand-border)" : "var(--color-input-border-strong)"}`,
+                  backgroundColor: ratings[athlete.id] ? "var(--color-brand-hover-bg)" : "var(--color-divider-faint)",
+                  color: ratings[athlete.id] ? "var(--color-brand)" : "var(--color-field-avatar-border)",
                   fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700,
                   textAlign: "center", outline: "none",
                   transition: "all 0.15s",
@@ -1760,9 +1749,9 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
                 letterSpacing: "0.02em", transition: "all 0.12s",
-                borderColor: isGK ? "rgba(242,192,5,0.5)" : "rgba(255,255,255,0.08)",
-                backgroundColor: isGK ? "rgba(242,192,5,0.12)" : "rgba(255,255,255,0.03)",
-                color: isGK ? "#F2C005" : "rgba(255,255,255,0.2)",
+                borderColor: isGK ? "var(--color-warning-border-strong)" : "var(--color-input-border)",
+                backgroundColor: isGK ? "var(--color-warning-filter-bg)" : "var(--color-divider-faint)",
+                color: isGK ? "var(--color-warning)" : "var(--color-text-ghost)",
                 opacity: isPresent ? 1 : 0.3,
               }}>GK</button>
 
@@ -1777,9 +1766,9 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
                 display: "flex", alignItems: "center", justifyContent: "center",
                 fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 900,
                 transition: "all 0.12s",
-                borderColor: isCaptain ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.08)",
-                backgroundColor: isCaptain ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.03)",
-                color: isCaptain ? "#BFF205" : "rgba(255,255,255,0.2)",
+                borderColor: isCaptain ? "var(--color-brand-border)" : "var(--color-input-border)",
+                backgroundColor: isCaptain ? "var(--color-brand-glow)" : "var(--color-divider-faint)",
+                color: isCaptain ? "var(--color-brand)" : "var(--color-text-ghost)",
                 opacity: isPresent ? 1 : 0.3,
               }}>C</button>
 
@@ -1809,12 +1798,12 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
                 width: 28, height: 28, borderRadius: 6, border: "1px solid",
                 cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
                 transition: "all 0.12s",
-                borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.1)",
-                backgroundColor: isPresent ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
+                borderColor: isPresent ? "var(--color-brand-border)" : "var(--color-input-border-strong)",
+                backgroundColor: isPresent ? "var(--color-brand-muted-bg)" : "var(--color-divider-faint)",
               }}>
               {isPresent
-                ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4"/></svg>
+                ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="var(--color-text-ghost)" strokeWidth="1.4"/></svg>
               }
             </button>
           </div>
@@ -1842,29 +1831,25 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "9px 14px",
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          borderBottom: "1px solid var(--color-divider)",
           backgroundColor: "transparent",
           transition: "background 0.12s",
         }}>
           {/* Avatar */}
-          <div style={{
-            width: 36, height: 36, borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-            backgroundColor: "rgba(255,255,255,0.06)",
-            border: "1.5px solid rgba(255,255,255,0.08)",
-            opacity: isPresent ? 1 : 0.3,
-            transition: "all 0.15s",
-          }}>
-            {member.photo_url
-              ? <img src={member.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "#555" }}>
-                  {name.slice(0, 2).toUpperCase()}
-                </div>
-            }
-          </div>
+          <PersonAvatar
+            photoUrl={member.photo_url}
+            size={36}
+            style={{
+              backgroundColor: "var(--color-surface-raised)",
+              border: "1.5px solid var(--color-input-border)",
+              opacity: isPresent ? 1 : 0.3,
+              transition: "all 0.15s",
+            }}
+          />
           {/* Nome */}
           <span style={{
             flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
-            color: isPresent ? "var(--color-text-primary)" : "rgba(255,255,255,0.25)",
+            color: isPresent ? "var(--color-text-primary)" : "var(--color-field-line-strong)",
             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const,
             transition: "color 0.15s",
           }}>{name}</span>
@@ -1876,12 +1861,12 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               width: 28, height: 28, borderRadius: 6, border: "1px solid",
               cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
               transition: "all 0.12s",
-              borderColor: isPresent ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.1)",
-              backgroundColor: isPresent ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
+              borderColor: isPresent ? "var(--color-brand-border)" : "var(--color-input-border-strong)",
+              backgroundColor: isPresent ? "var(--color-brand-muted-bg)" : "var(--color-divider-faint)",
             }}>
             {isPresent
-              ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="rgba(255,255,255,0.2)" strokeWidth="1.4"/></svg>
+              ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><rect x="2" y="2" width="8" height="8" rx="1.5" stroke="var(--color-text-ghost)" strokeWidth="1.4"/></svg>
             }
           </button>
         </div>
@@ -1900,7 +1885,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
         }}>
           {team?.logo_url
             ? <img src={team.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />
-            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+            : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "var(--color-surface-raised)", flexShrink: 0 }} />
           }
           <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" as const }}>
@@ -1909,8 +1894,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{presentCount}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>/{allAthletes.length}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 900, color: presentCount > 0 ? "var(--color-brand)" : "var(--color-dashed-border)", lineHeight: 1 }}>{presentCount}</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-ghost)" }}>/{allAthletes.length}</span>
             </div>
           </div>
         </div>
@@ -1919,18 +1904,18 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
         <div style={{
           display: "flex", alignItems: "center", gap: 10,
           padding: "5px 14px",
-          backgroundColor: "rgba(255,255,255,0.02)",
+          backgroundColor: "var(--color-hover-bg-subtle)",
           borderLeft: border, borderRight: border,
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          borderBottom: "1px solid var(--color-divider)",
         }}>
           <div style={{ width: 36, flexShrink: 0 }} />
-          <div style={{ width: 20, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>#</div>
-          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>Atleta</span>
-          <span style={{ width: 44, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>Nota</span>
+          <div style={{ width: 20, flexShrink: 0, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>#</div>
+          <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.1em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>Atleta</span>
+          <span style={{ width: 44, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>Nota</span>
           <div style={{ display: "flex", gap: 5 }}>
-            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>GK</span>
-            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>C</span>
-            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "rgba(255,255,255,0.2)", textTransform: "uppercase" as const }}>✓</span>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>GK</span>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>C</span>
+            <span style={{ width: 28, textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.06em", color: "var(--color-text-ghost)", textTransform: "uppercase" as const }}>✓</span>
           </div>
         </div>
 
@@ -1941,15 +1926,15 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           overflow: "hidden",
         }}>
           {allAthletes.length === 0 ? (
-            <p style={{ padding: "24px 16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.15)", textAlign: "center" }}>
+            <p style={{ padding: "24px 16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-dashed-border)", textAlign: "center" }}>
               Nenhum atleta inscrito.
             </p>
           ) : (
             <>
               {goalkeepers.length > 0 && (
                 <>
-                  <div style={{ padding: "6px 14px", backgroundColor: "rgba(242,192,5,0.04)", borderBottom: "1px solid rgba(242,192,5,0.08)" }}>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "#F2C005" }}>Goleiros</span>
+                  <div style={{ padding: "6px 14px", backgroundColor: "var(--color-warning-row-bg)", borderBottom: "1px solid var(--color-warning-row-border)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--color-warning)" }}>Goleiros</span>
                   </div>
                   {goalkeepers.map(a => <AthleteRow key={a.id} athlete={a} />)}
                 </>
@@ -1957,8 +1942,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               {outfield.length > 0 && (
                 <>
                   {goalkeepers.length > 0 && (
-                    <div style={{ padding: "6px 14px", backgroundColor: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.25)" }}>Linha</span>
+                    <div style={{ padding: "6px 14px", backgroundColor: "var(--color-hover-bg-subtle)", borderBottom: "1px solid var(--color-divider)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--color-text-hint)" }}>Linha</span>
                     </div>
                   )}
                   {outfield.map(a => <AthleteRow key={a.id} athlete={a} />)}
@@ -1978,15 +1963,15 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
               display: "flex", alignItems: "center", gap: 10,
               padding: "8px 14px",
               borderRadius: "10px 10px 0 0",
-              backgroundColor: "rgba(255,255,255,0.02)",
+              backgroundColor: "var(--color-hover-bg-subtle)",
               border, borderBottom: "none",
             }}>
-              <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.35)" }}>
+              <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--color-text-muted)" }}>
                 Comissão Técnica
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 900, color: staffPresentCount > 0 ? "rgba(191,242,5,0.7)" : "rgba(255,255,255,0.15)", lineHeight: 1 }}>{staffPresentCount}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>/{allStaff.length}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 900, color: staffPresentCount > 0 ? "var(--color-brand-text-faint)" : "var(--color-dashed-border)", lineHeight: 1 }}>{staffPresentCount}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-ghost)" }}>/{allStaff.length}</span>
               </div>
             </div>
             {/* Lista comissão */}
@@ -2019,7 +2004,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
           <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.04em" }}>
             Notas dos atletas
           </p>
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 3, letterSpacing: "0.04em" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-faint)", margin: 0, marginTop: 3, letterSpacing: "0.04em" }}>
             {ratingsArePublic ? "Públicas — visíveis no 06.score" : "Privadas — visíveis apenas no 06.lab"}
           </p>
         </div>
@@ -2031,7 +2016,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
             position: "relative", display: "inline-flex",
             width: 44, height: 24, borderRadius: 12, border: "none",
             cursor: savingVisibility ? "not-allowed" : "pointer",
-            backgroundColor: ratingsArePublic ? "var(--color-brand)" : "rgba(255,255,255,0.12)",
+            backgroundColor: ratingsArePublic ? "var(--color-brand)" : "var(--color-dashed-border)",
             transition: "background-color 0.2s ease",
             opacity: savingVisibility ? 0.6 : 1, padding: 0, flexShrink: 0,
           }}
@@ -2043,7 +2028,7 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
             width: 20, height: 20, borderRadius: "50%",
             backgroundColor: "white",
             transition: "left 0.2s ease",
-            boxShadow: "0 1px 4px rgba(0,0,0,0.3)",
+            boxShadow: "var(--color-shadow-soft)",
           }} />
         </button>
       </div>
@@ -2056,12 +2041,12 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
       {/* Legenda */}
       <div style={{ display: "flex", gap: 16, marginTop: 16, flexWrap: "wrap" as const }}>
         {[
-          { color: "#BFF205", label: "Capitão" },
-          { color: "#F2C005", label: "Goleiro da partida" },
+          { color: "var(--color-brand)", label: "Capitão" },
+          { color: "var(--color-warning)", label: "Goleiro da partida" },
         ].map(({ color, label }) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <div style={{ width: 2, height: 12, borderRadius: 1, backgroundColor: color }} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.04em" }}>{label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", letterSpacing: "0.04em" }}>{label}</span>
           </div>
         ))}
       </div>
@@ -2070,8 +2055,8 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
         padding: isMobile ? "12px 16px" : "12px 32px",
-        backgroundColor: "rgba(10,10,10,0.95)",
-        borderTop: "1px solid rgba(255,255,255,0.05)",
+        backgroundColor: "var(--color-bar-bg)",
+        borderTop: "1px solid var(--color-hover-bg)",
         backdropFilter: "blur(12px)",
         display: "flex", alignItems: "center", justifyContent: "flex-end",
         zIndex: 20,
@@ -2081,12 +2066,12 @@ function FormacoesTab({ match, lineups, setLineups, staffLineups, setStaffLineup
             padding: isMobile ? "11px 0" : "11px 36px",
             width: isMobile ? "100%" : "auto",
             borderRadius: 9, border: "none",
-            backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+            backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)",
             fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
             letterSpacing: "0.1em", textTransform: "uppercase" as const,
             cursor: savingLineups ? "not-allowed" : "pointer",
             opacity: savingLineups ? 0.5 : 1,
-            boxShadow: "0 4px 24px rgba(191,242,5,0.15)",
+            boxShadow: "0 4px 24px var(--color-brand-filter-bg)",
           }}>
           {savingLineups ? "Salvando…" : "Salvar formações"}
         </button>
@@ -2161,13 +2146,13 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
           <span style={{
             fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800,
             letterSpacing: "0.16em", textTransform: "uppercase" as const,
-            color: "#BFF205",
+            color: "var(--color-brand)",
           }}>{title}</span>
           {subtitle && (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", marginTop: 1, letterSpacing: "0.06em" }}>{subtitle}</p>
           )}
         </div>
-        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+        <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
       </div>
     );
   }
@@ -2183,30 +2168,22 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
         <div
           onClick={openMotm}
           style={{
-            borderRadius: 14, border: `1px solid ${motmAthleteId ? "rgba(191,242,5,0.25)" : "var(--color-border)"}`,
-            backgroundColor: motmAthleteId ? "rgba(191,242,5,0.04)" : "var(--color-surface)",
+            borderRadius: 14, border: `1px solid ${motmAthleteId ? "var(--color-brand-border)" : "var(--color-border)"}`,
+            backgroundColor: motmAthleteId ? "var(--color-brand-hover-bg)" : "var(--color-surface)",
             padding: isMobile ? "16px" : "20px 24px",
             cursor: "pointer", transition: "all 0.15s", position: "relative", overflow: "hidden",
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = motmAthleteId ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.15)"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = motmAthleteId ? "rgba(191,242,5,0.25)" : "var(--color-border)"; }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = motmAthleteId ? "var(--color-brand-border)" : "var(--color-dashed-border)"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = motmAthleteId ? "var(--color-brand-border)" : "var(--color-border)"; }}
         >
           {motmAthleteId && selectedMotm ? (
             <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 12 : 16 }}>
               {/* Foto grande */}
-              <div style={{
-                width: isMobile ? 52 : 64, height: isMobile ? 52 : 64,
-                borderRadius: "50%", overflow: "hidden", flexShrink: 0,
-                backgroundColor: "rgba(255,255,255,0.06)",
-                border: "2px solid rgba(191,242,5,0.3)",
-              }}>
-                {selectedMotm.photo_url
-                  ? <img src={selectedMotm.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "#555" }}>
-                      {(selectedMotm.surname ?? selectedMotm.full_name).slice(0, 2).toUpperCase()}
-                    </div>
-                }
-              </div>
+              <PersonAvatar
+                photoUrl={selectedMotm.photo_url}
+                size={isMobile ? 52 : 64}
+                style={{ backgroundColor: "var(--color-surface-raised)", border: "2px solid var(--color-brand-border)" }}
+              />
               {/* Nome + time */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: isMobile ? 16 : 20, fontWeight: 800, color: "var(--color-text-primary)", lineHeight: 1, margin: 0, letterSpacing: "0.02em" }}>
@@ -2215,35 +2192,35 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
                 {motmTeam && (
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6 }}>
                     {motmTeam.logo_url && <img src={motmTeam.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.35)" }}>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-text-muted)" }}>
                       {motmTeam.short_name ?? motmTeam.full_name}
                     </span>
                   </div>
                 )}
               </div>
               {/* Troféu */}
-              <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(191,242,5,0.12)", border: "1px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "var(--color-brand-glow)", border: "1px solid var(--color-brand-border-medium)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="20" height="20" viewBox="0 0 12 12" fill="none">
-                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="#BFF205" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="#BFF205" strokeWidth="1.3" strokeLinecap="round"/>
+                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="var(--color-brand)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="var(--color-brand)" strokeWidth="1.3" strokeLinecap="round"/>
                 </svg>
               </div>
               {/* Limpar */}
               <button type="button" onClick={clearMotm}
-                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
             </div>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
               {/* Placeholder */}
-              <div style={{ width: isMobile ? 52 : 64, height: isMobile ? 52 : 64, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+              <div style={{ width: isMobile ? 52 : 64, height: isMobile ? 52 : 64, borderRadius: "50%", backgroundColor: "var(--color-hover-bg-subtle)", border: "1px dashed var(--color-input-border-strong)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                 <svg width="22" height="22" viewBox="0 0 12 12" fill="none">
-                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="rgba(255,255,255,0.15)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="rgba(255,255,255,0.15)" strokeWidth="1.3" strokeLinecap="round"/>
+                  <path d="M6 8.5v2M4 10.5h4M2 1.5h8M3 1.5C3 5 1 5.5 1 7.5c0 0 .5 1 2 1M9 1.5C9 5 11 5.5 11 7.5c0 0-.5 1-2 1M3 8.5h6" stroke="var(--color-dashed-border)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M6 8.5C4.34 8.5 3 7.16 3 5.5V1.5h6v4c0 1.66-1.34 3-3 3z" stroke="var(--color-dashed-border)" strokeWidth="1.3" strokeLinecap="round"/>
                 </svg>
               </div>
               <div>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.25)", margin: 0 }}>Selecionar Melhor em Campo</p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)", marginTop: 3 }}>Toque para escolher o atleta</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-hint)", margin: 0 }}>Selecionar Melhor em Campo</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-dashed-border)", marginTop: 3 }}>Toque para escolher o atleta</p>
               </div>
             </div>
           )}
@@ -2251,44 +2228,44 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
 
         {/* ── Modal de seleção MOTM ── */}
         {motmStep !== null && (
-          <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.82)", zIndex: 60, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? 0 : 16 }}
+          <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-modal-scrim-heavy)", zIndex: 60, display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center", padding: isMobile ? 0 : 16 }}
           onClick={e => { if (e.target === e.currentTarget) setMotmStep(null); }}>
           <div style={{
             width: "100%", maxWidth: isMobile ? "100%" : 480,
             borderRadius: isMobile ? "18px 18px 0 0" : 18,
-            border: "1px solid rgba(255,255,255,0.1)",
-            backgroundColor: "#0e0e0e",
+            border: "1px solid var(--color-input-border-strong)",
+            backgroundColor: "var(--color-modal-bg)",
             overflow: "hidden",
-            boxShadow: isMobile ? "0 -24px 80px rgba(0,0,0,0.8)" : "0 32px 80px rgba(0,0,0,0.8)",
+            boxShadow: isMobile ? "0 -24px 80px var(--color-modal-shadow)" : "var(--color-modal-shadow)",
             maxHeight: isMobile ? "85vh" : "70vh",
             display: "flex", flexDirection: "column",
           }}>
             {/* Handle — só mobile */}
             {isMobile && (
               <div style={{ display: "flex", justifyContent: "center", padding: "12px 0 4px" }}>
-                <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "rgba(255,255,255,0.15)" }} />
+                <div style={{ width: 36, height: 4, borderRadius: 2, backgroundColor: "var(--color-dashed-border)" }} />
               </div>
             )}
 
               {/* Header */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   {motmStep === "athlete" && motmTeamId && (
                     <button type="button" onClick={() => { setMotmStep("team"); setMotmSearch(""); }}
-                      style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
+                      style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border-strong)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>‹</button>
                   )}
                   <div>
-                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>
+                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>
                       {motmStep === "team" ? "Selecionar time" : "Selecionar atleta"}
                     </p>
                     {motmStep === "athlete" && motmTeamId && (() => {
                       const t = motmTeamId === match.team_a_id ? teamA : teamB;
-                      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0, marginTop: 2 }}>{t?.short_name ?? t?.full_name}</p>;
+                      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-icon-muted)", margin: 0, marginTop: 2 }}>{t?.short_name ?? t?.full_name}</p>;
                     })()}
                   </div>
                 </div>
                 <button type="button" onClick={() => setMotmStep(null)}
-                  style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+                  style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border-strong)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
               </div>
 
               {/* ── STEP: escolher time ── */}
@@ -2300,17 +2277,17 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
                       style={{
                         display: "flex", alignItems: "center", gap: 14,
                         padding: "16px 18px", borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        backgroundColor: "rgba(255,255,255,0.03)",
+                        border: "1px solid var(--color-input-border)",
+                        backgroundColor: "var(--color-hover-bg-subtle)",
                         cursor: "pointer", transition: "all 0.12s",
                       }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.05)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; e.currentTarget.style.backgroundColor = "var(--color-brand-hover-bg)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.backgroundColor = "var(--color-hover-bg-subtle)"; }}
                     >
                       <div style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                         {team?.logo_url
                           ? <img src={team.logo_url} alt="" style={{ width: 44, height: 44, objectFit: "contain" }} />
-                          : <div style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "#444" }}>
+                          : <div style={{ width: 44, height: 44, borderRadius: 10, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "#444" }}>
                               {(team?.short_name ?? team?.full_name ?? "?").slice(0, 2).toUpperCase()}
                             </div>
                         }
@@ -2319,7 +2296,7 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
                         <p style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 800, color: "var(--color-text-primary)", margin: 0, letterSpacing: "0.02em" }}>
                           {team?.short_name ?? team?.full_name ?? "—"}
                         </p>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 3 }}>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-faint)", margin: 0, marginTop: 3 }}>
                           {getAthletes(id).length} atletas
                         </p>
                       </div>
@@ -2334,7 +2311,7 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
               {/* ── STEP: escolher atleta ── */}
               {motmStep === "athlete" && (
                 <>
-                  <div style={{ padding: "10px 14px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--color-divider-strong)" }}>
                     <input autoFocus type="text" value={motmSearch} onChange={e => setMotmSearch(e.target.value)}
                       placeholder="Buscar atleta…"
                       style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)" }} />
@@ -2359,27 +2336,24 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
                             style={{
                               display: "flex", alignItems: "center", gap: 12,
                               padding: "12px 16px", cursor: "pointer",
-                              borderBottom: "1px solid rgba(255,255,255,0.04)",
-                              backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent",
+                              borderBottom: "1px solid var(--color-divider)",
+                              backgroundColor: isSelected ? "var(--color-brand-selected-bg)" : "transparent",
                               transition: "background 0.1s",
                             }}
-                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}
+                            onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                            onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "var(--color-brand-selected-bg)" : "transparent"; }}
                           >
-                            <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
-                              {a.photo_url
-                                ? <img src={a.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "#555" }}>
-                                    {(a.surname ?? a.full_name).slice(0, 2).toUpperCase()}
-                                  </div>
-                              }
-                            </div>
+                            <PersonAvatar
+                              photoUrl={a.photo_url}
+                              size={38}
+                              style={{ backgroundColor: "var(--color-surface-raised)" }}
+                            />
                             <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: isSelected ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
                               {a.surname ?? a.full_name}
                             </span>
                             {isSelected && (
                               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M2 7l4 4 6-6" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                                <path d="M2 7l4 4 6-6" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
                             )}
                           </div>
@@ -2402,20 +2376,20 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
           <div style={{ padding: "16px 18px", borderBottom: border }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                <rect x="1" y="2" width="10" height="8" rx="1.5" stroke="#BFF205" strokeWidth="1.2"/>
-                <circle cx="4.5" cy="5" r="1.2" stroke="#BFF205" strokeWidth="1.1"/>
-                <path d="M1 8.5l2.5-2.5 2 2 1.5-1.5L11 9.5" stroke="#BFF205" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
+                <rect x="1" y="2" width="10" height="8" rx="1.5" stroke="var(--color-brand)" strokeWidth="1.2"/>
+                <circle cx="4.5" cy="5" r="1.2" stroke="var(--color-brand)" strokeWidth="1.1"/>
+                <path d="M1 8.5l2.5-2.5 2 2 1.5-1.5L11 9.5" stroke="var(--color-brand)" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-secondary)" }}>Fotos do jogo</span>
             </div>
             <input type="url" value={photosUrl} onChange={e => setPhotosUrl(e.target.value)}
               placeholder="https://drive.google.com/…"
-              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: photosUrl ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", background: "none", border: "none", outline: "none", padding: 0 }} />
+              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: photosUrl ? "var(--color-text-primary)" : "var(--color-text-ghost)", background: "none", border: "none", outline: "none", padding: 0 }} />
             {photosUrl && (
               <a href={photosUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(191,242,5,0.5)", textDecoration: "none" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-brand-border)", textDecoration: "none" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--color-brand)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(191,242,5,0.5)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--color-brand-border)")}
               >
                 <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
                   <path d="M4 2H2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V6M6 1h3v3M9 1 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2429,19 +2403,19 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
           <div style={{ padding: "16px 18px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
               <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                <rect x="1" y="2.5" width="7.5" height="7" rx="1.2" stroke="#BFF205" strokeWidth="1.2"/>
-                <path d="M8.5 5l2.5-1.5v5L8.5 7" stroke="#BFF205" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                <rect x="1" y="2.5" width="7.5" height="7" rx="1.2" stroke="var(--color-brand)" strokeWidth="1.2"/>
+                <path d="M8.5 5l2.5-1.5v5L8.5 7" stroke="var(--color-brand)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-secondary)" }}>Vídeos / Highlights</span>
             </div>
             <input type="url" value={highlightsUrl} onChange={e => setHighlightsUrl(e.target.value)}
               placeholder="https://youtube.com/…"
-              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: highlightsUrl ? "var(--color-text-primary)" : "rgba(255,255,255,0.2)", background: "none", border: "none", outline: "none", padding: 0 }} />
+              style={{ width: "100%", fontFamily: "var(--font-mono)", fontSize: 13, color: highlightsUrl ? "var(--color-text-primary)" : "var(--color-text-ghost)", background: "none", border: "none", outline: "none", padding: 0 }} />
             {highlightsUrl && (
               <a href={highlightsUrl} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(191,242,5,0.5)", textDecoration: "none" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-brand-border)", textDecoration: "none" }}
                 onMouseEnter={e => (e.currentTarget.style.color = "var(--color-brand)")}
-                onMouseLeave={e => (e.currentTarget.style.color = "rgba(191,242,5,0.5)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "var(--color-brand-border)")}
               >
                 <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
                   <path d="M4 2H2a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1V6M6 1h3v3M9 1 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
@@ -2459,7 +2433,7 @@ function MidiaTab({ match, motmAthleteId, setMotmAthleteId, motmTeamIdProp, setM
           style={{
             padding: isMobile ? "12px 24px" : "12px 36px",
             borderRadius: 10, border: "none",
-            backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+            backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)",
             fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700,
             letterSpacing: "0.08em", textTransform: "uppercase" as const,
             cursor: "pointer", opacity: saving ? 0.5 : 1, width: isMobile ? "100%" : "auto",
@@ -2490,24 +2464,21 @@ function AthleteDropdown({ athletes, selectedId, onSelect, show, setShow, search
   return (
     <div style={{ position: "relative", marginTop: 4 }} ref={dropdownRef}>
       <div onClick={() => { setShow(!show); setSearch(""); }}
-        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", backgroundColor: "rgba(255,255,255,0.04)", border, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", backgroundColor: "var(--color-input-bg)", border, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-field-line)")}
         onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
         {selected ? (
           <>
-            <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
-              {selected.photo_url
-                ? <img src={selected.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
-                    {(selected.surname ?? selected.full_name).slice(0, 2).toUpperCase()}
-                  </div>
-              }
-            </div>
+            <PersonAvatar
+              photoUrl={selected.photo_url}
+              size={26}
+              style={{ backgroundColor: "var(--color-surface-raised)" }}
+            />
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>
               {selected.surname ?? selected.full_name}
             </span>
             <button type="button" onClick={e => { e.stopPropagation(); onSelect(""); }}
-              style={{ width: 18, height: 18, borderRadius: 4, border: "none", background: "none", color: "#555", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              style={{ width: 18, height: 18, borderRadius: 4, border: "none", background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
           </>
         ) : (
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#444", flex: 1 }}>{placeholder}</span>
@@ -2517,8 +2488,8 @@ function AthleteDropdown({ athletes, selectedId, onSelect, show, setShow, search
         </svg>
       </div>
       {show && (
-        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#181818", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, boxShadow: "0 16px 48px rgba(0,0,0,0.7)", overflow: "hidden" }}>
-          <div style={{ padding: "10px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ position: "absolute", top: "calc(100% + 3px)", left: 0, right: 0, zIndex: 200, backgroundColor: "var(--color-popup-bg)", border: "1px solid var(--color-dashed-border)", borderRadius: 10, boxShadow: "var(--color-shadow-panel)", overflow: "hidden" }}>
+          <div style={{ padding: "10px 12px", borderBottom: "1px solid var(--color-divider-strong)" }}>
             <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Buscar…"
               style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
@@ -2526,9 +2497,9 @@ function AthleteDropdown({ athletes, selectedId, onSelect, show, setShow, search
           <div style={{ maxHeight: 220, overflowY: "auto" }}>
             {optional && (
               <div onClick={() => onSelect("")}
-                style={{ padding: "9px 12px", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "#555", borderBottom: "1px solid rgba(255,255,255,0.04)", backgroundColor: !selectedId ? "rgba(191,242,5,0.06)" : "transparent" }}
-                onMouseEnter={e => { if (selectedId) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = !selectedId ? "rgba(191,242,5,0.06)" : "transparent"; }}>
+                style={{ padding: "9px 12px", cursor: "pointer", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-kbd-text)", borderBottom: "1px solid var(--color-divider)", backgroundColor: !selectedId ? "var(--color-brand-hover-bg)" : "transparent" }}
+                onMouseEnter={e => { if (selectedId) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = !selectedId ? "var(--color-brand-hover-bg)" : "transparent"; }}>
                 {placeholder}
               </div>
             )}
@@ -2536,17 +2507,14 @@ function AthleteDropdown({ athletes, selectedId, onSelect, show, setShow, search
               ? <p style={{ padding: "16px", fontFamily: "var(--font-mono)", fontSize: 11, color: "#444", textAlign: "center" }}>Nenhum resultado.</p>
               : filtered.sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name)).map((a, idx) => (
                 <div key={a.id} onClick={() => onSelect(a.id)}
-                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: selectedId === a.id ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
-                  onMouseEnter={e => { if (selectedId !== a.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === a.id ? "rgba(191,242,5,0.07)" : "transparent"; }}>
-                  <div style={{ width: 26, height: 26, borderRadius: "50%", overflow: "hidden", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    {a.photo_url
-                      ? <img src={a.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555" }}>
-                          {(a.surname ?? a.full_name).slice(0, 2).toUpperCase()}
-                        </div>
-                    }
-                  </div>
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-divider)" : "none", backgroundColor: selectedId === a.id ? "var(--color-brand-selected-bg)" : "transparent", transition: "background 0.1s" }}
+                  onMouseEnter={e => { if (selectedId !== a.id) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === a.id ? "var(--color-brand-selected-bg)" : "transparent"; }}>
+                  <PersonAvatar
+                    photoUrl={a.photo_url}
+                    size={26}
+                    style={{ backgroundColor: "var(--color-surface-raised)" }}
+                  />
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: selectedId === a.id ? "var(--color-brand)" : "var(--color-text-primary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {a.surname ?? a.full_name}
                   </span>
@@ -2571,18 +2539,18 @@ function MinutePicker({ value, max, onChange, onClose }: {
   const ITEM_H = 48;
 
   return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-overlay-heavy)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: 220, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.7)" }}>
+      <div style={{ width: 220, borderRadius: 18, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", boxShadow: "var(--color-shadow-panel)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 18px", borderBottom: "1px solid var(--color-border)" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "#555" }}>Minuto</span>
-          <button type="button" onClick={onClose} style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid var(--color-border)", background: "none", color: "#555", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-kbd-text)" }}>Minuto</span>
+          <button type="button" onClick={onClose} style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid var(--color-border)", background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ padding: "16px", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ position: "relative", height: ITEM_H * 3, width: 100, overflow: "hidden" }}
             onWheel={e => { e.preventDefault(); const idx = items.indexOf(sel); const next = Math.max(0, Math.min(items.length - 1, idx + (e.deltaY > 0 ? 1 : -1))); setSel(items[next]); }}>
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to bottom, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
-            <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "rgba(191,242,5,0.07)", border: "1px solid rgba(191,242,5,0.18)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", top: ITEM_H, left: 4, right: 4, height: ITEM_H, background: "var(--color-brand-selected-bg)", border: "1px solid var(--color-brand-border-subtle)", borderRadius: 10, zIndex: 1, pointerEvents: "none" }} />
             <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: ITEM_H, background: "linear-gradient(to top, var(--color-surface), transparent)", zIndex: 2, pointerEvents: "none" }} />
             <div style={{ display: "flex", flexDirection: "column", transform: `translateY(${-(items.indexOf(sel)) * ITEM_H + ITEM_H}px)`, transition: "transform 0.2s cubic-bezier(.4,0,.2,1)" }}>
               {items.map(v => (
@@ -2595,7 +2563,7 @@ function MinutePicker({ value, max, onChange, onClose }: {
         </div>
         <div style={{ padding: "14px 16px", borderTop: "1px solid var(--color-border)", display: "flex", gap: 8 }}>
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 9, borderRadius: 8, border: "1px solid var(--color-border)", background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
-          <button type="button" onClick={() => { onChange(sel); onClose(); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>OK</button>
+          <button type="button" onClick={() => { onChange(sel); onClose(); }} style={{ flex: 1, padding: 9, borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>OK</button>
         </div>
       </div>
     </div>
@@ -2691,8 +2659,8 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
 
   const border = "1px solid var(--color-border)";
   const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)", position: "relative", transition: "background 0.12s" };
-  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#555" };
-  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer", colorScheme: "dark" as any };
+  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-kbd-text)" };
+  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "var(--color-input-bg)", border: "1px solid var(--color-input-border)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer",  };
 
   function handleConfirm() {
     const fd = new FormData();
@@ -2713,21 +2681,21 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-overlay-heavy)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       {showMinutePicker && <MinutePicker value={minute} max={halfDuration * 2} onChange={v => setMinute(v)} onClose={() => setShowMinutePicker(false)} />}
-      <div style={{ width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
+      <div style={{ width: "100%", maxWidth: 420, borderRadius: 14, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-popup-bg)", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", maxHeight: "90vh" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border, flexShrink: 0 }}>
           <ActionIcon actionType={actionType} goalType={undefined} size={20} />
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>{ACTION_LABELS[actionType] ?? actionType}</span>
-          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)", overflowY: "auto", flex: 1 }}>
           {/* Aviso: formações não salvas */}
           {needsAthlete && !hasAnyLineup && (
-            <div style={{ padding: "8px 14px", backgroundColor: "rgba(242,192,5,0.07)", borderBottom: "1px solid rgba(242,192,5,0.12)", display: "flex", alignItems: "center", gap: 8 }}>
-              <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M6 1L1 10h10L6 1z" stroke="#F2C005" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6 5v2.5M6 9v.5" stroke="#F2C005" strokeWidth="1.3" strokeLinecap="round"/></svg>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#F2C005" }}>
+            <div style={{ padding: "8px 14px", backgroundColor: "var(--color-warning-selected-bg)", borderBottom: "1px solid var(--color-warning-filter-bg)", display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="13" height="13" viewBox="0 0 12 12" fill="none"><path d="M6 1L1 10h10L6 1z" stroke="var(--color-warning)" strokeWidth="1.2" strokeLinejoin="round"/><path d="M6 5v2.5M6 9v.5" stroke="var(--color-warning)" strokeWidth="1.3" strokeLinecap="round"/></svg>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-warning)" }}>
                 Formações não salvas — exibindo todos os inscritos
               </span>
             </div>
@@ -2736,9 +2704,9 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
             <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 10, padding: "12px 14px" }}>
               {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
                 <div key={id} onClick={() => { setTeamId(id); setAthleteId(""); setAssistId(""); }}
-                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "12px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: teamId === id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                  style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "12px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "var(--color-brand-border)" : "var(--color-hover-bg)"}`, backgroundColor: teamId === id ? "var(--color-brand-hover-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.12s" }}>
                   <div style={{ width: 36, height: 36, borderRadius: 8, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.06)", borderRadius: 8 }} />}
+                    {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "var(--color-divider-strong)", borderRadius: 8 }} />}
                   </div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: teamId === id ? "var(--color-brand)" : "var(--color-text-secondary)", textAlign: "center" }}>
                     {team?.short_name ?? team?.full_name ?? "—"}
@@ -2752,7 +2720,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
               <span style={labelStyle}>Minuto</span>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: "var(--color-brand)" }}>{minute}'</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#555", padding: "3px 8px", borderRadius: 4, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-kbd-text)", padding: "3px 8px", borderRadius: 4, backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-divider-strong)" }}>
                   {period === "first" ? "1º Tempo" : "2º Tempo"}
                 </span>
               </div>
@@ -2764,7 +2732,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
                 {[{ value: "normal", label: "Normal" }, { value: "penalty", label: "Pênalti" }, { value: "shootout", label: "Shoot-out" }, { value: "own_goal", label: "Gol contra" }].map(opt => (
                   <button key={opt.value} type="button" onClick={() => { setGoalType(opt.value); setAthleteId(""); }}
-                    style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${goalType === opt.value ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: goalType === opt.value ? "rgba(191,242,5,0.08)" : "rgba(255,255,255,0.03)", color: goalType === opt.value ? "var(--color-brand)" : "#777", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                    style={{ padding: "6px 12px", borderRadius: 7, border: `1px solid ${goalType === opt.value ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: goalType === opt.value ? "var(--color-brand-selected-bg)" : "var(--color-divider-faint)", color: goalType === opt.value ? "var(--color-brand)" : "var(--color-inactive-label)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                     {opt.label}
                   </button>
                 ))}
@@ -2785,9 +2753,9 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
                     padding: "5px 14px", borderRadius: 7, cursor: "pointer",
                     fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
                     transition: "all 0.12s",
-                    border: `1px solid ${targetType === opt.value ? "rgba(191,242,5,0.45)" : "rgba(255,255,255,0.08)"}`,
-                    backgroundColor: targetType === opt.value ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.03)",
-                    color: targetType === opt.value ? "var(--color-brand)" : "#777",
+                    border: `1px solid ${targetType === opt.value ? "var(--color-brand-glow-strong)" : "var(--color-input-border)"}`,
+                    backgroundColor: targetType === opt.value ? "var(--color-brand-muted-bg)" : "var(--color-divider-faint)",
+                    color: targetType === opt.value ? "var(--color-brand)" : "var(--color-inactive-label)",
                   }}>
                   {opt.label}
                 </button>
@@ -2819,7 +2787,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
                   .sort((a, b) => (a.surname ?? a.full_name).localeCompare(b.surname ?? b.full_name))
                   .map((s) => ({ value: s.id, label: s.surname ?? s.full_name }))} />
               {presentStaff.length === 0 && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "#555", marginTop: 4 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-kbd-text)", marginTop: 4 }}>
                   {hasAnyStaffLineup ? "Nenhum membro presente nesta partida." : "Formações da comissão não salvas."}
                 </p>
               )}
@@ -2869,7 +2837,7 @@ function ActionModal({ actionType, preselectedTeamId, match, getAthletes, getSta
         </div>
         <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border, flexShrink: 0 }}>
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
-          <button type="button" onClick={() => { handleConfirm(); onClose(); }} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
+          <button type="button" onClick={() => { handleConfirm(); onClose(); }} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
         </div>
       </div>
     </div>
@@ -2909,8 +2877,8 @@ function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShoot
   const goalkeepersForSelect = markedGoalkeepers.length > 0 ? markedGoalkeepers : presentOpposingAthletes;
   const border = "1px solid var(--color-border)";
   const fieldStyle: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 4, padding: "10px 14px", backgroundColor: "var(--color-surface)" };
-  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "#555" };
-  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer", colorScheme: "dark" as any };
+  const labelStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-kbd-text)" };
+  const selectStyle: React.CSSProperties = { fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 600, color: "var(--color-text-primary)", background: "var(--color-input-bg)", border: "1px solid var(--color-input-border)", borderRadius: 8, outline: "none", width: "100%", padding: "8px 12px", cursor: "pointer",  };
   const teamA = match.teams_a; const teamB = match.teams_b;
 
   function handleConfirm() {
@@ -2926,22 +2894,22 @@ function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShoot
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.7)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+    <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-overlay-heavy)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: "100%", maxWidth: 400, borderRadius: 14, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#181818", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}>
+      <div style={{ width: "100%", maxWidth: 400, borderRadius: 14, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-popup-bg)", overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,0.7)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 18px", borderBottom: border }}>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", flex: 1 }}>
             {editingShootout ? "Editar cobrança" : `Adicionar ${shootoutType === "penalties" ? "Pênalti" : "Shoot-out"}`}
           </span>
-          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+          <button type="button" onClick={onClose} style={{ width: 26, height: 26, borderRadius: 6, border, background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 1, backgroundColor: "var(--color-border)" }}>
           <div style={{ ...fieldStyle, flexDirection: "row" as const, gap: 10, padding: "12px 14px" }}>
             {[{ id: match.team_a_id, team: teamA }, { id: match.team_b_id, team: teamB }].map(({ id, team }) => (
               <div key={id} onClick={() => { setTeamId(id); setAthleteId(""); }}
-                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: teamId === id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${teamId === id ? "var(--color-brand-border)" : "var(--color-hover-bg)"}`, backgroundColor: teamId === id ? "var(--color-brand-hover-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.12s" }}>
                 <div style={{ width: 32, height: 32, borderRadius: 7, overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "rgba(255,255,255,0.06)", borderRadius: 7 }} />}
+                  {team?.logo_url ? <img src={team.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <div style={{ width: "100%", height: "100%", background: "var(--color-divider-strong)", borderRadius: 7 }} />}
                 </div>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: teamId === id ? "var(--color-brand)" : "var(--color-text-secondary)", textAlign: "center" }}>
                   {team?.short_name ?? team?.full_name ?? "—"}
@@ -2954,7 +2922,7 @@ function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShoot
             <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" as const }}>
               {[{ v: "goal", l: "✓ Convertido" }, { v: "goalkeeper_save", l: "Defesa" }, { v: "off_target", l: "Para fora" }, { v: "post", l: "Na trave" }].map(opt => (
                 <button key={opt.v} type="button" onClick={() => setResult(opt.v)}
-                  style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${result === opt.v ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: result === opt.v ? "rgba(191,242,5,0.08)" : "rgba(255,255,255,0.03)", color: result === opt.v ? "var(--color-brand)" : "#777", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const }}>
+                  style={{ padding: "6px 10px", borderRadius: 7, border: `1px solid ${result === opt.v ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: result === opt.v ? "var(--color-brand-selected-bg)" : "var(--color-divider-faint)", color: result === opt.v ? "var(--color-brand)" : "var(--color-inactive-label)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" as const }}>
                   {opt.l}
                 </button>
               ))}
@@ -2981,7 +2949,7 @@ function ShootoutModal({ match, shootoutType, getAthletes, lineups, editingShoot
         </div>
         <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: border }}>
           <button type="button" onClick={onClose} style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
-          <button type="button" onClick={handleConfirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
+          <button type="button" onClick={handleConfirm} style={{ flex: 1, padding: 10, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Confirmar</button>
         </div>
       </div>
     </div>
@@ -3101,13 +3069,13 @@ function PosJogoTab({
       if (type === "goal") {
         const gt = action.goal_type ?? "normal";
         return (
-          <span style={{ color: "rgba(255,255,255,0.6)", display: "flex" }}>
+          <span style={{ color: "var(--color-text-label)", display: "flex" }}>
             <ActionIcon actionType="goal" goalType={gt} size={18} />
           </span>
         );
       }
       return (
-        <span style={{ color: "rgba(255,255,255,0.55)", display: "flex" }}>
+        <span style={{ color: "var(--color-text-subtle)", display: "flex" }}>
           <ActionIcon actionType={type} goalType="normal" size={18} />
         </span>
       );
@@ -3118,7 +3086,7 @@ function PosJogoTab({
       if (isGoal) {
         if (!assistName) return null;
         return (
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.38)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-dim)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             Assist. {assistName}
           </p>
         );
@@ -3127,7 +3095,7 @@ function PosJogoTab({
         const label = MISS_RESULTS[action.miss_result] ?? null;
         if (!label) return null;
         return (
-          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.38)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-dim)", margin: 0, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {label}
           </p>
         );
@@ -3147,11 +3115,11 @@ function PosJogoTab({
             <EventIcon />
           </div>
 
-          {/* Placar — só em gols, sempre #BFF205 */}
+          {/* Placar — só em gols, usa brand */}
           {isGoal && scoreLabel && (
             <span style={{
               fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 900,
-              color: "#BFF205", flexShrink: 0, lineHeight: 1, letterSpacing: "0.02em",
+              color: "var(--color-brand)", flexShrink: 0, lineHeight: 1, letterSpacing: "0.02em",
             }}>
               {scoreLabel}
             </span>
@@ -3176,8 +3144,8 @@ function PosJogoTab({
             onClick={e => { e.stopPropagation(); handleDelete(action.id, action.action_type, action.is_own_goal, action.team_id); }}
             className="tl-del-btn"
             style={{
-              width: 20, height: 20, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)",
-              background: "none", color: "#FF4444", cursor: "pointer", fontSize: 14,
+              width: 20, height: 20, borderRadius: 4, border: "1px solid var(--color-danger-muted-border)",
+              background: "none", color: "var(--color-danger)", cursor: "pointer", fontSize: 14,
               display: "flex", alignItems: "center", justifyContent: "center",
               flexShrink: 0, opacity: 0, transition: "opacity 0.15s",
             }}
@@ -3188,7 +3156,7 @@ function PosJogoTab({
 
     return (
       <div
-        style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 48px 1fr" : "1fr 64px 1fr", alignItems: "center", minHeight: 46, borderBottom: "1px solid rgba(255,255,255,0.03)" }}
+        style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 48px 1fr" : "1fr 64px 1fr", alignItems: "center", minHeight: 46, borderBottom: "1px solid var(--color-divider-faint)" }}
         onMouseEnter={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "1")}
         onMouseLeave={e => e.currentTarget.querySelectorAll<HTMLElement>(".tl-del-btn").forEach(b => b.style.opacity = "0")}
       >
@@ -3198,7 +3166,7 @@ function PosJogoTab({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
         <span style={{
             fontFamily: "var(--font-mono)", fontSize: isMobile ? 13 : 18, fontWeight: 800,
-            color: "rgba(255,255,255,0.45)", letterSpacing: "0.01em", lineHeight: 1,
+            color: "var(--color-text-muted)", letterSpacing: "0.01em", lineHeight: 1,
           }}>
             {action.minute ? `${action.minute}'` : "—"}
           </span>
@@ -3228,13 +3196,13 @@ function PosJogoTab({
       return (
         <div style={{
           width: 26, height: 26, borderRadius: 6,
-          backgroundColor: isGoal ? "rgba(191,242,5,0.1)" : "rgba(255,68,68,0.08)",
-          border: `1px solid ${isGoal ? "rgba(191,242,5,0.2)" : "rgba(255,68,68,0.18)"}`,
+          backgroundColor: isGoal ? "var(--color-brand-muted-bg)" : "var(--color-danger-goal-bg)",
+          border: `1px solid ${isGoal ? "var(--color-brand-border-light)" : "var(--color-danger-goal-border)"}`,
           display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
         }}>
           {isGoal
-            ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="#FF4444" strokeWidth="1.8" strokeLinecap="round"/></svg>
+            ? <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            : <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M3 3l6 6M9 3l-6 6" stroke="var(--color-danger)" strokeWidth="1.8" strokeLinecap="round"/></svg>
           }
         </div>
       );
@@ -3256,7 +3224,7 @@ function PosJogoTab({
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 800, color: totalA > totalB ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{totalA}</span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: "#2a2a2a" }}>–</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, color: "var(--color-text-muted)" }}>–</span>
             <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 800, color: totalB > totalA ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{totalB}</span>
           </div>
           <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8 }}>
@@ -3276,7 +3244,7 @@ function PosJogoTab({
               <div key={i} style={{
                 display: "grid", gridTemplateColumns: "1fr 64px 1fr",
                 alignItems: "center", minHeight: 40,
-                borderBottom: i < maxKicks - 1 ? "1px solid rgba(255,255,255,0.03)" : "none",
+                borderBottom: i < maxKicks - 1 ? "1px solid var(--color-divider-faint)" : "none",
               }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px 6px 0" }}>
                 {kA && (
@@ -3286,22 +3254,22 @@ function PosJogoTab({
                         {kA.athlete?.surname ?? kA.athlete?.full_name ?? "—"}
                       </span>
                       <button type="button" onClick={() => { setEditingShootout(kA); setOpenShootoutModal(true); }}
-                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-text-faint)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
                       <button type="button" onClick={() => handleDeleteShootout(kA.id)}
-                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "#FF4444", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid var(--color-danger-muted-border)", background: "none", color: "var(--color-danger)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
                     </>
                   )}
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "#2a2a2a" }}>{i + 1}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-muted)" }}>{i + 1}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 8, padding: "6px 0 6px 8px" }}>
                 {kB && (
                     <>
                       <button type="button" onClick={() => handleDeleteShootout(kB.id)}
-                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,68,68,0.2)", background: "none", color: "#FF4444", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid var(--color-danger-muted-border)", background: "none", color: "var(--color-danger)", cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
                       <button type="button" onClick={() => { setEditingShootout(kB); setOpenShootoutModal(true); }}
-                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
+                        style={{ width: 22, height: 22, borderRadius: 4, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-text-faint)", cursor: "pointer", fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✎</button>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-secondary)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "right" }}>
                         {kB.athlete?.surname ?? kB.athlete?.full_name ?? "—"}
                       </span>
@@ -3317,13 +3285,13 @@ function PosJogoTab({
         <button type="button" onClick={() => setOpenShootoutModal(true)}
           style={{
             width: "100%", marginTop: 8, padding: "12px",
-            border: "1px dashed rgba(255,255,255,0.08)", borderRadius: 10,
+            border: "1px dashed var(--color-input-border)", borderRadius: 10,
             background: "none", color: "#444", fontFamily: "var(--font-mono)",
             fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
             cursor: "pointer", transition: "all 0.15s",
           }}
-          onMouseEnter={e => { e.currentTarget.style.color = "var(--color-brand)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}
-          onMouseLeave={e => { e.currentTarget.style.color = "#444"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}
+          onMouseEnter={e => { e.currentTarget.style.color = "var(--color-brand)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}
+          onMouseLeave={e => { e.currentTarget.style.color = "#444"; e.currentTarget.style.borderColor = "var(--color-input-border)"; }}
         >+ Adicionar cobrança</button>
       </div>
     );
@@ -3335,30 +3303,30 @@ function PosJogoTab({
 
       {/* ── Modal encerramento ── */}
       {showEndModal && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.78)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-modal-scrim)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowEndModal(false); }}>
-          <div style={{ width: "100%", maxWidth: 400, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#111", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+          <div style={{ width: "100%", maxWidth: 400, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: border }}>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Encerrar partida</span>
-              <button type="button" onClick={() => setShowEndModal(false)} style={{ width: 28, height: 28, borderRadius: 7, border, background: "none", color: "#555", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              <button type="button" onClick={() => setShowEndModal(false)} style={{ width: 28, height: 28, borderRadius: 7, border, background: "none", color: "var(--color-kbd-text)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
             </div>
             <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 8 }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>Tipo de encerramento</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-text-faint)", marginBottom: 4 }}>Tipo de encerramento</p>
               {[{ v: "normal", l: "Normal" }, { v: "penalties", l: "Pênaltis" }, { v: "shootouts", l: "Shoot-outs" }, { v: "walkover", l: "W.O." }, { v: "postponed", l: "Adiada" }].map(opt => (
                 <div key={opt.v} onClick={() => setEndFinishType(opt.v)}
-                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 9, border: `1px solid ${endFinishType === opt.v ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: endFinishType === opt.v ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.12s" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 9, border: `1px solid ${endFinishType === opt.v ? "var(--color-brand-border)" : "var(--color-hover-bg)"}`, backgroundColor: endFinishType === opt.v ? "var(--color-brand-hover-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.12s" }}>
                   <div style={{ width: 14, height: 14, borderRadius: "50%", border: `1.5px solid ${endFinishType === opt.v ? "var(--color-brand)" : "#333"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     {endFinishType === opt.v && <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--color-brand)" }} />}
                   </div>
                   <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: endFinishType === opt.v ? "var(--color-text-primary)" : "#555" }}>{opt.l}</span>
                 </div>
               ))}
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginTop: 8, marginBottom: 4 }}>Vencedor agregado (opcional)</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-text-faint)", marginTop: 8, marginBottom: 4 }}>Vencedor agregado (opcional)</p>
               <div style={{ display: "flex", gap: 8 }}>
                 {[{ id: "", label: "Empate", logo: null }, { id: match.team_a_id, label: teamA?.short_name ?? "A", logo: teamA?.logo_url }, { id: match.team_b_id, label: teamB?.short_name ?? "B", logo: teamB?.logo_url }].map(opt => (
                   <div key={opt.id} onClick={() => setEndAggregateWinnerId(opt.id)}
-                    style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${endAggregateWinnerId === opt.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.07)"}`, backgroundColor: endAggregateWinnerId === opt.id ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)", cursor: "pointer" }}>
-                    {opt.logo ? <img src={opt.logo} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} /> : <div style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 10, color: "#333" }}>—</span></div>}
+                    style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "10px 8px", borderRadius: 10, border: `1px solid ${endAggregateWinnerId === opt.id ? "var(--color-brand-border)" : "var(--color-hover-bg)"}`, backgroundColor: endAggregateWinnerId === opt.id ? "var(--color-brand-hover-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer" }}>
+                    {opt.logo ? <img src={opt.logo} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} /> : <div style={{ width: 26, height: 26, borderRadius: 6, backgroundColor: "var(--color-hover-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontSize: 10, color: "var(--color-kbd-muted)" }}>—</span></div>}
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: endAggregateWinnerId === opt.id ? "var(--color-brand)" : "#444", textAlign: "center" }}>{opt.label}</span>
                   </div>
                 ))}
@@ -3367,7 +3335,7 @@ function PosJogoTab({
             <div style={{ display: "flex", gap: 8, padding: "14px 20px", borderTop: border }}>
               <button type="button" onClick={() => setShowEndModal(false)} style={{ flex: 1, padding: 11, borderRadius: 9, border, background: "none", color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>Cancelar</button>
               <button type="button" onClick={handleEncerrar} disabled={savingEnd || !endFinishType}
-                style={{ flex: 2, padding: 11, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: savingEnd || !endFinishType ? 0.45 : 1 }}>
+                style={{ flex: 2, padding: 11, borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", opacity: savingEnd || !endFinishType ? 0.45 : 1 }}>
                 {savingEnd ? "Salvando…" : "Confirmar"}
               </button>
             </div>
@@ -3415,15 +3383,15 @@ function PosJogoTab({
           backgroundColor: "var(--color-surface)", cursor: "pointer",
           marginBottom: 10, transition: "border-color 0.15s",
         }}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)")}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-field-line)")}
         onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
       >
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)" }}>Status da partida</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--color-text-muted)" }}>Status da partida</span>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: finishType ? "var(--color-brand)" : "rgba(255,255,255,0.2)" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: finishType ? "var(--color-brand)" : "var(--color-text-ghost)" }}>
             {finishType ? FINISH_TYPE_LABELS[finishType] ?? finishType : "Definir encerramento"}
           </span>
-          <span style={{ color: "rgba(255,255,255,0.15)", fontSize: 16, lineHeight: 1 }}>›</span>
+          <span style={{ color: "var(--color-dashed-border)", fontSize: 16, lineHeight: 1 }}>›</span>
         </div>
       </div>
 
@@ -3446,14 +3414,14 @@ function PosJogoTab({
         )}
         {/* Time A */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px" }}>
-          {teamA?.logo_url ? <img src={teamA.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)" }} />}
+          {teamA?.logo_url ? <img src={teamA.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "var(--color-hover-bg)" }} />}
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: winnerSide === "a" ? "var(--color-text-primary)" : "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
             {teamA?.short_name ?? teamA?.full_name ?? "—"}
           </span>
           <button type="button" onClick={() => setOpenGoalTeam(match.team_a_id)}
-            style={{ marginLeft: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#444"; }}>+</button>
+            style={{ marginLeft: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-hover-bg)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-muted-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; e.currentTarget.style.borderColor = "var(--color-hover-bg)"; e.currentTarget.style.color = "#444"; }}>+</button>
         </div>
         {/* Placar */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 22px" }}>
@@ -3464,13 +3432,13 @@ function PosJogoTab({
         {/* Time B */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "14px 16px" }}>
           <button type="button" onClick={() => setOpenGoalTeam(match.team_b_id)}
-            style={{ marginRight: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.1)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.color = "#444"; }}>+</button>
+            style={{ marginRight: 2, width: 28, height: 28, borderRadius: 7, backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-hover-bg)", cursor: "pointer", fontSize: 18, color: "#444", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-muted-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; e.currentTarget.style.borderColor = "var(--color-hover-bg)"; e.currentTarget.style.color = "#444"; }}>+</button>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: winnerSide === "b" ? "var(--color-text-primary)" : "var(--color-text-secondary)", letterSpacing: "0.04em", textTransform: "uppercase" }}>
             {teamB?.short_name ?? teamB?.full_name ?? "—"}
           </span>
-          {teamB?.logo_url ? <img src={teamB.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "rgba(255,255,255,0.05)" }} />}
+          {teamB?.logo_url ? <img src={teamB.logo_url} alt="" style={{ width: 30, height: 30, objectFit: "contain" }} /> : <div style={{ width: 30, height: 30, borderRadius: 7, backgroundColor: "var(--color-hover-bg)" }} />}
         </div>
       </div>
 
@@ -3482,8 +3450,8 @@ function PosJogoTab({
             <button key={p} type="button" onClick={() => setActivePeriod(p)}
               style={{
                 padding: "9px 0", border: "none",
-                backgroundColor: activePeriod === p ? "rgba(191,242,5,0.05)" : "transparent",
-                color: activePeriod === p ? "var(--color-brand)" : "rgba(255,255,255,0.25)",
+                backgroundColor: activePeriod === p ? "var(--color-brand-hover-bg)" : "transparent",
+                color: activePeriod === p ? "var(--color-brand)" : "var(--color-field-line-strong)",
                 fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
                 letterSpacing: "0.12em", textTransform: "uppercase",
                 cursor: "pointer", borderRight: p === "first" ? border : "none",
@@ -3508,20 +3476,20 @@ function PosJogoTab({
                 borderLeft: align === "right" ? border : "none",
               }}>
                 <button type="button" onClick={() => handleChangeFouls(teamId, -1)}
-                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid var(--color-input-border)", background: "var(--color-divider-faint)", cursor: "pointer", color: "var(--color-text-faint)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-text-ghost)"; e.currentTarget.style.color = "var(--color-text-label)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-field-avatar-border)"; }}
                 >−</button>
                 <div style={{ textAlign: "center", minWidth: 44 }}>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 34, fontWeight: 900, lineHeight: 1, color: isDanger ? "#FF4444" : "var(--color-text-primary)", transition: "color 0.2s", display: "block" }}>{fouls}</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: isDanger ? "rgba(255,68,68,0.6)" : "rgba(255,255,255,0.2)", marginTop: 2, display: "block" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 34, fontWeight: 900, lineHeight: 1, color: isDanger ? "var(--color-danger)" : "var(--color-text-primary)", transition: "color 0.2s", display: "block" }}>{fouls}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: isDanger ? "var(--color-danger-text-soft)" : "var(--color-text-ghost)", marginTop: 2, display: "block" }}>
                     {isDanger ? "5ª FALTA" : "Faltas"}
                   </span>
                 </div>
                 <button type="button" onClick={() => handleChangeFouls(teamId, 1)}
-                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", cursor: "pointer", color: "rgba(255,255,255,0.3)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; e.currentTarget.style.color = "rgba(255,255,255,0.6)"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.3)"; }}
+                  style={{ width: 30, height: 30, borderRadius: 7, border: "1px solid var(--color-input-border)", background: "var(--color-divider-faint)", cursor: "pointer", color: "var(--color-text-faint)", fontFamily: "var(--font-mono)", fontSize: 18, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-text-ghost)"; e.currentTarget.style.color = "var(--color-text-label)"; }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-field-avatar-border)"; }}
                 >+</button>
               </div>
             );
@@ -3544,17 +3512,17 @@ function PosJogoTab({
             style={{
               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
               gap: 10, padding: "16px 8px", borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.07)",
+              border: "1px solid var(--color-hover-bg)",
               backgroundColor: "var(--color-surface)", cursor: "pointer", transition: "all 0.15s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.14)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-surface)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.transform = "translateY(0)"; }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; e.currentTarget.style.borderColor = "var(--color-border-hover-mid)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-surface)"; e.currentTarget.style.borderColor = "var(--color-hover-bg)"; e.currentTarget.style.transform = "translateY(0)"; }}
           >
             <ActionIcon actionType={type} size={28} />
             <span style={{
               fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800,
               letterSpacing: "0.08em", textTransform: "uppercase",
-              color: "rgba(255,255,255,0.4)",
+              color: "var(--color-icon-muted)",
               textAlign: "center", lineHeight: 1.4,
             }}>{label}</span>
           </button>
@@ -3573,7 +3541,7 @@ function PosJogoTab({
                 padding: "10px 20px", border: "none",
                 borderBottom: `2px solid ${activeShootoutTab === tab.key ? "var(--color-brand)" : "transparent"}`,
                 backgroundColor: "transparent",
-                color: activeShootoutTab === tab.key ? "var(--color-brand)" : "rgba(255,255,255,0.25)",
+                color: activeShootoutTab === tab.key ? "var(--color-brand)" : "var(--color-field-line-strong)",
                 fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
                 letterSpacing: "0.12em", textTransform: "uppercase",
                 cursor: "pointer", transition: "color 0.12s", marginBottom: -1,
@@ -3589,8 +3557,8 @@ function PosJogoTab({
         <div>
           {actions.length === 0 ? (
             <div style={{ padding: "64px 0", textAlign: "center" }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.12)" }}>Sem ações registradas</p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)", marginTop: 8 }}>Use os botões acima para registrar eventos da partida.</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--color-dashed-border)" }}>Sem ações registradas</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-dashed-border)", marginTop: 8 }}>Use os botões acima para registrar eventos da partida.</p>
             </div>
           ) : (
             <>
@@ -3598,11 +3566,11 @@ function PosJogoTab({
                 <div style={{ marginBottom: 4 }}>
                   {/* Separador 2º tempo */}
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 48px 1fr" : "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
-                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ height: 1, backgroundColor: "var(--color-brand-border)" }} />
                     <div style={{ textAlign: "center" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#BFF205" }}>2º T</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-brand)" }}>2º T</span>
                     </div>
-                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ height: 1, backgroundColor: "var(--color-brand-border)" }} />
                   </div>
                   {secondHalf.map((a: any) => <TimelineRow key={a.id} action={a} scoreLabel={actionsWithScore[a.id]} />)}
                 </div>
@@ -3611,11 +3579,11 @@ function PosJogoTab({
                 <div style={{ marginTop: secondHalf.length > 0 ? 16 : 0 }}>
                   {/* Separador 1º tempo */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 64px 1fr", marginBottom: 8, alignItems: "center" }}>
-                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ height: 1, backgroundColor: "var(--color-brand-border)" }} />
                     <div style={{ textAlign: "center" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "#BFF205" }}>1º T</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--color-brand)" }}>1º T</span>
                     </div>
-                    <div style={{ height: 1, backgroundColor: "rgba(191,242,5,0.25)" }} />
+                    <div style={{ height: 1, backgroundColor: "var(--color-brand-border)" }} />
                   </div>
                   {firstHalf.map((a: any) => <TimelineRow key={a.id} action={a} scoreLabel={actionsWithScore[a.id]} />)}
                 </div>
@@ -3630,19 +3598,19 @@ function PosJogoTab({
 
       {/* ══ MODAL PÓS-PUBLICAÇÃO ══ */}
       {showPublishModal && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.78)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "var(--color-modal-scrim)", zIndex: 60, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowPublishModal(false); }}>
-          <div style={{ width: "100%", maxWidth: 380, borderRadius: 16, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "#111", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+          <div style={{ width: "100%", maxWidth: 380, borderRadius: 16, border: "1px solid var(--color-brand-border-medium)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)" }}>
             <div style={{ padding: "28px 24px 20px", textAlign: "center" }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", backgroundColor: "rgba(191,242,5,0.1)", border: "1px solid rgba(191,242,5,0.25)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", backgroundColor: "var(--color-brand-muted-bg)", border: "1px solid var(--color-brand-border-medium)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                  <path d="M4 11l5 5 9-9" stroke="#BFF205" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M4 11l5 5 9-9" stroke="var(--color-brand)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.04em", marginBottom: 10 }}>
                 Resultado publicado!
               </p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.45)", lineHeight: 1.7, marginBottom: 4 }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-muted)", lineHeight: 1.7, marginBottom: 4 }}>
                 As estatísticas foram atualizadas.
               </p>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-brand)", lineHeight: 1.6 }}>
@@ -3651,11 +3619,11 @@ function PosJogoTab({
             </div>
             <div style={{ padding: "0 24px 24px" }}>
               <button type="button" onClick={() => { setShowPublishModal(false); setShowEndModal(true); }}
-                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", marginBottom: 8 }}>
+                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", cursor: "pointer", marginBottom: 8 }}>
                 Atualizar status agora
               </button>
               <button type="button" onClick={() => setShowPublishModal(false)}
-                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent", color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
+                style={{ width: "100%", padding: "11px", borderRadius: 9, border: "1px solid var(--color-input-border)", backgroundColor: "transparent", color: "var(--color-text-muted)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer" }}>
                 Fechar
               </button>
             </div>
@@ -3667,8 +3635,8 @@ function PosJogoTab({
       <div style={{
         position: "fixed", bottom: 0, left: 0, right: 0,
         padding: isMobile ? "12px 16px" : "12px 32px",
-        backgroundColor: "rgba(10,10,10,0.95)",
-        borderTop: "1px solid rgba(255,255,255,0.05)",
+        backgroundColor: "var(--color-bar-bg)",
+        borderTop: "1px solid var(--color-hover-bg)",
         backdropFilter: "blur(12px)",
         display: "flex", alignItems: "center", justifyContent: "flex-end",
         gap: 12, zIndex: 20,

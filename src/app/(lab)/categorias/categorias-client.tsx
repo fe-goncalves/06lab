@@ -1,9 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { criarCategoriaGlobal, editarCategoriaGlobal, deletarCategoriaGlobal } from "./actions";
+import { Check, GripVertical, Pencil, Plus, Tag, Trash2, X } from "lucide-react";
+import {
+  criarCategoriaGlobal,
+  editarCategoriaGlobal,
+  deletarCategoriaGlobal,
+  reordenarCategoriasGlobal,
+} from "./actions";
 import { toast } from "@/app/(lab)/components/toast";
-import { Plus, Pencil, Trash2, Check, X } from "lucide-react";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Category = { id: string; label: string; display_order: number };
 type Props = { categories: Category[] };
@@ -15,17 +21,19 @@ export default function CategoriasClient({ categories: initialCategories }: Prop
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingLabel, setEditingLabel] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const ic = "rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[var(--color-brand)]";
-  const is = { borderColor: "var(--color-border)", backgroundColor: "var(--color-background)", color: "var(--color-text-primary)" };
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [reordering, setReordering] = useState(false);
 
   async function handleAdd() {
     if (!newLabel.trim()) return;
     setAdding(true);
     const result = await criarCategoriaGlobal(newLabel);
     setAdding(false);
-    if ("error" in result) { toast("error", result.error); return; }
-    setCategories(prev => [...prev, { id: result.id, label: newLabel.trim(), display_order: prev.length + 1 }]);
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    setCategories((prev) => [...prev, { id: result.id, label: newLabel.trim(), display_order: prev.length + 1 }]);
     setNewLabel("");
     toast("success", "Categoria criada.");
   }
@@ -33,8 +41,11 @@ export default function CategoriasClient({ categories: initialCategories }: Prop
   async function handleEdit(id: string) {
     if (!editingLabel.trim()) return;
     const result = await editarCategoriaGlobal(id, editingLabel);
-    if ("error" in result) { toast("error", result.error); return; }
-    setCategories(prev => prev.map(c => c.id === id ? { ...c, label: editingLabel.trim() } : c));
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, label: editingLabel.trim() } : c)));
     setEditingId(null);
     toast("success", "Categoria atualizada.");
   }
@@ -44,101 +55,170 @@ export default function CategoriasClient({ categories: initialCategories }: Prop
     setDeletingId(id);
     const result = await deletarCategoriaGlobal(id);
     setDeletingId(null);
-    if ("error" in result) { toast("error", result.error); return; }
-    setCategories(prev => prev.filter(c => c.id !== id));
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    setCategories((prev) => prev.filter((c) => c.id !== id).map((c, i) => ({ ...c, display_order: i + 1 })));
     toast("success", "Categoria removida.");
   }
 
-  return (
-    <div className="max-w-lg">
-      {/* Lista */}
-      <div className="rounded-xl border overflow-hidden mb-4" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        {categories.length === 0 && (
-          <div className="px-5 py-10 text-center">
-            <p className="font-display text-base mb-1" style={{ color: "var(--color-text-primary)" }}>Nenhuma categoria ainda</p>
-            <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-              Adicione categorias como Sub-11, Sub-13, Adulto, etc.
-            </p>
-          </div>
-        )}
-        {categories.map((cat, idx) => (
-          <div key={cat.id}
-            className="group flex items-center gap-3 px-5 py-3"
-            style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
+  function reorderCategories(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return;
+    const from = categories.findIndex((c) => c.id === sourceId);
+    const to = categories.findIndex((c) => c.id === targetId);
+    if (from < 0 || to < 0) return;
 
-            {editingId === cat.id ? (
-              <>
+    const next = [...categories];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    const withOrder = next.map((c, i) => ({ ...c, display_order: i + 1 }));
+    setCategories(withOrder);
+
+    setReordering(true);
+    void (async () => {
+      const result = await reordenarCategoriasGlobal(withOrder.map((c) => c.id));
+      setReordering(false);
+      if ("error" in result) {
+        toast("error", result.error);
+        setCategories(categories);
+      }
+    })();
+  }
+
+  return (
+    <div className={`${styles.entityHub} ${styles.page} ${styles.hubListPage} ${styles.personListHub} ${styles.adminHub}`}>
+      <div className={`${styles.content} ${styles.hubListContent}`}>
+        <main className={styles.hallMain}>
+          <div className={styles.rankingsTitleRow}>
+            <div>
+              <h2 className={styles.hallCategoryTitle}>Categorias</h2>
+              <p className={styles.sectionSubtitle}>
+                Categorias globais da organização · arraste para reordenar
+                {reordering ? " · salvando ordem…" : ""}
+              </p>
+            </div>
+          </div>
+
+          <div className={styles.adminToolbarBlock}>
+            <div className={styles.hubListSearchRow}>
+              <div className={styles.newsSearchWrap}>
+                <Tag size={15} strokeWidth={2} className={styles.newsSearchIcon} aria-hidden />
                 <input
                   type="text"
-                  value={editingLabel}
-                  onChange={e => setEditingLabel(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") handleEdit(cat.id);
-                    if (e.key === "Escape") setEditingId(null);
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleAdd();
                   }}
-                  className={ic + " flex-1"}
-                  style={is}
-                  autoFocus
+                  placeholder="Nova categoria…"
+                  className={styles.newsSearchInput}
+                  aria-label="Nova categoria"
                 />
-                <button type="button" onClick={() => handleEdit(cat.id)}
-                  className="rounded border p-1.5"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
-                  <Check size={13} />
+              </div>
+              <div className={styles.hubListSearchActions}>
+                <button
+                  type="button"
+                  onClick={() => void handleAdd()}
+                  disabled={adding || !newLabel.trim()}
+                  className={styles.saveBtn}
+                >
+                  <Plus size={14} strokeWidth={2.5} />
+                  {adding ? "Adicionando…" : "Adicionar"}
                 </button>
-                <button type="button" onClick={() => setEditingId(null)}
-                  className="rounded border p-1.5"
-                  style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                  <X size={13} />
-                </button>
-              </>
+              </div>
+            </div>
+          </div>
+
+          <div className={`${styles.hubListBare} ${styles.athleteListStack} ${styles.adminListSection}`}>
+            {categories.length === 0 ? (
+              <div className={styles.listPanelEmpty}>
+                <Tag size={32} strokeWidth={1.5} className={styles.newsEmptyIcon} />
+                <p className={styles.listPanelEmptyTitle}>Nenhuma categoria</p>
+                <p className={styles.newsEmptyDesc}>
+                  Adicione categorias para classificar as competições da organização.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded font-mono text-xs font-bold"
-                  style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "var(--color-text-secondary)" }}>
-                  {cat.display_order}
-                </div>
-                <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                  {cat.label}
-                </span>
-                <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button type="button"
-                    onClick={() => { setEditingId(cat.id); setEditingLabel(cat.label); }}
-                    className="rounded border p-1.5"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                    <Pencil size={13} />
-                  </button>
-                  <button type="button"
-                    onClick={() => handleDelete(cat.id)}
-                    disabled={deletingId === cat.id}
-                    className="rounded border p-1.5 disabled:opacity-40"
-                    style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </>
+              categories.map((cat) => {
+                const isDragging = draggingId === cat.id;
+                return (
+                  <div
+                    key={cat.id}
+                    draggable={editingId !== cat.id}
+                    onDragStart={() => setDraggingId(cat.id)}
+                    onDragEnd={() => setDraggingId(null)}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (draggingId) reorderCategories(draggingId, cat.id);
+                      setDraggingId(null);
+                    }}
+                    className={`${styles.athleteListRow} ${isDragging ? styles.hubListRowSelected : ""}`}
+                  >
+                    <div className={styles.athleteListRowInner}>
+                      {editingId === cat.id ? (
+                        <div className={styles.hubEditInline}>
+                          <input
+                            type="text"
+                            value={editingLabel}
+                            onChange={(e) => setEditingLabel(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void handleEdit(cat.id);
+                              if (e.key === "Escape") setEditingId(null);
+                            }}
+                            className={styles.hubEditInlineInput}
+                            autoFocus
+                          />
+                          <button type="button" onClick={() => void handleEdit(cat.id)} className={styles.hubIconActionBtn}>
+                            <Check size={14} strokeWidth={2.5} />
+                          </button>
+                          <button type="button" onClick={() => setEditingId(null)} className={styles.hubIconActionBtn}>
+                            <X size={14} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={styles.athleteListRowLink}>
+                            <span className={styles.hubDragHandle} title="Arrastar para reordenar">
+                              <GripVertical size={16} strokeWidth={2} />
+                            </span>
+                            <span className={styles.hubOrderBadge}>{cat.display_order}</span>
+                            <div className={styles.athleteListDetails}>
+                              <p className={styles.athleteListNickname}>{cat.label.toUpperCase()}</p>
+                            </div>
+                          </div>
+                          <div className={styles.hubRowActionsHover}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingId(cat.id);
+                                setEditingLabel(cat.label);
+                              }}
+                              className={styles.hubIconActionBtn}
+                              aria-label="Editar categoria"
+                            >
+                              <Pencil size={14} strokeWidth={2} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(cat.id)}
+                              disabled={deletingId === cat.id}
+                              className={`${styles.hubIconActionBtn} ${styles.hubIconActionBtnDanger}`}
+                              aria-label="Remover categoria"
+                            >
+                              <Trash2 size={14} strokeWidth={2} />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
-        ))}
-      </div>
-
-      {/* Adicionar */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newLabel}
-          onChange={e => setNewLabel(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") handleAdd(); }}
-          placeholder="Nova categoria (ex: Sub-17, Adulto)"
-          className={ic + " flex-1"}
-          style={is}
-        />
-        <button type="button" onClick={handleAdd}
-          disabled={adding || !newLabel.trim()}
-          className="flex items-center gap-1.5 rounded-lg border px-4 py-2 text-sm font-medium disabled:opacity-40"
-          style={{ borderColor: "var(--color-brand)", color: "var(--color-brand)" }}>
-          <Plus size={14} />
-          {adding ? "…" : "Adicionar"}
-        </button>
+        </main>
       </div>
     </div>
   );

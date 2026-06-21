@@ -13,8 +13,13 @@ import {
 } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
-import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { LabPicker } from "@/app/(lab)/components/lab-picker";
+import { EquipeColorPicker } from "./equipe-color-picker";
+import { EquipeLogoUpload } from "./equipe-logo-upload";
+import { GenderSwitch } from "./gender-switch";
+import { YearRollPicker } from "./year-roll-picker";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
+import styles from "./equipe-hub.module.css";
 
 type TeamRow = Record<string, unknown> & {
   id: string;
@@ -31,10 +36,10 @@ type TeamRow = Record<string, unknown> & {
   home_venue_id: string | null;
   parent_team_id?: string | null;
   is_hidden?: boolean | null;
+  is_virtual?: boolean | null;
 };
 
 type VenueOption = { id: string; full_name: string };
-type TeamOption = { id: string; full_name: string; gender: string | null };
 type Athlete = {
   id: string;
   full_name: string;
@@ -42,6 +47,13 @@ type Athlete = {
   photo_url: string | null;
   position_id: string | null;
   position: { id: string; full_name: string; abbreviation: string; display_order: number } | null;
+};
+type StaffMember = {
+  id: string;
+  full_name: string;
+  surname: string | null;
+  photo_url: string | null;
+  role: { full_name: string } | null;
 };
 type Match = {
   id: string;
@@ -60,7 +72,7 @@ const STATUS_LABEL: Record<string, string> = {
   scheduled: "AG", ongoing: "AO VIVO", finished: "FT", postponed: "AD",
 };
 const STATUS_COLOR: Record<string, string> = {
-  scheduled: "#A6A6A6", ongoing: "#BFF205", finished: "#A6A6A6", postponed: "#FF4444",
+  scheduled: "var(--color-text-secondary)", ongoing: "var(--color-brand)", finished: "var(--color-text-secondary)", postponed: "var(--color-danger)",
 };
 
 function colorInputValue(hex: string | null | undefined): string {
@@ -89,20 +101,22 @@ function genderBadgeLabel(gender: string | null): string {
   return gender;
 }
 
-function genderMatchesForm(form: "male" | "female", db: string | null): boolean {
-  const g = String(db ?? "").toLowerCase();
-  if (form === "male") return g === "male" || g === "m" || g === "masculino";
-  return g === "female" || g === "f" || g === "feminino";
+function displayNickname(surname: string | null, fullName: string): string {
+  return (surname?.trim() || fullName).toUpperCase();
+}
+
+function sortByNickname<T extends { surname: string | null; full_name: string }>(a: T, b: T): number {
+  return displayNickname(a.surname, a.full_name).localeCompare(displayNickname(b.surname, b.full_name), "pt-BR");
 }
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+    <div className={styles.sectionHeader}>
       <div>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
-        {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 1 }}>{subtitle}</p>}
+        <p className={styles.sectionTitle}>{title}</p>
+        {subtitle && <p className={styles.sectionSubtitle}>{subtitle}</p>}
       </div>
-      <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+      <div className={styles.sectionLine} />
     </div>
   );
 }
@@ -118,7 +132,6 @@ export default function EquipeHubPage() {
 
   // Informação
   const [venues, setVenues] = useState<VenueOption[]>([]);
-  const [siblingTeams, setSiblingTeams] = useState<TeamOption[]>([]);
   const [fullName, setFullName] = useState("");
   const [shortName, setShortName] = useState("");
   const [abbreviation, setAbbreviation] = useState("");
@@ -134,10 +147,15 @@ export default function EquipeHubPage() {
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [genderLocked, setGenderLocked] = useState(false);
+  const [isVirtual, setIsVirtual] = useState(false);
 
   // Elenco
   const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loadingAthletes, setLoadingAthletes] = useState(false);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+  const [elencoLoaded, setElencoLoaded] = useState(false);
 
   // Jogos
   const [matches, setMatches] = useState<Match[]>([]);
@@ -155,12 +173,27 @@ export default function EquipeHubPage() {
     if (teamErr || !teamRow) { setLoadError("Equipe não encontrada."); setLoadingData(false); return; }
     const team = teamRow as TeamRow;
     if (team.organization_id !== profile.organization_id) { setLoadError("Equipe não encontrada."); setLoadingData(false); return; }
-    const [{ data: venuesData }, { data: othersData }] = await Promise.all([
-      supabase.from("venues").select("id, full_name").eq("organization_id", profile.organization_id).order("full_name"),
-      supabase.from("teams").select("id, full_name, gender").eq("organization_id", profile.organization_id).neq("id", id).order("full_name"),
+    const { data: venuesData } = await supabase
+      .from("venues")
+      .select("id, full_name")
+      .eq("organization_id", profile.organization_id)
+      .order("full_name");
+    const [
+      { count: athleteStintCount },
+      { count: matchCount },
+      { count: editionCount },
+    ] = await Promise.all([
+      supabase.from("athlete_team_stints").select("id", { count: "exact", head: true }).eq("team_id", id),
+      supabase.from("matches").select("id", { count: "exact", head: true }).or(`team_a_id.eq.${id},team_b_id.eq.${id}`),
+      supabase.from("edition_teams").select("id", { count: "exact", head: true }).eq("team_id", id),
     ]);
+    setGenderLocked(
+      (athleteStintCount ?? 0) > 0
+      || (matchCount ?? 0) > 0
+      || (editionCount ?? 0) > 0,
+    );
+    setIsVirtual(!!team.is_virtual);
     setVenues((venuesData ?? []) as VenueOption[]);
-    setSiblingTeams((othersData ?? []) as TeamOption[]);
     setFullName(team.full_name ?? "");
     setShortName(team.short_name ?? "");
     setAbbreviation(team.abbreviation ?? "");
@@ -179,16 +212,43 @@ export default function EquipeHubPage() {
     setLoadingData(false);
   }, [id, router]);
 
-  async function loadAthletes() {
+  async function loadElenco() {
     setLoadingAthletes(true);
+    setLoadingStaff(true);
     const supabase = createClient();
-    const { data } = await supabase
-      .from("athlete_team_stints")
-      .select("athletes(id, full_name, surname, photo_url, position_id, player_positions(id, full_name, abbreviation, display_order))")
-      .eq("team_id", id).eq("is_current", true);
-    const list = (data ?? []).map((s: any) => ({ ...s.athletes, position: s.athletes?.player_positions ?? null })).filter(Boolean);
-    setAthletes(list);
+    const [{ data: athleteData }, { data: staffData }] = await Promise.all([
+      supabase
+        .from("athlete_team_stints")
+        .select("athletes(id, full_name, surname, photo_url, position_id, player_positions(id, full_name, abbreviation, display_order))")
+        .eq("team_id", id)
+        .eq("is_current", true),
+      supabase
+        .from("staff_team_stints")
+        .select("staff_members(id, full_name, surname, photo_url, staff_roles(full_name))")
+        .eq("team_id", id)
+        .eq("is_current", true),
+    ]);
+    const athleteList = (athleteData ?? [])
+      .map((s: { athletes: Record<string, unknown> | null }) => {
+        const a = s.athletes as (Athlete & { player_positions: Athlete["position"] }) | null;
+        if (!a) return null;
+        return { ...a, position: a.player_positions ?? null };
+      })
+      .filter((a): a is Athlete => a !== null)
+      .sort(sortByNickname);
+    const staffList = (staffData ?? [])
+      .map((s: { staff_members: Record<string, unknown> | null }) => {
+        const m = s.staff_members as (Omit<StaffMember, "role"> & { staff_roles: StaffMember["role"] }) | null;
+        if (!m) return null;
+        return { ...m, role: m.staff_roles ?? null };
+      })
+      .filter((m): m is StaffMember => m !== null)
+      .sort(sortByNickname);
+    setAthletes(athleteList);
+    setStaff(staffList);
     setLoadingAthletes(false);
+    setLoadingStaff(false);
+    setElencoLoaded(true);
   }
 
   async function loadMatches() {
@@ -204,14 +264,10 @@ export default function EquipeHubPage() {
   }
 
   useEffect(() => { void loadTeamAndOptions(); }, [loadTeamAndOptions]);
+  useEffect(() => { setElencoLoaded(false); }, [id]);
   useEffect(() => {
-    if (activeTab === "elenco" && athletes.length === 0) loadAthletes();
-  }, [activeTab]);
-  useEffect(() => {
-    if (!parentTeamId) return;
-    const stillValid = siblingTeams.some(t => t.id === parentTeamId && genderMatchesForm(gender, t.gender));
-    if (!stillValid) setParentTeamId("");
-  }, [gender, parentTeamId, siblingTeams]);
+    if (activeTab === "elenco" && !elencoLoaded) void loadElenco();
+  }, [activeTab, elencoLoaded, id]);
   useEffect(() => { return () => { if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl); }; }, [previewObjectUrl]);
 
   function handleLogoChange(file: File | null) {
@@ -223,7 +279,9 @@ export default function EquipeHubPage() {
   }
 
   async function handleSubmit(ev: FormEvent) {
-    ev.preventDefault(); setSaving(true);
+    ev.preventDefault();
+    if (isVirtual) return;
+    setSaving(true);
     try {
       const fd = new FormData();
       fd.append("full_name", fullName.trim());
@@ -246,135 +304,75 @@ export default function EquipeHubPage() {
   }
 
   const headerLogoSrc = previewObjectUrl ?? displayLogoUrl;
-  const parentOptions = siblingTeams.filter(t => genderMatchesForm(gender, t.gender));
-
-  // Agrupamento por posição
-  const athletesByPosition: Record<string, { posLabel: string; order: number; athletes: Athlete[] }> = {};
-  athletes.forEach(a => {
-    const key = a.position?.id ?? "sem-posicao";
-    const label = a.position?.full_name ?? "Sem posição";
-    const order = a.position?.display_order ?? 99;
-    if (!athletesByPosition[key]) athletesByPosition[key] = { posLabel: label, order, athletes: [] };
-    athletesByPosition[key].athletes.push(a);
-  });
-  const positionGroups = Object.values(athletesByPosition).sort((a, b) => a.order - b.order);
-
-  // Cores para uso no header
-  const teamColor = primaryColor !== "#000000" ? primaryColor : null;
-  const border = "1px solid rgba(255,255,255,0.08)";
-
-  const inputBaseStyle: React.CSSProperties = {
-    width: "100%",
-    padding: "9px 12px",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: 9,
-    fontFamily: "var(--font-mono)",
-    fontSize: 12,
-    color: "var(--color-text-primary)",
-    outline: "none",
-    transition: "border-color 0.15s",
-  };
+  const headerTitle = (shortName.trim() || fullName.trim() || "Equipe").toUpperCase();
+  const headerDetail = abbreviation.trim()
+    ? `${abbreviation.trim().toUpperCase()}  |  ${fullName.trim() || "—"}`
+    : (fullName.trim() || "—");
+  const genderCrumbLabel = genderBadgeLabel(gender);
+  const venueOptions = venues.map((v) => ({ id: v.id, label: v.full_name }));
+  const loadingElenco = loadingAthletes || loadingStaff;
 
   if (loadingData) return (
-    <div style={{ padding: "48px 32px", fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>
+    <div className={`${styles.equipeHub} ${styles.loading}`}>
       Carregando…
     </div>
   );
   if (loadError) return (
-    <div style={{ padding: "48px 32px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)" }}>
+    <div className={`${styles.equipeHub} ${styles.loading}`} style={{ color: "var(--color-text-primary)" }}>
       {loadError}
     </div>
   );
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh", flexDirection: "column", backgroundColor: "var(--color-background)" }}>
+    <div className={`${styles.equipeHub} ${styles.page}`}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <div style={{ borderBottom: "1px solid var(--color-border)", position: "relative", overflow: "hidden" }}>
-        {/* Degradê com a cor do time */}
-        <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          background: teamColor
-            ? `linear-gradient(135deg, ${teamColor}22 0%, transparent 55%)`
-            : `linear-gradient(135deg, rgba(191,242,5,0.06) 0%, transparent 55%)`,
-        }} />
-        <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.85, pointerEvents: "none" }} />
+      <div className={styles.header}>
+        <div className={styles.headerGlow} />
+        <div className={styles.headerSurface} />
 
-        <div style={{ padding: "20px 32px 0", position: "relative", zIndex: 1 }}>
-          <Breadcrumb items={[{ label: "Equipes", href: "/equipes" }, { label: fullName || "Equipe" }]} />
+        <div className={styles.headerInner}>
+          <Breadcrumb items={[
+            { label: "Equipes", href: "/equipes" },
+            { label: genderCrumbLabel },
+            { label: headerTitle },
+          ]} />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            {/* Logo */}
-            <div style={{ position: "relative", flexShrink: 0 }}>
-              <div style={{
-                width: 60, height: 60, borderRadius: 14, overflow: "hidden",
-                border: `2px solid ${teamColor ? teamColor + "55" : "rgba(255,255,255,0.1)"}`,
-                backgroundColor: "rgba(255,255,255,0.04)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                {headerLogoSrc
-                  ? <img src={headerLogoSrc} alt="" style={{ width: 52, height: 52, objectFit: "contain" }} />
-                  : <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800, color: teamColor ?? "#BFF205" }}>
-                      {initialsFromTeam({ abbreviation, full_name: fullName })}
-                    </span>
-                }
-              </div>
-            </div>
-
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Pills de metadados */}
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, flexWrap: "wrap" as const }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.4)", backgroundColor: "rgba(255,255,255,0.04)" }}>
-                  {genderBadgeLabel(gender)}
-                </span>
-                {foundedYear && (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", padding: "2px 8px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.25)" }}>
-                    Est. {foundedYear}
+          <div className={styles.heroRow}>
+            <div className={styles.logoSlot}>
+              {headerLogoSrc
+                ? <img src={headerLogoSrc} alt="" className={styles.logoImg} />
+                : <span className={styles.logoInitials}>
+                    {initialsFromTeam({ abbreviation, full_name: fullName })}
                   </span>
-                )}
-                {/* Swatches de cores */}
-                <div style={{ display: "flex", gap: 4, marginLeft: 4 }}>
-                  {[primaryColor, secondaryColor, tertiaryColor].filter(c => c && c !== "#000000").map((c, i) => (
-                    <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", backgroundColor: c, border: "1px solid rgba(255,255,255,0.15)" }} />
-                  ))}
-                </div>
-              </div>
-
-              {/* Nome */}
-              <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 24, fontWeight: 900, color: "var(--color-text-primary)", letterSpacing: "0.01em", lineHeight: 1.1, margin: 0 }}>
-                {fullName || "Equipe"}
-              </h1>
-              {abbreviation && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: teamColor ?? "rgba(255,255,255,0.3)", marginTop: 2 }}>
-                  {abbreviation}
-                </p>
-              )}
+              }
             </div>
 
-            {/* Botão salvar — só na aba informação */}
-            {activeTab === "informacao" && (
-              <button type="submit" form="form-editar-equipe" disabled={saving}
-                style={{ flexShrink: 0, padding: "9px 22px", borderRadius: 9, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: saving ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, transition: "opacity 0.12s", opacity: saving ? 0.6 : 1 }}>
+            <div className={styles.heroMeta}>
+              <h1 className={styles.title}>{headerTitle}</h1>
+              <p className={styles.headerDetail}>{headerDetail}</p>
+            </div>
+
+            {activeTab === "informacao" && !isVirtual && (
+              <button type="submit" form="form-editar-equipe" disabled={saving} className={styles.saveBtn}>
                 {saving ? "Salvando…" : "Salvar"}
               </button>
             )}
           </div>
 
-          {/* Faixa colorida */}
-          {teamColor && (
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, ${teamColor}80 0%, transparent 60%)`, pointerEvents: "none" }} />
-          )}
+          <div className={styles.stripe} />
 
-          {/* Abas */}
-          <div style={{ display: "flex", gap: 0 }}>
+          <div className={styles.tabBar}>
             {[
               { key: "informacao", label: "INFORMAÇÃO" },
               { key: "elenco", label: "ELENCO" },
             ].map(tab => (
-              <button key={tab.key} type="button"
-                onClick={() => setActiveTab(tab.key as any)}
-                style={{ padding: "11px 18px", border: "none", borderBottom: `2px solid ${activeTab === tab.key ? (teamColor ?? "#BFF205") : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: activeTab === tab.key ? (teamColor ?? "#BFF205") : "#666", cursor: "pointer", transition: "color 0.12s" }}>
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key as "informacao" | "elenco")}
+                className={`${styles.tab} ${activeTab === tab.key ? styles.tabActive : ""}`}
+              >
                 {tab.label}
               </button>
             ))}
@@ -383,239 +381,225 @@ export default function EquipeHubPage() {
       </div>
 
       {/* ── Conteúdo ────────────────────────────────────────────────────── */}
-      <div style={{ flex: 1, padding: "24px 32px" }}>
+      <div className={styles.content}>
 
-        {/* ── ABA INFORMAÇÃO ───────────────────────────────────────────── */}
         {activeTab === "informacao" && (
-          <form id="form-editar-equipe" onSubmit={handleSubmit}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 860 }}>
+          <form id="form-editar-equipe" onSubmit={handleSubmit} className={styles.formWrap}>
+                {isVirtual && (
+                  <div className={styles.virtualNotice} role="status">
+                    <p className={styles.virtualNoticeTitle}>Pool do sistema</p>
+                    <p className={styles.virtualNoticeDesc}>
+                      &quot;Sem Clube&quot; não é uma equipe real — apenas agrupa atletas e comissão sem vínculo.
+                      Os dados não podem ser editados.
+                    </p>
+                  </div>
+                )}
 
-              {/* Card Identidade Visual */}
-              <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-                <SectionHeader title="Identidade visual" />
+                <SectionHeader title="Equipe" subtitle={isVirtual ? "Somente leitura" : "Identidade, dados cadastrais e visibilidade"} />
 
-                {/* Logo cropável */}
-                <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-                  <ImageCropUpload
-                    value={pendingLogoFile}
-                    onChange={handleLogoChange}
-                    existingUrl={displayLogoUrl}
-                    label=""
-                    placeholder="Enviar logo"
-                  />
-                </div>
+                <EquipeLogoUpload
+                  value={pendingLogoFile}
+                  onChange={handleLogoChange}
+                  existingUrl={displayLogoUrl}
+                  disabled={isVirtual}
+                />
 
-                {/* Cores */}
-                <SectionHeader title="Cores do time" />
-                <div style={{ display: "flex", gap: 12 }}>
-                  {([
-                    { label: "Primária", val: primaryColor, set: setPrimaryColor },
-                    { label: "Secundária", val: secondaryColor, set: setSecondaryColor },
-                    { label: "Terciária", val: tertiaryColor, set: setTertiaryColor },
-                  ] as const).map(({ label, val, set }) => (
-                    <label key={label} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                      <div style={{ position: "relative", width: 44, height: 44, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(255,255,255,0.1)", cursor: "pointer" }}>
-                        <input type="color" value={val} onChange={e => set(e.target.value)}
-                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", cursor: "pointer", opacity: 0 }} />
-                        <span style={{ pointerEvents: "none", display: "block", width: "100%", height: "100%", backgroundColor: val }} />
-                      </div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(255,255,255,0.3)", letterSpacing: "0.06em", textTransform: "uppercase" as const }}>{label}</span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: val !== "#000000" ? val : "rgba(255,255,255,0.2)" }}>{val}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Card Dados */}
-              <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "20px 20px 24px" }}>
-                <SectionHeader title="Dados da equipe" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-                  {/* Nome completo */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nome completo *</span>
-                    <input type="text" required value={fullName} onChange={e => setFullName(e.target.value)}
-                      style={inputBaseStyle}
-                      onFocus={e => e.target.style.borderColor = "rgba(191,242,5,0.4)"}
-                      onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
+                <div className={styles.fieldStack}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel} htmlFor="eq-full-name">Nome completo *</label>
+                    <input id="eq-full-name" type="text" required value={fullName} onChange={e => setFullName(e.target.value)} className={styles.input} readOnly={isVirtual} disabled={isVirtual} />
                   </div>
 
-                  {/* Nome curto + Sigla */}
-                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Nome curto</span>
-                      <input type="text" value={shortName} onChange={e => setShortName(e.target.value)}
-                        style={inputBaseStyle}
-                        onFocus={e => e.target.style.borderColor = "rgba(191,242,5,0.4)"}
-                        onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
+                  <div className={styles.fieldRow2}>
+                    <div className={styles.field}>
+                      <label className={styles.fieldLabel} htmlFor="eq-short-name">Nome curto</label>
+                      <input id="eq-short-name" type="text" value={shortName} onChange={e => setShortName(e.target.value)} className={styles.input} readOnly={isVirtual} disabled={isVirtual} />
                     </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Sigla</span>
-                      <input type="text" maxLength={3} value={abbreviation}
+                    <div className={styles.field}>
+                      <label className={styles.fieldLabel} htmlFor="eq-abbr">Sigla</label>
+                      <input id="eq-abbr" type="text" maxLength={3} value={abbreviation}
                         onChange={e => setAbbreviation(e.target.value.slice(0, 3).toUpperCase())}
-                        style={{ ...inputBaseStyle, textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.1em", textAlign: "center" as const }}
-                        onFocus={e => e.target.style.borderColor = "rgba(191,242,5,0.4)"}
-                        onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
+                        className={styles.inputAbbr} readOnly={isVirtual} disabled={isVirtual} />
                     </div>
                   </div>
 
-                  {/* Gênero — pill buttons */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 7 }}>Gênero</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      {(["male", "female"] as const).map(g => (
-                        <button key={g} type="button" onClick={() => setGender(g)}
-                          style={{ flex: 1, padding: "8px 0", borderRadius: 9, border: `1px solid ${gender === g ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: gender === g ? "rgba(191,242,5,0.08)" : "transparent", color: gender === g ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
-                          {g === "male" ? "Masculino" : "Feminino"}
-                        </button>
-                      ))}
-                    </div>
+                  <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Gênero</span>
+                    <GenderSwitch
+                      value={gender}
+                      onChange={setGender}
+                      disabled={isVirtual || genderLocked}
+                      hint={
+                        !isVirtual && genderLocked
+                          ? "Não é possível alterar: existem atletas, jogos ou inscrições em competições vinculados."
+                          : undefined
+                      }
+                    />
                   </div>
 
-                  {/* Ano de fundação + Local */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Fundação</span>
-                      <input type="number" value={foundedYear} onChange={e => setFoundedYear(e.target.value)}
-                        placeholder="—"
-                        style={{ ...inputBaseStyle, textAlign: "center" as const }}
-                        onFocus={e => e.target.style.borderColor = "rgba(191,242,5,0.4)"}
-                        onBlur={e => e.target.style.borderColor = "rgba(255,255,255,0.08)"} />
-                    </div>
-                    <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Estádio / local</span>
-                      <LabSelect
-                        value={homeVenueId}
-                        onChange={setHomeVenueId}
-                        placeholder="—"
-                        options={venues.map((v) => ({ value: v.id, label: v.full_name }))}
+                  <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Cores do time</span>
+                    <div className={styles.colorTiles}>
+                      <EquipeColorPicker
+                        value={primaryColor}
+                        onChange={setPrimaryColor}
+                        ariaLabel="Cor primária"
+                        disabled={isVirtual}
+                      />
+                      <EquipeColorPicker
+                        value={secondaryColor}
+                        onChange={setSecondaryColor}
+                        ariaLabel="Cor secundária"
+                        disabled={isVirtual}
+                      />
+                      <EquipeColorPicker
+                        value={tertiaryColor}
+                        onChange={setTertiaryColor}
+                        ariaLabel="Cor terciária"
+                        disabled={isVirtual}
                       />
                     </div>
                   </div>
 
-                  {/* Time pai */}
-                  <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5 }}>Time pai</span>
-                    <LabSelect
-                      value={parentTeamId}
-                      onChange={setParentTeamId}
-                      placeholder="Nenhum"
-                      options={parentOptions.map((t) => ({ value: t.id, label: t.full_name }))}
-                    />
+                  <div className={styles.fieldRowVenue}>
+                    <div className={styles.field}>
+                      <span className={styles.fieldLabel}>Fundação</span>
+                      <YearRollPicker value={foundedYear} onChange={setFoundedYear} disabled={isVirtual} />
+                    </div>
+                    <div className={styles.field}>
+                      <span className={styles.fieldLabel}>Estádio / local</span>
+                      <div className={styles.glassSelect}>
+                        <LabPicker
+                          options={venueOptions}
+                          value={homeVenueId}
+                          onChange={setHomeVenueId}
+                          placeholder="Selecione o local"
+                          searchPlaceholder="Buscar estádio…"
+                          emptyLabel="—"
+                          allowEmpty
+                          showLogos={false}
+                          disabled={isVirtual}
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Visibilidade pública */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 12px", borderRadius: 9, border, backgroundColor: "rgba(255,255,255,0.02)" }}>
+                  {!isVirtual && (
+                  <div className={styles.toggleRow}>
                     <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-primary)", display: "block" }}>
-                        Ocultar no site público
-                      </span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", display: "block", marginTop: 2 }}>
-                        A equipe não aparecerá no site público
-                      </span>
+                      <span className={styles.toggleTitle}>Ocultar no site público</span>
+                      <span className={styles.toggleDesc}>A equipe não aparecerá no site público</span>
                     </div>
                     <button
                       type="button"
                       role="switch"
                       aria-checked={isHidden}
                       onClick={() => setIsHidden((v) => !v)}
-                      style={{
-                        width: 44,
-                        height: 24,
-                        borderRadius: 999,
-                        border: "none",
-                        padding: 2,
-                        cursor: "pointer",
-                        backgroundColor: isHidden ? "#BFF205" : "rgba(255,255,255,0.12)",
-                        transition: "background-color 0.15s",
-                        flexShrink: 0,
-                      }}
+                      className={isHidden ? styles.switchOn : styles.switchOff}
                     >
-                      <span
-                        style={{
-                          display: "block",
-                          width: 20,
-                          height: 20,
-                          borderRadius: "50%",
-                          backgroundColor: isHidden ? "#0a0a0a" : "#fff",
-                          transform: isHidden ? "translateX(20px)" : "translateX(0)",
-                          transition: "transform 0.15s",
-                        }}
-                      />
+                      <span className={isHidden ? styles.switchThumbOn : styles.switchThumbOff} />
                     </button>
                   </div>
+                  )}
                 </div>
-              </div>
-            </div>
           </form>
         )}
 
-        {/* ── ABA ELENCO ───────────────────────────────────────────────── */}
         {activeTab === "elenco" && (
-          <div style={{ maxWidth: 640 }}>
-            {loadingAthletes ? (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Carregando…</p>
-            ) : athletes.length === 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center" as const }}>
-                <div style={{ width: 56, height: 56, borderRadius: 14, border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                  <span style={{ fontSize: 22 }}>👥</span>
-                </div>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)" }}>Elenco vazio</p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>Nenhum atleta vinculado a esta equipe.</p>
-                <Link href="/atletas" style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#BFF205", marginTop: 16, textDecoration: "none" }}>
+          <div className={styles.elencoWrap}>
+            {loadingElenco ? (
+              <p className={styles.loadingMono}>Carregando…</p>
+            ) : athletes.length === 0 && staff.length === 0 ? (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyIcon}>👥</div>
+                <p className={styles.emptyTitle}>Elenco vazio</p>
+                <p className={styles.emptyDesc}>Nenhum atleta ou membro da comissão vinculado a esta equipe.</p>
+                <Link href="/atletas" className={styles.emptyLink}>
                   Ir para atletas →
                 </Link>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-                {positionGroups.map(group => (
-                  <div key={group.posLabel}>
-                    {/* Header do grupo de posição */}
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: teamColor ?? "#BFF205" }}>
-                        {group.posLabel}
-                      </span>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)" }}>
-                        {group.athletes.length}
-                      </span>
-                      <div style={{ flex: 1, height: 1, background: `linear-gradient(to right, ${teamColor ? teamColor + "40" : "rgba(191,242,5,0.2)"}, transparent)` }} />
-                    </div>
+              <>
+                <div className={styles.elencoSection}>
+                  <div className={styles.elencoSectionTitle}>
+                    <span className={styles.elencoSectionName}>Atletas</span>
+                    <span className={styles.elencoSectionCount}>{athletes.length}</span>
+                    <div className={styles.elencoSectionLine} />
+                  </div>
 
-                    <div style={{ borderRadius: 12, border, backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
-                      {group.athletes.map((athlete, idx) => (
-                        <Link key={athlete.id} href={`/atletas/${athlete.id}`}
-                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", textDecoration: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", transition: "background 0.1s", opacity: 0.85 }}
-                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "rgba(255,255,255,0.03)"; (e.currentTarget as HTMLElement).style.opacity = "1"; }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = "transparent"; (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}>
-
-                          {/* Avatar */}
-                          <div style={{ width: 38, height: 38, borderRadius: "50%", overflow: "hidden", border: `2px solid ${teamColor ? teamColor + "44" : "rgba(191,242,5,0.2)"}`, flexShrink: 0 }}>
+                  {athletes.length === 0 ? (
+                    <p className={styles.emptyDesc}>Nenhum atleta vinculado.</p>
+                  ) : (
+                    <div className={styles.rosterList}>
+                      {athletes.map((athlete) => (
+                        <Link key={athlete.id} href={`/atletas/${athlete.id}`} className={styles.rosterRow}>
+                          <div className={styles.avatar}>
                             {athlete.photo_url
-                              ? <img src={athlete.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                              : <div style={{ width: "100%", height: "100%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.4)" }}>
-                                  {(athlete.surname ?? athlete.full_name).slice(0, 2).toUpperCase()}
+                              ? <img src={athlete.photo_url} alt="" className={styles.avatarImg} />
+                              : (
+                                <div className={styles.avatarFallback}>
+                                  <PersonAvatarPlaceholder fill />
                                 </div>
+                              )
                             }
                           </div>
 
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>
-                              {athlete.surname ?? athlete.full_name}
+                          <div className={styles.rosterInfo}>
+                            <p className={styles.rosterName}>{displayNickname(athlete.surname, athlete.full_name)}</p>
+                            <p className={styles.rosterMeta}>
+                              <span className={styles.rosterMetaPos}>{athlete.position?.full_name ?? "Sem posição"}</span>
+                              <span className={styles.rosterMetaSep}>|</span>
+                              {athlete.full_name}
                             </p>
-                            {athlete.surname && (
-                              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>
-                                {athlete.full_name}
-                              </p>
-                            )}
                           </div>
 
-                          <ChevronRight size={13} style={{ color: "rgba(255,255,255,0.2)", flexShrink: 0 }} />
+                          <ChevronRight size={14} className={styles.rosterChevron} />
                         </Link>
                       ))}
                     </div>
+                  )}
+                </div>
+
+                <div className={styles.elencoSection}>
+                  <div className={styles.elencoSectionTitle}>
+                    <span className={styles.elencoSectionName}>Comissão técnica</span>
+                    <span className={styles.elencoSectionCount}>{staff.length}</span>
+                    <div className={styles.elencoSectionLine} />
                   </div>
-                ))}
-              </div>
+
+                  {staff.length === 0 ? (
+                    <p className={styles.emptyDesc}>Nenhum membro da comissão vinculado.</p>
+                  ) : (
+                    <div className={styles.rosterList}>
+                      {staff.map((member) => (
+                        <Link key={member.id} href={`/comissao/${member.id}`} className={styles.rosterRow}>
+                          <div className={styles.avatar}>
+                            {member.photo_url
+                              ? <img src={member.photo_url} alt="" className={styles.avatarImg} />
+                              : (
+                                <div className={styles.avatarFallback}>
+                                  <PersonAvatarPlaceholder fill />
+                                </div>
+                              )
+                            }
+                          </div>
+
+                          <div className={styles.rosterInfo}>
+                            <p className={styles.rosterName}>{displayNickname(member.surname, member.full_name)}</p>
+                            <p className={styles.rosterMeta}>
+                              <span className={styles.rosterMetaPos}>{member.role?.full_name ?? "Comissão"}</span>
+                              <span className={styles.rosterMetaSep}>|</span>
+                              {member.full_name}
+                            </p>
+                          </div>
+
+                          <ChevronRight size={14} className={styles.rosterChevron} />
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
         )}

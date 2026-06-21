@@ -52,9 +52,9 @@ const KNOCKOUT_ROUND_LABELS = [
 ];
 
 const STATUS_LABEL: Record<string, { label: string; colors: { bg: string; text: string } }> = {
-  scheduled: { label: "Agendada",   colors: { bg: "rgba(166,166,166,0.12)", text: "#A6A6A6" } },
+  scheduled: { label: "Agendada",   colors: { bg: "rgba(166,166,166,0.12)", text: "var(--color-text-secondary)" } },
   live:       { label: "Ao vivo",   colors: { bg: "rgba(255,80,80,0.12)",   text: "#FF5050" } },
-  finished:   { label: "Encerrada", colors: { bg: "rgba(191,242,5,0.12)",   text: "#BFF205" } },
+  finished:   { label: "Encerrada", colors: { bg: "rgba(191,242,5,0.12)",   text: "var(--color-brand)" } },
   postponed:  { label: "Adiada",    colors: { bg: "rgba(255,165,0,0.12)",   text: "#FFA500" } },
   cancelled:  { label: "Cancelada", colors: { bg: "rgba(255,80,80,0.12)",   text: "#FF5050" } },
 };
@@ -570,7 +570,7 @@ export default function FaseClient({
               </button>
               <button type="button" onClick={handleSave} disabled={saving}
                 className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 {saving ? "Salvando…" : "Salvar"}
               </button>
             </div>
@@ -581,7 +581,7 @@ export default function FaseClient({
                 className="border-b-2 pb-3 font-mono text-xs transition-colors"
                 style={{
                   borderColor: activeTab === tab.key ? "var(--color-brand)" : "transparent",
-                  color: activeTab === tab.key ? "var(--color-brand)" : "#A6A6A6",
+                  color: activeTab === tab.key ? "var(--color-brand)" : "var(--color-text-secondary)",
                 }}>
                 {tab.label}
               </button>
@@ -663,7 +663,7 @@ export default function FaseClient({
                 <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Na fase ({teamsInPhase.length})</h2>
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                   {teamsInPhase.map((et: any, idx: number) => (
-                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
+                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[var(--color-hover-bg-subtle)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                       {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />}
                       <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name ?? "Equipe"}</span>
@@ -685,7 +685,7 @@ export default function FaseClient({
                 <h2 className="mb-3 font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>Disponíveis para adicionar</h2>
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
                   {teamsNotInPhase.map((et: any, idx: number) => (
-                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[rgba(255,255,255,0.02)]"
+                    <div key={et.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-[var(--color-hover-bg-subtle)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                       {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-7 w-7 rounded object-contain" />}
                       <span className="flex-1 text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name ?? "Equipe"}</span>
@@ -711,7 +711,7 @@ export default function FaseClient({
             <div className="flex justify-end">
               <button type="button" onClick={() => setShowGroupForm(true)}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 <Plus size={14} /> {isConference ? "Nova conferência" : "Novo grupo"}
               </button>
             </div>
@@ -728,7 +728,7 @@ export default function FaseClient({
                     className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                   <button type="button" onClick={handleCreateGroup} disabled={savingGroup || !groupName.trim()}
                     className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                     {savingGroup ? "Criando…" : "Criar"}
                   </button>
                 </div>
@@ -762,7 +762,7 @@ export default function FaseClient({
                         )}
                       </div>
                       {members.map((et: any, idx: number) => (
-                        <div key={et.id} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-[rgba(255,255,255,0.02)]"
+                        <div key={et.id} className="flex items-center gap-3 px-4 py-2.5 group hover:bg-[var(--color-hover-bg-subtle)]"
                           style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                           {et.teams?.logo_url && <img src={et.teams.logo_url} alt="" className="h-6 w-6 rounded object-contain" />}
                           <span className="flex-1 text-sm" style={{ color: "var(--color-text-primary)" }}>{et.teams?.full_name}</span>
@@ -805,7 +805,7 @@ export default function FaseClient({
             <div className="flex justify-end">
               <button type="button" onClick={() => { setRoundOrder(String(rounds.length + 1)); setShowRoundForm(true); }}
                 className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 <Plus size={14} /> {hasMatchups ? "Novo estágio" : "Nova rodada"}
               </button>
             </div>
@@ -852,7 +852,7 @@ export default function FaseClient({
                     className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                   <button type="button" onClick={handleCreateRound} disabled={savingRound || !roundName.trim()}
                     className="rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50"
-                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                    style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                     {savingRound ? "Criando…" : "Criar rodada"}
                   </button>
                 </div>
@@ -861,7 +861,7 @@ export default function FaseClient({
             {rounds.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem rodadas</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
+                <p className="mt-2 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
                   {hasMatchups ? "Adicione os estágios: Final, Semifinal, Quartas de Final…" : "Crie a primeira rodada para começar."}
                 </p>
               </div>
@@ -915,11 +915,11 @@ export default function FaseClient({
                             className="rounded-lg border px-3 py-1.5 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
                           <button type="button" onClick={() => handleUpdateRound(r.id)}
                             className="rounded-lg px-3 py-1.5 text-sm font-medium"
-                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>Salvar</button>
+                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>Salvar</button>
                         </div>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-4 px-5 py-3 group hover:bg-[rgba(255,255,255,0.02)]">
+                      <div className="flex items-center gap-4 px-5 py-3 group hover:bg-[var(--color-hover-bg-subtle)]">
                         <span className="font-mono text-xs w-6 text-right shrink-0" style={{ color: "var(--color-text-secondary)" }}>{r.display_order}</span>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-sm" style={{ color: "var(--color-text-primary)" }}>{r.custom_label ?? r.name}</p>
@@ -980,7 +980,7 @@ export default function FaseClient({
                   await handleAddTeamToPhase(t.id);
                 }}
                 className="rounded-lg px-4 py-2 text-sm font-medium"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 Confirmar
               </button>
             </div>

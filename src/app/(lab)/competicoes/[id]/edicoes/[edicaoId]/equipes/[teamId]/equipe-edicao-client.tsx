@@ -13,6 +13,9 @@ import {
 } from "@/app/(lab)/competicoes/[id]/edicoes/actions";
 
 import { Plus, Check, X, ArrowRightLeft, Search, Ban, RotateCcw, Trash2, History } from "lucide-react";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
+import { LAB_ACCENT_HEX } from "@/lib/lab-theme";
 
 type RosterEntry = {
   id: string;
@@ -65,7 +68,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 const STATUS_COLOR: Record<string, string> = {
   pending: "#F2C005", approved: "var(--color-brand)", rejected: "var(--color-danger)",
-  inactive: "#555", free_agent: "#A6A6A6",
+  inactive: "#555", free_agent: "var(--color-text-secondary)",
 };
 
 function applyDateMask(value: string): string {
@@ -126,9 +129,8 @@ function RosterCard({
         {photoUrl ? (
           <img src={photoUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center font-mono text-xs font-bold"
-            style={{ color: teamColor }}>
-            {displayName.slice(0, 2).toUpperCase()}
+          <div className="flex h-full w-full items-center justify-center" style={{ color: "var(--color-text-hint)" }}>
+            <PersonAvatarPlaceholder fill />
           </div>
         )}
       </div>
@@ -285,7 +287,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
   const [approveStartDate, setApproveStartDate] = useState("");
 
   const team = editionTeam.teams;
-  const teamColor = team?.primary_color ?? "var(--color-brand)";
+  const teamColor = LAB_ACCENT_HEX;
 
   const athletes = entries
     .filter(e => e.member_type === "athlete" && (isFreeAgentPool ? e.status !== "inactive" : true))
@@ -608,7 +610,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
             {editionTeam.is_free_agent_pool !== true && (
               <button type="button" onClick={() => setShowSearchModal(true)}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium shrink-0"
-                style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
+                style={{ backgroundColor: teamColor, color: "var(--color-on-brand)" }}>
                 <Plus size={15} strokeWidth={2.5} />
                 {activeTab === "atletas" ? "Novo atleta" : "Nova comissão"}
               </button>
@@ -625,7 +627,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 className="border-b-2 pb-3 font-mono text-xs transition-colors mt-1"
                 style={{
                   borderColor: activeTab === tab.key ? teamColor : "transparent",
-                  color: activeTab === tab.key ? teamColor : "#A6A6A6",
+                  color: activeTab === tab.key ? teamColor : "var(--color-text-secondary)",
                 }}>
                 {tab.label}
               </button>
@@ -647,7 +649,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                   {athletes.filter(e => e.status === "approved").length} ativos
                 </span>
                 {athletes.filter(e => e.status === "inactive").length > 0 && (
-                  <span className="font-mono text-xs" style={{ color: "#555" }}>
+                  <span className="font-mono text-xs" style={{ color: "var(--color-kbd-text)" }}>
                     · {athletes.filter(e => e.status === "inactive").length} inativos
                   </span>
                 )}
@@ -659,7 +661,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
               </p>
             ) : (
               athletes.map((entry) => (
-                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? 0.45 : 1, transition: "opacity 0.15s" }}>
+                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? "var(--list-row-opacity-inactive)" : 1, transition: "opacity 0.15s" }}>
                   <RosterCard
                     photoUrl={entry.athletes?.photo_url ?? null}
                     displayName={entry.athletes?.surname ?? entry.athletes?.full_name ?? "?"}
@@ -741,7 +743,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
               </p>
             ) : (
               staff.map((entry) => (
-                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? 0.45 : 1, transition: "opacity 0.15s" }}>
+                <div key={entry.id} style={{ opacity: entry.status === "inactive" ? "var(--list-row-opacity-inactive)" : 1, transition: "opacity 0.15s" }}>
                   <RosterCard
                     photoUrl={entry.staff_members?.photo_url ?? null}
                     displayName={entry.staff_members?.surname ?? entry.staff_members?.full_name ?? "?"}
@@ -830,7 +832,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
               <button type="button" onClick={handleConfirmarRemocao}
                 disabled={processing === removeConfirmEntryId}
                 className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-danger)", color: "#fff" }}>
+                style={{ backgroundColor: "var(--color-danger)", color: "var(--color-text-primary)" }}>
                 {processing === removeConfirmEntryId ? "Removendo…" : "Confirmar remoção"}
               </button>
             </div>
@@ -927,7 +929,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 onClick={() => rejectEntryId && handleRejeitar(rejectEntryId, rejectReason)}
                 disabled={processing === rejectEntryId || !rejectReason}
                 className="rounded-lg px-4 py-2 font-mono text-xs font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-danger)", color: "#fff" }}>
+                style={{ backgroundColor: "var(--color-danger)", color: "var(--color-text-primary)" }}>
                 {processing === rejectEntryId ? "Rejeitando…" : "Confirmar"}
               </button>
             </div>
@@ -981,15 +983,12 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 </p>
               ) : (
                 searchResults.map((athlete, idx) => (
-                  <div key={athlete.id} className="flex items-center gap-3 px-6 py-3 group transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                  <div key={athlete.id} className="flex items-center gap-3 px-6 py-3 group transition-colors hover:bg-[var(--color-hover-bg-subtle)]"
                     style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                     {athlete.photo_url ? (
                       <img src={athlete.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                        style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        {(athlete.surname ?? athlete.full_name).slice(0, 2).toUpperCase()}
-                      </div>
+                      <PersonAvatar photoUrl={null} size={36} style={{ backgroundColor: "var(--color-border)" }} />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
@@ -1016,15 +1015,12 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 </p>
               ) : (
                 staffSearchResults.map((member, idx) => (
-                  <div key={member.id} className="flex items-center gap-3 px-6 py-3 group transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                  <div key={member.id} className="flex items-center gap-3 px-6 py-3 group transition-colors hover:bg-[var(--color-hover-bg-subtle)]"
                     style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                     {member.photo_url ? (
                       <img src={member.photo_url} alt="" className="h-9 w-9 rounded-full object-cover shrink-0" />
                     ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                        style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                        {(member.surname ?? member.full_name).slice(0, 2).toUpperCase()}
-                      </div>
+                      <PersonAvatar photoUrl={null} size={36} style={{ backgroundColor: "var(--color-border)" }} />
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>
@@ -1096,7 +1092,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
         <button type="button" onClick={handleTransferir}
           disabled={!transferTargetId || !transferDate || transferDate.length < 10 || processing === transferEntryId}
           className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
           {processing === transferEntryId ? "Transferindo…" : "Confirmar"}
         </button>
       </div>
@@ -1139,7 +1135,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                 onClick={() => approveEntryId && handleAprovar(approveEntryId)}
                 disabled={!approveStartDate || approveStartDate.length < 10 || processing === approveEntryId}
                 className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 {processing === approveEntryId ? "Aprovando…" : "Confirmar"}
               </button>
             </div>
@@ -1240,7 +1236,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                         onClick={() => handleSaveStint(stint.id)}
                         disabled={!editStintStarted || editStintStarted.length < 10 || savingStint}
                         className="rounded-lg px-3 py-1.5 font-mono text-xs font-medium disabled:opacity-50"
-                        style={{ backgroundColor: teamColor, color: "#0D0D0D" }}>
+                        style={{ backgroundColor: teamColor, color: "var(--color-on-brand)" }}>
                         {savingStint ? "Salvando…" : "Salvar"}
                       </button>
                     </div>
@@ -1262,7 +1258,7 @@ const [historyMemberType, setHistoryMemberType] = useState<"athlete" | "staff">(
                         )}
                         {stint.movement_type && (
                           <span className="shrink-0 font-mono text-xs rounded px-1.5 py-0.5"
-                            style={{ backgroundColor: "rgba(255,255,255,0.05)", color: "var(--color-text-secondary)" }}>
+                            style={{ backgroundColor: "var(--color-hover-bg)", color: "var(--color-text-secondary)" }}>
                             {stint.movement_type === "arrival" ? "chegada" : stint.movement_type === "transfer" ? "transferência" : stint.movement_type}
                           </span>
                         )}

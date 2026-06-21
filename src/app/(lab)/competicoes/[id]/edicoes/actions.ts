@@ -120,6 +120,60 @@ export async function editarEdicao(
   return { success: true };
 }
 
+function parseDatetimeLocalToIso(value: string | null | undefined): string | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+export type ConfiguracaoInscricoesPayload = {
+  athlete_doc_type: "rg" | "cpf";
+  staff_doc_type: "rg" | "cpf";
+  max_athletes: number | null;
+  max_staff: number | null;
+  max_transfers: number | null;
+  min_birth_year: number | null;
+  max_birth_year: number | null;
+  registration_window_start: string | null;
+  registration_window_end: string | null;
+};
+
+export async function salvarConfiguracaoInscricoes(
+  edicaoId: string,
+  payload: ConfiguracaoInscricoesPayload,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const start = parseDatetimeLocalToIso(payload.registration_window_start);
+  const end = parseDatetimeLocalToIso(payload.registration_window_end);
+
+  if (start && end && new Date(start) >= new Date(end)) {
+    return { error: "A data de início deve ser anterior ao fim das inscrições." };
+  }
+
+  const { error } = await supabase
+    .from("edition_settings")
+    .upsert({
+      edition_id: edicaoId,
+      athlete_doc_type: payload.athlete_doc_type,
+      staff_doc_type: payload.staff_doc_type,
+      max_athletes: payload.max_athletes,
+      max_staff: payload.max_staff,
+      max_transfers: payload.max_transfers,
+      min_birth_year: payload.min_birth_year,
+      max_birth_year: payload.max_birth_year,
+      registration_window_start: start,
+      registration_window_end: end,
+    }, { onConflict: "edition_id" });
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function atualizarVisibilidadeHome(
   editionId: string,
   show: boolean,

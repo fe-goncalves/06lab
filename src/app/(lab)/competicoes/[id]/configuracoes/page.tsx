@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { verificarPodeExcluirCompeticao } from "../../actions";
 import ConfiguracoesCompeticaoClient from "./configuracoes-client";
 
 export default async function ConfiguracoesCompeticaoPage({
@@ -49,6 +50,16 @@ export default async function ConfiguracoesCompeticaoPage({
 
   if (error || !comp) redirect("/competicoes");
 
+  const supportsLifecycle = Object.prototype.hasOwnProperty.call(comp, "is_active");
+  const genderLocked = (editions ?? []).length > 0;
+
+  const deleteCheck = supportsLifecycle
+    ? await verificarPodeExcluirCompeticao(id)
+    : { canDelete: false, reasons: [] as string[] };
+  const deleteGuard = "error" in deleteCheck
+    ? { canDelete: false, reasons: [] as string[] }
+    : deleteCheck;
+
   const editionsList = (editions ?? []).map((e: any) => ({
     id: e.id,
     status: e.status,
@@ -79,6 +90,9 @@ export default async function ConfiguracoesCompeticaoPage({
       globalCategories={globalCategories ?? []}
       editions={editionsList}
       seasons={seasonsList}
+      deleteCheck={deleteGuard}
+      genderLocked={genderLocked}
+      supportsLifecycle={supportsLifecycle}
     />
   );
 }

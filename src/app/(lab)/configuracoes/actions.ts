@@ -1,9 +1,67 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 import { validarTipoImagem, MAX_IMAGE_SIZE, gerarNomeSeguro, extensaoSegura } from "@/lib/security/uploads";
 import { validarURL, DOMINIOS_REDES_SOCIAIS } from "@/lib/security/urls";
+
+type MainAdminContext =
+  | { error: string }
+  | { user: { id: string }; profileId: string; organizationId: string };
+
+async function assertMainAdmin(): Promise<MainAdminContext> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("id, role, organization_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (profile?.role !== "main") return { error: "Sem permissão." };
+  if (!profile.organization_id) return { error: "Organização não encontrada." };
+
+  return { user, profileId: profile.id, organizationId: profile.organization_id };
+}
+
+function teamShortLabel(team: {
+  abbreviation: string | null;
+  short_name: string | null;
+  full_name: string;
+}): string {
+  return (
+    team.abbreviation?.toUpperCase()
+    ?? team.short_name?.toUpperCase()
+    ?? team.full_name.slice(0, 3).toUpperCase()
+  );
+}
+
+export type RepresentativeRow = {
+  id: string;
+  full_name: string;
+  email: string;
+  status: string;
+  created_at: string;
+  photo_url: string | null;
+  teams: Array<{
+    id: string;
+    short_label: string;
+    full_name: string;
+    short_name: string | null;
+    logo_url: string | null;
+  }>;
+};
+
+export type TeamOption = {
+  id: string;
+  full_name: string;
+  short_name: string | null;
+  short_label: string;
+  logo_url: string | null;
+};
 
 // ─── Salvar organização (campos gerais + redes sociais + site) ────────────────
 
@@ -127,17 +185,11 @@ export async function alterarSenha(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Não autenticado." };
 
-  const currentPassword = String(formData.get("current_password") ?? "").trim();
   const newPassword = String(formData.get("new_password") ?? "").trim();
 
-  if (!currentPassword) return { error: "Informe a senha atual." };
-  if (!newPassword || newPassword.length < 6) return { error: "A senha deve ter pelo menos 6 caracteres." };
-
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: user.email!,
-    password: currentPassword,
-  });
-  if (signInError) return { error: "Senha atual incorreta." };
+  if (!newPassword || newPassword.length < 6) {
+    return { error: "A senha deve ter pelo menos 6 caracteres." };
+  }
 
   const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) return { error: error.message };
@@ -249,5 +301,452 @@ export async function desativarUsuario(
     .eq("id", profileId);
 
   if (error) return { error: error.message };
+  return { success: true };
+}
+
+// ─── Representantes ───────────────────────────────────────────────────────────
+
+export async function listarEquipesOrganizacao(
+  orgId: string,
+): Promise<{ teams: TeamOption[] } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+  if (auth.organizationId !== orgId) return { error: "Sem permissão." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("teams")
+    .select("id, full_name, short_name, abbreviation, logo_url")
+    .eq("organization_id", orgId)
+    .eq("is_virtual", false)
+    .order("full_name");
+
+  if (error) return { error: error.message };
+
+  const teams = (data ?? []).map(t => ({
+    id: t.id,
+    full_name: t.full_name,
+    short_name: t.short_name,
+    short_label: teamShortLabel(t),
+    logo_url: (t.logo_url as string | null) ?? null,
+  }));
+
+  return { teams };
+}
+
+export async function listarRepresentantes(
+  orgId: string,
+): Promise<{ representatives: RepresentativeRow[] } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+  if (auth.organizationId !== orgId) return { error: "Sem permissão." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("representatives")
+    .select(`
+      id, full_name, email, status, created_at, photo_url,
+      representative_team_access (
+        team_id,
+        teams ( id, full_name, short_name, abbreviation, logo_url )
+      )
+    `)
+    .eq("organization_id", orgId)
+    .order("created_at", { ascending: true });
+
+  if (error) return { error: error.message };
+
+  const representatives: RepresentativeRow[] = (data ?? []).map(rep => {
+    const access = (rep.representative_team_access ?? []) as Array<{
+      team_id: string;
+      teams: {
+        id: string;
+        full_name: string;
+        short_name: string | null;
+        abbreviation: string | null;
+        logo_url: string | null;
+      } | null;
+    }>;
+
+    const teams = access
+      .filter(a => a.teams)
+      .map(a => ({
+        id: a.teams!.id,
+        full_name: a.teams!.full_name,
+        short_name: a.teams!.short_name,
+        short_label: teamShortLabel(a.teams!),
+        logo_url: a.teams!.logo_url ?? null,
+      }));
+
+    return {
+      id: rep.id,
+      full_name: rep.full_name,
+      email: rep.email,
+      status: rep.status,
+      created_at: rep.created_at,
+      photo_url: (rep.photo_url as string | null) ?? null,
+      teams,
+    };
+  });
+
+  return { representatives };
+}
+
+export async function criarRepresentante(
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "").trim();
+  const teamIds = formData.getAll("team_ids").map(String).filter(Boolean);
+
+  if (!fullName || !email || password.length < 6 || teamIds.length === 0) {
+    return { error: "Preencha todos os campos e selecione ao menos uma equipe." };
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "E-mail inválido." };
+  }
+
+  const { data: orgId, error: orgError } = await supabase.rpc("get_user_organization_id");
+  if (orgError || !orgId) return { error: "Organização não encontrada." };
+  if (orgId !== auth.organizationId) return { error: "Sem permissão." };
+
+  const supabaseAdmin = createAdminClient();
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+
+  if (authError || !authData.user) {
+    return { error: authError?.message ?? "Erro ao criar usuário." };
+  }
+
+  const { data: rep, error: repError } = await supabase
+    .from("representatives")
+    .insert({
+      auth_user_id: authData.user.id,
+      organization_id: orgId,
+      full_name: fullName,
+      email,
+      status: "active",
+      created_by: auth.profileId,
+    })
+    .select("id")
+    .single();
+
+  if (repError || !rep) {
+    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    return { error: repError?.message ?? "Erro ao criar representante." };
+  }
+
+  const accessRows = teamIds.map(teamId => ({
+    representative_id: rep.id,
+    team_id: teamId,
+  }));
+
+  const { error: accessError } = await supabase
+    .from("representative_team_access")
+    .insert(accessRows);
+
+  if (accessError) {
+    await supabase.from("representatives").delete().eq("id", rep.id);
+    await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    return { error: accessError.message };
+  }
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
+  return { success: true };
+}
+
+export async function atualizarRepresentante(
+  repId: string,
+  formData: FormData,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const { data: rep, error: fetchError } = await supabase
+    .from("representatives")
+    .select("id, organization_id, auth_user_id, photo_url")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { error: "Representante não encontrado." };
+  }
+
+  const fullName = String(formData.get("full_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const newPassword = String(formData.get("new_password") ?? "").trim();
+  const removePhoto = formData.get("remove_photo") === "true";
+  const teamIds = formData.getAll("team_ids").map(String).filter(Boolean);
+
+  if (!fullName) return { error: "Nome é obrigatório." };
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return { error: "E-mail inválido." };
+  }
+  if (teamIds.length === 0) return { error: "Selecione ao menos uma equipe." };
+  if (newPassword && newPassword.length < 6) {
+    return { error: "A nova senha deve ter pelo menos 6 caracteres." };
+  }
+
+  let photo_url: string | null = rep.photo_url as string | null;
+  if (removePhoto) {
+    photo_url = null;
+  } else {
+    const file = formData.get("photo") as File | null;
+    if (file && file.size > 0) {
+      if (file.size > MAX_IMAGE_SIZE) {
+        return { error: "A imagem deve ter no máximo 5 MB." };
+      }
+      const tipoValido = await validarTipoImagem(file);
+      if (!tipoValido) return { error: "Formato inválido. Envie PNG, JPEG ou WebP." };
+      const ext = await extensaoSegura(file);
+      const path = `representatives/${gerarNomeSeguro(ext)}`;
+      const { error: uploadError } = await supabase.storage
+        .from("photo")
+        .upload(path, file, { contentType: file.type, cacheControl: "3600" });
+      if (uploadError) return { error: uploadError.message };
+      const { data: pub } = supabase.storage.from("photo").getPublicUrl(path);
+      photo_url = pub.publicUrl;
+    }
+  }
+
+  const { error: updateError } = await supabase
+    .from("representatives")
+    .update({ full_name: fullName, email, photo_url })
+    .eq("id", repId);
+
+  if (updateError) return { error: updateError.message };
+
+  const supabaseAdmin = createAdminClient();
+  if (rep.auth_user_id) {
+    const authUpdate: { email?: string; password?: string } = { email };
+    if (newPassword) authUpdate.password = newPassword;
+    const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+      rep.auth_user_id as string,
+      authUpdate,
+    );
+    if (authError) return { error: authError.message };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("representative_team_access")
+    .delete()
+    .eq("representative_id", repId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  const accessRows = teamIds.map(teamId => ({
+    representative_id: repId,
+    team_id: teamId,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("representative_team_access")
+    .insert(accessRows);
+
+  if (insertError) return { error: insertError.message };
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
+  return { success: true };
+}
+
+export async function verificarPodeExcluirRepresentante(
+  repId: string,
+): Promise<{ canDelete: boolean; reasons: string[] } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const { data: rep, error: fetchError } = await supabase
+    .from("representatives")
+    .select("id, organization_id, status")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { canDelete: false, reasons: ["Representante não encontrado."] };
+  }
+
+  const reasons: string[] = [];
+
+  if (rep.status === "active") {
+    reasons.push("desative o representante antes de excluir");
+  }
+
+  const { count: pendingCount } = await supabase
+    .from("roster_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("requested_by_representative_id", repId)
+    .eq("status", "pending");
+
+  if ((pendingCount ?? 0) > 0) {
+    reasons.push("possui solicitações pendentes");
+  }
+
+  return { canDelete: reasons.length === 0, reasons };
+}
+
+export async function excluirRepresentante(
+  repId: string,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const { data: rep, error: fetchError } = await supabase
+    .from("representatives")
+    .select("id, organization_id, auth_user_id, full_name")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { error: "Representante não encontrado." };
+  }
+
+  const check = await verificarPodeExcluirRepresentante(repId);
+  if ("error" in check) return check;
+  if (!check.canDelete) {
+    return { error: `Não é possível excluir: ${check.reasons.join(", ")}.` };
+  }
+
+  const { error: accessError } = await supabase
+    .from("representative_team_access")
+    .delete()
+    .eq("representative_id", repId);
+
+  if (accessError) return { error: accessError.message };
+
+  const { error: deleteError } = await supabase
+    .from("representatives")
+    .delete()
+    .eq("id", repId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  if (rep.auth_user_id) {
+    const supabaseAdmin = createAdminClient();
+    await supabaseAdmin.auth.admin.deleteUser(rep.auth_user_id as string);
+  }
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
+  return { success: true };
+}
+
+export async function atualizarEquipesRepresentante(
+  repId: string,
+  teamIds: string[],
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+  if (!repId || teamIds.length === 0) {
+    return { error: "Selecione ao menos uma equipe." };
+  }
+
+  const supabase = await createClient();
+  const { data: rep, error: repError } = await supabase
+    .from("representatives")
+    .select("id, organization_id")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (repError) return { error: repError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { error: "Representante não encontrado." };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("representative_team_access")
+    .delete()
+    .eq("representative_id", repId);
+
+  if (deleteError) return { error: deleteError.message };
+
+  const accessRows = teamIds.map(teamId => ({
+    representative_id: repId,
+    team_id: teamId,
+  }));
+
+  const { error: insertError } = await supabase
+    .from("representative_team_access")
+    .insert(accessRows);
+
+  if (insertError) return { error: insertError.message };
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
+  return { success: true };
+}
+
+export async function desativarRepresentante(
+  repId: string,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const { data: rep, error: fetchError } = await supabase
+    .from("representatives")
+    .select("id, organization_id, status")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { error: "Representante não encontrado." };
+  }
+
+  const { error } = await supabase
+    .from("representatives")
+    .update({ status: "inactive" })
+    .eq("id", repId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
+  return { success: true };
+}
+
+export async function reativarRepresentante(
+  repId: string,
+): Promise<{ success: true } | { error: string }> {
+  const auth = await assertMainAdmin();
+  if ("error" in auth) return auth;
+
+  const supabase = await createClient();
+  const { data: rep, error: fetchError } = await supabase
+    .from("representatives")
+    .select("id, organization_id, status")
+    .eq("id", repId)
+    .maybeSingle();
+
+  if (fetchError) return { error: fetchError.message };
+  if (!rep || rep.organization_id !== auth.organizationId) {
+    return { error: "Representante não encontrado." };
+  }
+
+  const { error } = await supabase
+    .from("representatives")
+    .update({ status: "active" })
+    .eq("id", repId);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/configuracoes");
+  revalidatePath("/representantes");
   return { success: true };
 }

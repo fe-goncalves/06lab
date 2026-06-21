@@ -55,7 +55,7 @@ function btnBase(disabled: boolean) {
 function btnPrimary(disabled: boolean) {
   return {
     ...btnBase(disabled),
-    backgroundColor: disabled ? "var(--color-surface)" : "#BFF205",
+    backgroundColor: disabled ? "var(--color-surface)" : "var(--color-brand)",
     color: disabled ? "var(--color-text-primary)" : "#0a0a0a",
     border: "none",
   } as React.CSSProperties;
@@ -162,9 +162,9 @@ function Card({ icon, title, description, children }: {
       <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
         <div style={{
           width: 36, height: 36, borderRadius: 10,
-          backgroundColor: "rgba(191,242,5,0.08)",
+          backgroundColor: "var(--color-brand-selected-bg)",
           display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, color: "#BFF205",
+          flexShrink: 0, color: "var(--color-brand)",
         }}>
           {icon}
         </div>
@@ -390,7 +390,7 @@ export default function RelatoriosPage() {
   function Msg({ id }: { id: ReportId }) {
     const m = msgs[id];
     if (!m) return null;
-    return <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#FF4444", marginTop: -4 }}>{m}</p>;
+    return <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-danger)", marginTop: -4 }}>{m}</p>;
   }
 
   if (loadingComps) return (
@@ -403,7 +403,7 @@ export default function RelatoriosPage() {
     <div className="p-6 md:p-8">
       <header className="mb-8">
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-          <FileBarChart size={22} strokeWidth={2} style={{ color: "#BFF205" }} />
+          <FileBarChart size={22} strokeWidth={2} style={{ color: "var(--color-brand)" }} />
           <h1 className="font-display text-2xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
             Relatórios
           </h1>

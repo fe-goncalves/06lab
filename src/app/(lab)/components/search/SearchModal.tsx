@@ -14,6 +14,7 @@ import {
   Flag,
 } from "lucide-react";
 import { useSearch } from "./useSearch";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
 
 // ─── Metadados das categorias ───────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
     <div
       className="fixed inset-0 z-[200] flex items-start justify-center px-4 pt-[14vh]"
       style={{
-        backgroundColor: "rgba(0,0,0,0.65)",
+        backgroundColor: "var(--color-search-scrim)",
         backdropFilter: "blur(4px)",
         WebkitBackdropFilter: "blur(4px)",
       }}
@@ -135,7 +136,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
               size={17}
               strokeWidth={2}
               className="shrink-0"
-              style={{ color: "#A6A6A6" }}
+              style={{ color: "var(--color-text-secondary)" }}
             />
           )}
 
@@ -152,7 +153,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
             <button
               onClick={() => setQuery("")}
               className="shrink-0 transition-opacity hover:opacity-100"
-              style={{ color: "#A6A6A6", opacity: 0.5 }}
+              style={{ color: "var(--color-text-secondary)", opacity: 0.5 }}
               aria-label="Limpar busca"
             >
               <X size={15} strokeWidth={2} />
@@ -164,7 +165,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
             style={{
               border: "1px solid var(--color-border)",
               backgroundColor: "var(--color-background)",
-              color: "#555",
+              color: "var(--color-kbd-text)",
             }}
           >
             ESC
@@ -177,7 +178,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
           {showHint && (
             <p
               className="px-4 py-10 text-center font-mono text-xs"
-              style={{ color: "#555" }}
+              style={{ color: "var(--color-inactive-label)" }}
             >
               Digite ao menos 2 caracteres para buscar
             </p>
@@ -187,7 +188,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
           {showEmpty && (
             <p
               className="px-4 py-10 text-center font-mono text-sm"
-              style={{ color: "#555" }}
+              style={{ color: "var(--color-inactive-label)" }}
             >
               Nenhum resultado para{" "}
               <span style={{ color: "var(--color-text-primary)" }}>
@@ -212,7 +213,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
                     style={{
                       backgroundColor: "var(--color-background)",
                       borderBottom: "1px solid var(--color-border)",
-                      color: "#555",
+                      color: "var(--color-kbd-text)",
                     }}
                   >
                     {meta.icon}
@@ -229,33 +230,44 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
                       style={{ borderBottom: "1px solid var(--color-border)" }}
                       onMouseEnter={(e) => {
                         (e.currentTarget as HTMLElement).style.backgroundColor =
-                          "rgba(191,242,5,0.05)";
+                          "var(--color-brand-hover-bg)";
                       }}
                       onMouseLeave={(e) => {
                         (e.currentTarget as HTMLElement).style.backgroundColor =
                           "transparent";
                       }}
                     >
-                      {/* Avatar / inicial */}
-                      <div
-                        className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full font-mono text-xs font-bold"
-                        style={{
-                          backgroundColor: "var(--color-background)",
-                          border: "1px solid var(--color-border)",
-                          color: "#A6A6A6",
-                        }}
-                      >
-                        {item.avatar_url ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={item.avatar_url}
-                            alt={item.name}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          item.name.charAt(0).toUpperCase()
-                        )}
-                      </div>
+                      {/* Avatar */}
+                      {(["athletes", "staff", "referees"] as const).includes(item.category as "athletes" | "staff" | "referees") ? (
+                        <PersonAvatar
+                          photoUrl={item.avatar_url}
+                          size={32}
+                          style={{
+                            border: "1px solid var(--color-border)",
+                            backgroundColor: "var(--color-background)",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full font-mono text-xs font-bold"
+                          style={{
+                            backgroundColor: "var(--color-background)",
+                            border: "1px solid var(--color-border)",
+                            color: "var(--color-text-secondary)",
+                          }}
+                        >
+                          {item.avatar_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={item.avatar_url}
+                              alt={item.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            item.name.slice(0, 2).toUpperCase()
+                          )}
+                        </div>
+                      )}
 
                       {/* Nome + subtítulo */}
                       <div className="min-w-0 flex-1">
@@ -268,7 +280,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
                         {item.subtitle && (
                           <p
                             className="truncate font-mono text-xs"
-                            style={{ color: "#A6A6A6" }}
+                            style={{ color: "var(--color-text-secondary)" }}
                           >
                             {item.subtitle}
                           </p>
@@ -276,7 +288,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
                       </div>
 
                       {/* Ícone da categoria à direita */}
-                      <span className="shrink-0" style={{ color: "#333" }}>
+                      <span className="shrink-0" style={{ color: "var(--color-kbd-muted)" }}>
                         {meta.icon}
                       </span>
                     </button>
@@ -291,7 +303,7 @@ export function SearchModal({ isOpen, onClose, organizationId }: SearchModalProp
           className="flex items-center justify-between px-4 py-2 font-mono text-[11px]"
           style={{
             borderTop: "1px solid var(--color-border)",
-            color: "#333",
+            color: "var(--color-kbd-muted)",
           }}
         >
           <span>↵ navegar</span>

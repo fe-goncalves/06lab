@@ -1,13 +1,17 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import { editarArbitro } from "../actions";
-import { Camera } from "lucide-react";
-import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { LabPicker } from "@/app/(lab)/components/lab-picker";
+import { GenderSwitch, normalizePersonGender } from "@/app/(lab)/components/gender-switch";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
+import { EntityHubShell } from "@/app/(lab)/components/entity-hub-shell";
+import { EntityHubSectionHeader } from "@/app/(lab)/components/entity-hub-section-header";
+import { EntityLogoUpload } from "@/app/(lab)/components/entity-logo-upload";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,7 +60,7 @@ type MatchEntry = {
 type CardAction = {
   id: string;
   matchId: string;
-  actionType: "yellow_card" | "red_card" | "yellow_red_card";
+  actionType: "yellow_card" | "red_card" | "red_yellow_card";
   teamId: string | null;
 };
 
@@ -78,12 +82,6 @@ const REFEREE_ROLES_STATIC = [
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function initialsFromName(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return ((parts[0]?.[0] ?? "") + (parts[parts.length - 1]?.[0] ?? "")).toUpperCase();
-  return name.slice(0, 2).toUpperCase() || "?";
-}
-
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return "—";
   try {
@@ -96,64 +94,6 @@ function getRoleLabel(roleId: string | null, roles: RefereeRole[]): string {
   return REFEREE_ROLES_STATIC.find(r => r.id === roleId)?.label
     ?? roles.find(r => r.id === roleId)?.name
     ?? "—";
-}
-
-// ─── SectionHeader ─────────────────────────────────────────────────────────────
-
-function SectionHeader({ label, count }: { label: string; count?: number }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205" }}>
-        {label}
-      </span>
-      {count !== undefined && (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)" }}>{count}</span>
-      )}
-      <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.25), transparent)" }} />
-    </div>
-  );
-}
-
-// ─── StatCard ──────────────────────────────────────────────────────────────────
-
-function StatCard({ value, label, color }: { value: number; label: string; color: string }) {
-  return (
-    <div style={{
-      borderRadius: 14, border: `1px solid ${color}22`,
-      backgroundColor: `${color}08`,
-      padding: "18px 20px",
-      display: "flex", flexDirection: "column", gap: 6,
-    }}>
-      <span style={{ fontFamily: "var(--font-display)", fontSize: 32, fontWeight: 900, color, lineHeight: 1 }}>
-        {value}
-      </span>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,0.35)" }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ─── FilterPill ────────────────────────────────────────────────────────────────
-
-function FilterPill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: "5px 12px", borderRadius: 20,
-        border: `1px solid ${active ? "#BFF205" : "rgba(255,255,255,0.1)"}`,
-        backgroundColor: active ? "rgba(191,242,5,0.1)" : "transparent",
-        color: active ? "#BFF205" : "rgba(255,255,255,0.35)",
-        fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
-        letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s",
-        whiteSpace: "nowrap" as const,
-      }}
-    >
-      {label}
-    </button>
-  );
 }
 
 // ─── MatchRow ──────────────────────────────────────────────────────────────────
@@ -171,25 +111,18 @@ function MatchRow({ match, roles, isFirst }: { match: MatchEntry; roles: Referee
       href={`/partidas/${match.matchId}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex", alignItems: "center",
-        padding: "0 16px", height: 58,
-        textDecoration: "none",
-        opacity: hovered ? 1 : 0.82,
-        transition: "opacity 0.12s",
-        position: "relative",
-        borderTop: isFirst ? "none" : "1px solid rgba(255,255,255,0.05)",
-      }}
+      className={styles.matchRow}
+      style={{ borderTop: isFirst ? "none" : undefined }}
     >
       <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, ${colorA}80 50%, ${colorB}80 50%)`, opacity: hovered ? 1 : 0, transition: "opacity 0.12s" }} />
 
       <div style={{ width: 80, flexShrink: 0 }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{formatDate(match.matchDate)}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-muted)" }}>{formatDate(match.matchDate)}</span>
       </div>
 
       <div style={{ width: 140, flexShrink: 0 }}>
         <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{competitionLabel}</p>
-        {match.phaseName && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 1 }}>{match.phaseName}</p>}
+        {match.phaseName && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-faint)", margin: 0, marginTop: 1 }}>{match.phaseName}</p>}
       </div>
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
@@ -200,15 +133,15 @@ function MatchRow({ match, roles, isFirst }: { match: MatchEntry; roles: Referee
           {match.teamA?.logo_url && <img src={match.teamA.logo_url} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "rgba(255,255,255,0.05)", padding: "4px 10px", borderRadius: 8, minWidth: 72, justifyContent: "center" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, backgroundColor: "var(--color-hover-bg)", padding: "4px 10px", borderRadius: 8, minWidth: 72, justifyContent: "center" }}>
           {scoreReady ? (
             <>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "var(--color-text-primary)" }}>{match.scoreA}</span>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>×</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-ghost)" }}>×</span>
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 800, color: "var(--color-text-primary)" }}>{match.scoreB}</span>
             </>
           ) : (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.25)" }}>{match.status === "ongoing" ? "AO VIVO" : "—"}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-hint)" }}>{match.status === "ongoing" ? "AO VIVO" : "—"}</span>
           )}
         </div>
 
@@ -221,7 +154,7 @@ function MatchRow({ match, roles, isFirst }: { match: MatchEntry; roles: Referee
       </div>
 
       <div style={{ width: 100, flexShrink: 0, textAlign: "right" }}>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: 20, backgroundColor: "rgba(191,242,5,0.08)", color: "#BFF205", border: "1px solid rgba(191,242,5,0.15)" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em", padding: "3px 8px", borderRadius: 20, backgroundColor: "var(--color-brand-selected-bg)", color: "var(--color-brand)", border: "1px solid rgba(191,242,5,0.15)" }}>
           {roleLabel}
         </span>
       </div>
@@ -231,28 +164,30 @@ function MatchRow({ match, roles, isFirst }: { match: MatchEntry; roles: Referee
 
 // ─── AbaInformações ────────────────────────────────────────────────────────────
 
-function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRole[] }) {
+function AbaInformacoes({
+  referee,
+  onSavingChange,
+}: {
+  referee: Referee;
+  onSavingChange: (saving: boolean) => void;
+}) {
   const router = useRouter();
-  const fileRef = useRef<HTMLInputElement>(null);
   const [fullName, setFullName] = useState(referee.full_name);
   const [refereeRoleId, setRefereeRoleId] = useState(referee.referee_role_id ?? "");
-  const [gender, setGender] = useState(referee.gender ?? "");
+  const [gender, setGender] = useState<"male" | "female">(() => normalizePersonGender(referee.gender));
   const [phone, setPhone] = useState(referee.phone ?? "");
   const [pixKey, setPix] = useState(referee.pix_key ?? "");
   const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  useEffect(() => {
+    onSavingChange(saving);
+    return () => onSavingChange(false);
+  }, [saving, onSavingChange]);
 
-  function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setPendingPhoto(f);
-    setPreviewUrl(old => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(f); });
-  }
-
-  async function handleSave() {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!fullName.trim()) return;
     setSaving(true);
     try {
       const fd = new FormData();
@@ -266,92 +201,83 @@ function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRo
       if ("error" in result) { toast("error", result.error); return; }
       toast("success", "Alterações salvas.");
       setPendingPhoto(null);
-      if (previewUrl) { URL.revokeObjectURL(previewUrl); setPreviewUrl(null); }
       router.refresh();
     } finally { setSaving(false); }
   }
 
-  const displayPhoto = previewUrl ?? referee.photo_url;
-
-  const fieldLabel: React.CSSProperties = {
-    fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
-    letterSpacing: "0.12em", textTransform: "uppercase",
-    color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 6,
-  };
-  const inputStyle: React.CSSProperties = {
-    width: "100%", padding: "9px 12px", borderRadius: 9,
-    border: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.04)",
-    color: "var(--color-text-primary)",
-    fontFamily: "var(--font-mono)", fontSize: 12,
-    outline: "none", boxSizing: "border-box", transition: "border-color 0.12s",
-  };
-
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, alignItems: "start" }}>
-      <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", padding: 20 }}>
-        <SectionHeader label="Foto" />
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
-          <div style={{ position: "relative" }}>
-            <div style={{ width: 100, height: 100, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(191,242,5,0.3)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {displayPhoto
-                ? <img src={displayPhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <span style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "rgba(255,255,255,0.2)" }}>{initialsFromName(fullName || "?")}</span>
-              }
-            </div>
-            <button type="button" onClick={() => fileRef.current?.click()} style={{ position: "absolute", bottom: 2, right: 2, width: 26, height: 26, borderRadius: "50%", backgroundColor: "#BFF205", border: "2px solid var(--color-surface)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-              <Camera size={11} strokeWidth={2.5} color="#0a0a0a" />
-            </button>
-          </div>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={handlePhotoChange} />
-          {pendingPhoto && <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", textAlign: "center" }}>{pendingPhoto.name}</p>}
-        </div>
-      </div>
+    <form id="form-arbitro" onSubmit={handleSubmit} className={styles.contentWide}>
+      <EntityHubSectionHeader title="INFORMAÇÕES" subtitle="Identidade e contatos do árbitro" />
 
-      <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", padding: 20 }}>
-        <SectionHeader label="Dados" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <span style={fieldLabel}>Função</span>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {REFEREE_ROLES_STATIC.map(role => (
-                <button key={role.id} type="button" onClick={() => setRefereeRoleId(role.id)} style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${refereeRoleId === role.id ? "#BFF205" : "rgba(255,255,255,0.1)"}`, backgroundColor: refereeRoleId === role.id ? "rgba(191,242,5,0.1)" : "transparent", color: refereeRoleId === role.id ? "#BFF205" : "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.12s" }}>
-                  {role.label}
-                </button>
-              ))}
-            </div>
+      <EntityLogoUpload
+        value={pendingPhoto}
+        onChange={setPendingPhoto}
+        existingUrl={referee.photo_url}
+        label="Foto do árbitro"
+        hint="PNG, JPG ou WebP · proporção 1:1 recomendada"
+        round
+      />
+
+      <div className={styles.fieldStack}>
+        <div className={styles.field}>
+          <label className={styles.fieldLabel}>Função</label>
+          <div className={styles.segmentRow}>
+            {REFEREE_ROLES_STATIC.map(role => (
+              <button
+                key={role.id}
+                type="button"
+                onClick={() => setRefereeRoleId(role.id)}
+                className={`${styles.segmentBtn} ${refereeRoleId === role.id ? styles.segmentBtnActive : ""}`.trim()}
+              >
+                {role.label}
+              </button>
+            ))}
           </div>
-          <div>
-            <span style={fieldLabel}>Nome completo *</span>
-            <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={inputStyle} onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")} onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")} />
-          </div>
-          <div>
-            <span style={fieldLabel}>Gênero</span>
-            <LabSelect
-              value={gender}
-              onChange={setGender}
-              options={[
-                { value: "male", label: "Masculino" },
-                { value: "female", label: "Feminino" },
-                { value: "other", label: "Outro" },
-              ]}
-              placeholder="Gênero"
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.fieldLabel} htmlFor="referee-full-name">Nome completo *</label>
+          <input
+            id="referee-full-name"
+            type="text"
+            required
+            value={fullName}
+            onChange={e => setFullName(e.target.value)}
+            className={styles.input}
+          />
+        </div>
+
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Gênero</span>
+          <GenderSwitch value={gender} onChange={setGender} />
+        </div>
+
+        <div className={styles.fieldRow2}>
+          <div className={styles.field}>
+            <label className={styles.fieldLabel} htmlFor="referee-phone">Telefone</label>
+            <input
+              id="referee-phone"
+              type="text"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="(00) 00000-0000"
+              className={styles.input}
             />
           </div>
-          <div>
-            <span style={fieldLabel}>Telefone</span>
-            <input type="text" value={phone} onChange={e => setPhone(e.target.value)} placeholder="(00) 00000-0000" style={inputStyle} onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")} onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")} />
+          <div className={styles.field}>
+            <label className={styles.fieldLabel} htmlFor="referee-pix">Chave Pix</label>
+            <input
+              id="referee-pix"
+              type="text"
+              value={pixKey}
+              onChange={e => setPix(e.target.value)}
+              placeholder="CPF, e-mail, telefone ou chave aleatória"
+              className={styles.input}
+            />
           </div>
-          <div>
-            <span style={fieldLabel}>Chave Pix</span>
-            <input type="text" value={pixKey} onChange={e => setPix(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" style={inputStyle} onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")} onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")} />
-          </div>
-          <button type="button" onClick={handleSave} disabled={saving || !fullName.trim()} style={{ padding: "10px 0", borderRadius: 9, border: "none", backgroundColor: saving || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", cursor: saving || !fullName.trim() ? "not-allowed" : "pointer", transition: "all 0.12s", marginTop: 4 }}>
-            {saving ? "Salvando…" : "Salvar alterações"}
-          </button>
         </div>
       </div>
-    </div>
+    </form>
   );
 }
 
@@ -360,10 +286,10 @@ function AbaInformacoes({ referee, roles }: { referee: Referee; roles: RefereeRo
 function AbaJogos({ matches, roles }: { matches: MatchEntry[]; roles: RefereeRole[] }) {
   if (matches.length === 0) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "80px 0", textAlign: "center", borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)" }}>
-        <div style={{ width: 48, height: 48, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14, fontSize: 20 }}>🏁</div>
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Nenhum jogo registrado</p>
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", marginTop: 6 }}>Este árbitro ainda não foi vinculado a nenhuma partida.</p>
+      <div className={styles.emptyState}>
+        <div className={styles.emptyIcon}>🏁</div>
+        <p className={styles.emptyTitle}>Nenhum jogo registrado</p>
+        <p className={styles.emptyDesc}>Este árbitro ainda não foi vinculado a nenhuma partida.</p>
       </div>
     );
   }
@@ -377,8 +303,8 @@ function AbaJogos({ matches, roles }: { matches: MatchEntry[]; roles: RefereeRol
 
   return (
     <div>
-      <SectionHeader label="Jogos apitados" count={matches.length} />
-      <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
+      <EntityHubSectionHeader title="JOGOS APITADOS" subtitle={`${matches.length} ${matches.length === 1 ? "partida" : "partidas"}`} />
+      <div className={styles.matchList}>
         {sorted.map((match, idx) => (
           <MatchRow key={match.matchRefereeId} match={match} roles={roles} isFirst={idx === 0} />
         ))}
@@ -390,23 +316,43 @@ function AbaJogos({ matches, roles }: { matches: MatchEntry[]; roles: RefereeRol
 // ─── AbaEstatisticas ───────────────────────────────────────────────────────────
 
 function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; cardActions: CardAction[] }) {
-  const [filterCompetitionId, setFilterCompetitionId] = useState<string | null>(null);
-  const [filterTeamId, setFilterTeamId] = useState<string | null>(null);
-  const [filterYear, setFilterYear] = useState<number | null>(null);
+  const [filterCompetitionId, setFilterCompetitionId] = useState("");
+  const [filterTeamId, setFilterTeamId] = useState("");
+  const [filterYear, setFilterYear] = useState("");
 
   const competitions = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { id: string; label: string; searchText: string }>();
     matches.forEach(m => {
-      if (m.competitionId) map.set(m.competitionId, m.competitionShort ?? m.competitionName ?? m.competitionId);
+      if (m.competitionId) {
+        map.set(m.competitionId, {
+          id: m.competitionId,
+          label: m.competitionShort ?? m.competitionName ?? m.competitionId,
+          searchText: m.competitionName ?? m.competitionShort ?? m.competitionId,
+        });
+      }
     });
-    return Array.from(map.entries()).map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label));
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [matches]);
 
   const teams = useMemo(() => {
-    const map = new Map<string, { id: string; label: string }>();
+    const map = new Map<string, { id: string; label: string; logo_url: string | null; searchText: string }>();
     matches.forEach(m => {
-      if (m.teamA) map.set(m.teamA.id, { id: m.teamA.id, label: m.teamA.abbreviation ?? m.teamA.full_name });
-      if (m.teamB) map.set(m.teamB.id, { id: m.teamB.id, label: m.teamB.abbreviation ?? m.teamB.full_name });
+      if (m.teamA) {
+        map.set(m.teamA.id, {
+          id: m.teamA.id,
+          label: (m.teamA.abbreviation ?? m.teamA.full_name).toUpperCase(),
+          logo_url: m.teamA.logo_url,
+          searchText: m.teamA.full_name,
+        });
+      }
+      if (m.teamB) {
+        map.set(m.teamB.id, {
+          id: m.teamB.id,
+          label: (m.teamB.abbreviation ?? m.teamB.full_name).toUpperCase(),
+          logo_url: m.teamB.logo_url,
+          searchText: m.teamB.full_name,
+        });
+      }
     });
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [matches]);
@@ -417,13 +363,18 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
     return Array.from(set).sort((a, b) => b - a);
   }, [matches]);
 
+  const yearOptions = useMemo(
+    () => years.map((y) => ({ id: String(y), label: String(y) })),
+    [years],
+  );
+
   const filteredMatchIds = useMemo(() => {
     return new Set(
       matches
         .filter(m => {
           if (filterCompetitionId && m.competitionId !== filterCompetitionId) return false;
           if (filterTeamId && m.teamA?.id !== filterTeamId && m.teamB?.id !== filterTeamId) return false;
-          if (filterYear && m.yearValue !== filterYear) return false;
+          if (filterYear && m.yearValue !== Number(filterYear)) return false;
           return true;
         })
         .map(m => m.matchId)
@@ -434,54 +385,81 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
     const filtered = cardActions.filter(a => filteredMatchIds.has(a.matchId));
     return {
       total_matches: filteredMatchIds.size,
-      amarelos: filtered.filter(a => a.actionType === "yellow_card").length,
-      vermelhos: filtered.filter(a => a.actionType === "red_card").length,
-      amarelovermelhos: filtered.filter(a => a.actionType === "yellow_red_card").length,
+      amarelos: filtered.filter(a =>
+        a.actionType === "yellow_card" || a.actionType === "red_yellow_card"
+      ).length,
+      vermelhos: filtered.filter(a =>
+        a.actionType === "red_card" || a.actionType === "red_yellow_card"
+      ).length,
     };
   }, [cardActions, filteredMatchIds]);
 
-  const hasFilters = filterCompetitionId || filterTeamId || filterYear;
+  const hasFilters = Boolean(filterCompetitionId || filterTeamId || filterYear);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
-      {/* Filtros */}
-      <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)", padding: 20 }}>
-        <SectionHeader label="Filtros" />
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
+      <div className={styles.listPanel} style={{ padding: 20 }}>
+        <EntityHubSectionHeader title="FILTROS" subtitle="Refine as estatísticas por competição, equipe ou ano" />
+        <div className={styles.fieldStack}>
           {competitions.length > 0 && (
-            <div>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", marginBottom: 8, margin: 0, marginBottom: 8 }}>Competição</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                <FilterPill label="Todas" active={!filterCompetitionId} onClick={() => setFilterCompetitionId(null)} />
-                {competitions.map(c => (
-                  <FilterPill key={c.id} label={c.label} active={filterCompetitionId === c.id} onClick={() => setFilterCompetitionId(filterCompetitionId === c.id ? null : c.id)} />
-                ))}
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Competição</span>
+              <div className={styles.glassSelect}>
+                <LabPicker
+                  options={competitions.map((c) => ({
+                    id: c.id,
+                    label: c.label,
+                    searchText: c.searchText,
+                  }))}
+                  value={filterCompetitionId}
+                  onChange={setFilterCompetitionId}
+                  placeholder="Todas as competições"
+                  searchPlaceholder="Buscar competição…"
+                  emptyLabel="Todas"
+                  allowEmpty
+                  showLogos={false}
+                />
               </div>
             </div>
           )}
 
           {teams.length > 0 && (
-            <div>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: 0, marginBottom: 8 }}>Equipe</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                <FilterPill label="Todas" active={!filterTeamId} onClick={() => setFilterTeamId(null)} />
-                {teams.map(t => (
-                  <FilterPill key={t.id} label={t.label.toUpperCase()} active={filterTeamId === t.id} onClick={() => setFilterTeamId(filterTeamId === t.id ? null : t.id)} />
-                ))}
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Equipe</span>
+              <div className={styles.glassSelect}>
+                <LabPicker
+                  options={teams.map((t) => ({
+                    id: t.id,
+                    label: t.label,
+                    logo_url: t.logo_url,
+                    searchText: t.searchText,
+                  }))}
+                  value={filterTeamId}
+                  onChange={setFilterTeamId}
+                  placeholder="Todas as equipes"
+                  searchPlaceholder="Buscar equipe…"
+                  emptyLabel="Todas"
+                  allowEmpty
+                  showLogos
+                />
               </div>
             </div>
           )}
 
-          {years.length > 0 && (
-            <div>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.25)", margin: 0, marginBottom: 8 }}>Ano</p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                <FilterPill label="Todos" active={!filterYear} onClick={() => setFilterYear(null)} />
-                {years.map(y => (
-                  <FilterPill key={y} label={String(y)} active={filterYear === y} onClick={() => setFilterYear(filterYear === y ? null : y)} />
-                ))}
+          {yearOptions.length > 0 && (
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Ano</span>
+              <div className={styles.glassSelect}>
+                <LabPicker
+                  options={yearOptions}
+                  value={filterYear}
+                  onChange={setFilterYear}
+                  placeholder="Todos os anos"
+                  searchPlaceholder="Buscar ano…"
+                  emptyLabel="Todos"
+                  allowEmpty
+                  showLogos={false}
+                />
               </div>
             </div>
           )}
@@ -489,10 +467,12 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
           {hasFilters && (
             <button
               type="button"
-              onClick={() => { setFilterCompetitionId(null); setFilterTeamId(null); setFilterYear(null); }}
-              style={{ alignSelf: "flex-start", fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer", padding: 0, transition: "color 0.12s" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "#FF4444")}
-              onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.3)")}
+              onClick={() => {
+                setFilterCompetitionId("");
+                setFilterTeamId("");
+                setFilterYear("");
+              }}
+              className={styles.filterClear}
             >
               × Limpar filtros
             </button>
@@ -500,19 +480,26 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
         </div>
       </div>
 
-      {/* Painel de estatísticas */}
       <div>
-        <SectionHeader label={hasFilters ? "Estatísticas (filtradas)" : "Estatísticas gerais"} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
-          <StatCard value={stats.total_matches} label="Jogos" color="#BFF205" />
-          <StatCard value={stats.amarelos} label="Amarelos" color="#F2C005" />
-          <StatCard value={stats.amarelovermelhos} label="Amarelo-vermelho" color="#F27405" />
-          <StatCard value={stats.vermelhos} label="Vermelhos" color="#FF4444" />
+        <EntityHubSectionHeader title={hasFilters ? "ESTATÍSTICAS (FILTRADAS)" : "ESTATÍSTICAS GERAIS"} />
+        <div className={styles.statGrid}>
+          <div className={styles.statCard}>
+            <span className={styles.statCardValue} style={{ color: "#BFF205" }}>{stats.total_matches}</span>
+            <span className={styles.statCardLabel}>Jogos</span>
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statCardValue} style={{ color: "#F2C005" }}>{stats.amarelos}</span>
+            <span className={styles.statCardLabel}>Amarelos</span>
+          </div>
+          <div className={styles.statCard}>
+            <span className={styles.statCardValue} style={{ color: "#FF4444" }}>{stats.vermelhos}</span>
+            <span className={styles.statCardLabel}>Vermelhos</span>
+          </div>
         </div>
       </div>
 
       {cardActions.length === 0 && matches.length > 0 && (
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", textAlign: "center", padding: "16px 0" }}>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-ghost)", textAlign: "center", padding: "16px 0" }}>
           Nenhuma ação de cartão registrada nos jogos deste árbitro.
         </p>
       )}
@@ -525,88 +512,66 @@ function AbaEstatisticas({ matches, cardActions }: { matches: MatchEntry[]; card
 type Tab = "informacoes" | "jogos" | "estatisticas";
 
 const TAB_LABELS: Record<Tab, string> = {
-  informacoes: "Informações",
-  jogos: "Jogos",
-  estatisticas: "Estatísticas",
+  informacoes: "INFORMAÇÕES",
+  jogos: "JOGOS",
+  estatisticas: "ESTATÍSTICAS",
 };
 
 export default function ArbitroHub({ referee, matches, refereeRoles, cardActions }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("informacoes");
+  const [savingInformacoes, setSavingInformacoes] = useState(false);
 
   const displayName = referee.full_name;
   const roleLabel = getRoleLabel(referee.referee_role_id, refereeRoles);
+  const cardStats = useMemo(() => {
+    const amarelos = cardActions.filter(a =>
+      a.actionType === "yellow_card" || a.actionType === "red_yellow_card"
+    ).length;
+    const vermelhos = cardActions.filter(a =>
+      a.actionType === "red_card" || a.actionType === "red_yellow_card"
+    ).length;
+    return { amarelos, vermelhos };
+  }, [cardActions]);
+
+  const tabs = useMemo(
+    () => ([
+      { key: "informacoes", label: TAB_LABELS.informacoes },
+      { key: "jogos", label: TAB_LABELS.jogos, badge: matches.length },
+      { key: "estatisticas", label: TAB_LABELS.estatisticas },
+    ]),
+    [matches.length]
+  );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "var(--color-background)" }}>
-
-      <div style={{ backgroundColor: "var(--color-surface)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ padding: "20px 32px 0" }}>
-          <Breadcrumb items={[{ label: "Árbitros", href: "/arbitros" }, { label: displayName }]} />
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            <div style={{ width: 56, height: 56, borderRadius: "50%", overflow: "hidden", border: "2px solid rgba(191,242,5,0.3)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              {referee.photo_url
-                ? <img src={referee.photo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                : <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{initialsFromName(displayName)}</span>
-              }
-            </div>
-            <div>
-              <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 900, color: "var(--color-text-primary)", margin: 0, lineHeight: 1.1 }}>
-                {displayName.toUpperCase()}
-              </h1>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "#BFF205" }}>{roleLabel}</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)" }}>·</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-                  {matches.length} {matches.length === 1 ? "jogo" : "jogos"}
-                </span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.15)" }}>·</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)" }}>
-                  {cardActions.filter(a => a.actionType === "yellow_card").length}🟡 {cardActions.filter(a => a.actionType === "red_card").length}🔴
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: 0 }}>
-            {(["informacoes", "jogos", "estatisticas"] as Tab[]).map(tab => {
-              const isActive = activeTab === tab;
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  onClick={() => setActiveTab(tab)}
-                  style={{
-                    padding: "10px 18px",
-                    paddingBottom: isActive ? 8 : 10,
-                    borderBottom: isActive ? "2px solid #BFF205" : "2px solid transparent",
-                    backgroundColor: "transparent",
-                    border: "none",
-                    borderBottom: isActive ? "2px solid #BFF205" : "2px solid transparent",
-                    fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-                    letterSpacing: "0.12em", textTransform: "uppercase",
-                    color: isActive ? "#BFF205" : "rgba(255,255,255,0.3)",
-                    cursor: "pointer", transition: "all 0.12s",
-                  }}
-                >
-                  {TAB_LABELS[tab]}
-                  {tab === "jogos" && matches.length > 0 && (
-                    <span style={{ marginLeft: 7, fontFamily: "var(--font-mono)", fontSize: 9, padding: "2px 6px", borderRadius: 10, backgroundColor: isActive ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)", color: isActive ? "#BFF205" : "rgba(255,255,255,0.2)" }}>
-                      {matches.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+    <EntityHubShell
+      breadcrumb={[{ label: "Árbitros", href: "/arbitros" }, { label: displayName }]}
+      avatar={
+        <div className={styles.avatarSlot}>
+          {referee.photo_url
+            ? <img src={referee.photo_url} alt="" className={styles.avatarImg} />
+            : <PersonAvatarPlaceholder size={34} className={styles.avatarPlaceholderIcon} />
+          }
         </div>
-      </div>
-
-      <div style={{ flex: 1, padding: "24px 32px" }}>
-        {activeTab === "informacoes" && <AbaInformacoes referee={referee} roles={refereeRoles} />}
-        {activeTab === "jogos" && <AbaJogos matches={matches} roles={refereeRoles} />}
-        {activeTab === "estatisticas" && <AbaEstatisticas matches={matches} cardActions={cardActions} />}
-      </div>
-    </div>
+      }
+      title={displayName.toUpperCase()}
+      subtitle={`${roleLabel} · ${matches.length} ${matches.length === 1 ? "jogo" : "jogos"} · ${cardStats.amarelos}🟡 ${cardStats.vermelhos}🔴`}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(key) => {
+        if (key === "informacoes" || key === "jogos" || key === "estatisticas") {
+          setActiveTab(key);
+        }
+      }}
+      showSave={activeTab === "informacoes"}
+      saveFormId="form-arbitro"
+      saving={savingInformacoes}
+      saveLabel="Salvar alterações"
+    >
+      {activeTab === "informacoes" && (
+        <AbaInformacoes referee={referee} onSavingChange={setSavingInformacoes} />
+      )}
+      {activeTab === "jogos" && <AbaJogos matches={matches} roles={refereeRoles} />}
+      {activeTab === "estatisticas" && <AbaEstatisticas matches={matches} cardActions={cardActions} />}
+    </EntityHubShell>
   );
 }

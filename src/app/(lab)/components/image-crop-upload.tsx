@@ -5,6 +5,12 @@ import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from "react-image-cr
 import { compressNewsImage } from "@/lib/images/compress-news-image";
 import "react-image-crop/dist/ReactCrop.css";
 import { X, Check, ImagePlus } from "lucide-react";
+import {
+  fieldLabelStyle,
+  modalPanelStyle,
+  primaryBrandButtonStyle,
+  secondaryButtonStyle,
+} from "@/lib/lab-ui-styles";
 
 type ImageCropUploadProps = {
   value: File | null;
@@ -147,12 +153,7 @@ export function ImageCropUpload({
       {label && (
         <span
           style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 9,
-            fontWeight: 800,
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            color: "rgba(255,255,255,0.3)",
+            ...fieldLabelStyle,
             display: "block",
             marginBottom: 8,
           }}
@@ -164,11 +165,11 @@ export function ImageCropUpload({
       {cropping && srcImage && (
         <div
           className="fixed inset-0 z-[60] flex items-center justify-center p-6"
-          style={{ backgroundColor: "rgba(0,0,0,0.85)" }}
+          style={{ backgroundColor: "var(--color-modal-scrim-heavy)" }}
         >
           <div
             className="flex w-full max-w-lg flex-col gap-4 rounded-xl p-6"
-            style={{ backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.08)" }}
+            style={{ ...modalPanelStyle, borderRadius: 12 }}
           >
             <div className="flex items-center justify-between">
               <p
@@ -205,7 +206,7 @@ export function ImageCropUpload({
                 type="button"
                 onClick={cancelCrop}
                 className="rounded px-4 py-2 font-mono text-sm transition-opacity hover:opacity-70"
-                style={{ border: "1px solid rgba(255,255,255,0.08)", color: "var(--color-text-secondary)" }}
+                style={{ ...secondaryButtonStyle, padding: "8px 16px", fontSize: 12, textTransform: "none", letterSpacing: 0 }}
               >
                 Cancelar
               </button>
@@ -214,7 +215,7 @@ export function ImageCropUpload({
                 onClick={applyCrop}
                 disabled={compressing || !completedCrop}
                 className="flex items-center gap-2 rounded px-4 py-2 font-mono text-sm font-bold uppercase transition-opacity hover:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "#BFF205", color: "#0D0D0D" }}
+                style={{ ...primaryBrandButtonStyle, padding: "8px 16px", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}
               >
                 <Check size={14} strokeWidth={2.5} />
                 {compressing ? "Comprimindo…" : "Aplicar"}
@@ -232,8 +233,8 @@ export function ImageCropUpload({
               height: "100%",
               borderRadius: aspect === 1 ? 14 : 8,
               overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.08)",
-              backgroundColor: "rgba(255,255,255,0.03)",
+              border: "1px solid var(--color-input-border)",
+              backgroundColor: "var(--color-input-bg)",
             }}
           >
             <img
@@ -253,8 +254,8 @@ export function ImageCropUpload({
               height: 22,
               borderRadius: "50%",
               border: "none",
-              backgroundColor: "rgba(0,0,0,0.8)",
-              color: "#fff",
+              backgroundColor: "var(--color-badge-overlay)",
+              color: "var(--color-on-danger)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
@@ -273,8 +274,8 @@ export function ImageCropUpload({
               padding: "2px 6px",
               borderRadius: 4,
               border: "none",
-              backgroundColor: "rgba(0,0,0,0.8)",
-              color: "#fff",
+              backgroundColor: "var(--color-badge-overlay)",
+              color: "var(--color-on-danger)",
               cursor: "pointer",
               fontFamily: "var(--font-mono)",
               fontSize: 9,
@@ -291,8 +292,8 @@ export function ImageCropUpload({
             width: 100,
             height: 100,
             borderRadius: aspect === 1 ? 14 : 8,
-            border: "2px dashed rgba(255,255,255,0.12)",
-            backgroundColor: "rgba(255,255,255,0.03)",
+            border: "2px dashed var(--color-dashed-border)",
+            backgroundColor: "var(--color-input-bg)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
@@ -302,18 +303,18 @@ export function ImageCropUpload({
             transition: "border-color 0.15s",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)";
+            e.currentTarget.style.borderColor = "var(--color-dashed-border-hover)";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+            e.currentTarget.style.borderColor = "var(--color-dashed-border)";
           }}
         >
-          <ImagePlus size={20} strokeWidth={1.5} style={{ color: "rgba(255,255,255,0.25)" }} />
+          <ImagePlus size={20} strokeWidth={1.5} style={{ color: "var(--color-text-hint)" }} />
           <span
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: 8,
-              color: "rgba(255,255,255,0.25)",
+              color: "var(--color-text-hint)",
               textAlign: "center",
               padding: "0 6px",
               lineHeight: 1.3,

@@ -1,247 +1,306 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase";
-import { Trophy } from "lucide-react";
+import { memo, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { RefreshCw, Trophy } from "lucide-react";
+import { GenderSwitch } from "@/app/(lab)/components/gender-switch";
+import { LabPicker } from "@/app/(lab)/components/lab-picker";
+import { toast } from "@/app/(lab)/components/toast";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
+import {
+  loadRanking,
+  loadRankingExtrato,
+  recalcularRanking,
+  type RankingExtrato,
+  type RankingFiltroOpcoes,
+  type RankingFiltros,
+} from "./actions";
+import type { RankingRow } from "@/lib/ranking-calculate";
+import { RankingExtratoModal } from "./ranking-extrato-modal";
 
-type RankingRow = {
-  team_id: string;
-  team_name: string;
-  logo_url: string | null;
-  total_points: number;
-};
+function rankClass(rank: number): string {
+  if (rank === 1) return styles.hallRankNumTop1;
+  if (rank === 2) return styles.hallRankNumTop2;
+  if (rank === 3) return styles.hallRankNumTop3;
+  return "";
+}
 
-const GENDER_OPTIONS = [
-  { value: "male", label: "MASCULINO" },
-  { value: "female", label: "FEMININO" },
-];
+function competitionGenderMatches(filterGender: string, competitionGender: string | null | undefined): boolean {
+  const g = (competitionGender ?? "").toLowerCase();
+  if (filterGender === "male") return g === "male" || g === "m" || g === "masculino";
+  return g === "female" || g === "f" || g === "feminino";
+}
 
-const SPORT_OPTIONS = [
-  { value: "football7", label: "FUTEBOL 7" },
-];
-
-export default function RankingsClient({ orgId }: { orgId: string }) {
-  const [gender, setGender] = useState("male");
-  const [sportSlug, setSportSlug] = useState("football7");
-  const [rows, setRows] = useState<RankingRow[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    const supabase = createClient();
-    const { data, error } = await supabase.rpc("calculate_ranking", {
-      p_organization_id: orgId,
-      p_gender: gender,
-      p_sport_slug: sportSlug,
-    });
-    setLoading(false);
-    if (error) { console.error(error); return; }
-    setRows(data ?? []);
-  }
-
-  useEffect(() => { void load(); }, [orgId, gender, sportSlug]);
-
-  const pillBase: React.CSSProperties = {
-    fontFamily: "var(--font-mono)",
-    fontSize: "10px",
-    fontWeight: 700,
-    letterSpacing: "0.1em",
-    padding: "6px 14px",
-    borderRadius: "6px",
-    border: "1px solid",
-    cursor: "pointer",
-    transition: "all 0.15s",
-  };
-
-  function pillStyle(active: boolean): React.CSSProperties {
-    return {
-      ...pillBase,
-      backgroundColor: active ? "var(--color-brand)" : "transparent",
-      borderColor: active ? "var(--color-brand)" : "var(--color-border)",
-      color: active ? "#0a0a0a" : "#A6A6A6",
-    };
-  }
+const TeamRankingRow = memo(function TeamRankingRow({
+  rank,
+  row,
+  onOpenExtrato,
+}: {
+  rank: number;
+  row: RankingRow;
+  onOpenExtrato: (row: RankingRow) => void;
+}) {
+  const displayLabel = (row.short_name ?? row.team_name).toUpperCase();
+  const logoFallback = displayLabel.slice(0, 2);
 
   return (
-    <div className="p-6 md:p-8 max-w-3xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1
-          className="font-mono font-black tracking-tight"
-          style={{ fontSize: "22px", color: "var(--color-text-primary)" }}
-        >
-          RANKING
-        </h1>
-        <div className="mt-2 flex items-center gap-4">
-          <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>
-            Pontuação histórica acumulada por equipe
-          </p>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="font-mono text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50"
-            style={{ borderColor: "var(--color-border)", color: "var(--color-brand)", backgroundColor: "transparent" }}
-          >
-            {loading ? "CALCULANDO..." : "↻ RECALCULAR"}
-          </button>
+    <button type="button" onClick={() => onOpenExtrato(row)} className={styles.hallRankRowButton}>
+      <div className={styles.athleteListRowInner}>
+        <span className={`${styles.hallRankNum} ${rankClass(rank)}`}>{rank}º</span>
+
+        <div className={styles.athleteListRowLink}>
+          <div className={styles.hubListTeamLogoMain} title={row.short_name ?? row.team_name}>
+            {row.logo_url ? (
+              <img src={row.logo_url} alt="" loading="lazy" decoding="async" />
+            ) : (
+              <span className={styles.hubListTeamLogoFallback}>{logoFallback}</span>
+            )}
+          </div>
+
+          <div className={styles.athleteListDetails}>
+            <p className={styles.athleteListNickname}>{displayLabel}</p>
+          </div>
+        </div>
+
+        <div className={styles.hallRankStat}>
+          <span className={styles.hallRankStatValue}>{row.total_points}</span>
+          <span className={styles.hallRankStatSuffix}>pts</span>
         </div>
       </div>
+    </button>
+  );
+});
 
-      {/* Filtros */}
-      <div className="mb-6 flex flex-wrap gap-6">
-        <div className="flex flex-col gap-2">
-          <span
-            className="font-mono font-bold uppercase"
-            style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#A6A6A6" }}
-          >
-            Gênero
-          </span>
-          <div className="flex gap-2">
-            {GENDER_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setGender(opt.value)}
-                style={pillStyle(gender === opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
+interface Props {
+  opcoesFiltro: RankingFiltroOpcoes;
+}
+
+export default function RankingsClient({ opcoesFiltro }: Props) {
+  const [gender, setGender] = useState<"male" | "female">("male");
+  const [competitionId, setCompetitionId] = useState("");
+  const [seasonId, setSeasonId] = useState("");
+  const [yearId, setYearId] = useState("");
+  const [rows, setRows] = useState<RankingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [recalcPending, startRecalc] = useTransition();
+  const [extrato, setExtrato] = useState<RankingExtrato | null>(null);
+  const [extratoLoading, setExtratoLoading] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+
+  const filtros = useMemo<RankingFiltros>(
+    () => ({
+      gender,
+      competitionId: competitionId || undefined,
+      seasonId: seasonId || undefined,
+      yearId: yearId || undefined,
+    }),
+    [gender, competitionId, seasonId, yearId],
+  );
+
+  const competitionOptions = useMemo(
+    () =>
+      opcoesFiltro.competitions
+        .filter((competition) => competitionGenderMatches(gender, competition.gender))
+        .map((competition) => ({
+          id: competition.id,
+          label: competition.short_name ?? competition.full_name,
+          logo_url: competition.logo_url,
+          searchText: competition.full_name,
+        })),
+    [opcoesFiltro.competitions, gender],
+  );
+
+  const temFiltroAtivo = !!(competitionId || seasonId || yearId);
+
+  const fetchRanking = useCallback(async (nextFiltros: RankingFiltros) => {
+    setLoading(true);
+    const result = await loadRanking(nextFiltros);
+    setLoading(false);
+
+    if ("error" in result) {
+      toast("error", result.error);
+      setRows([]);
+      return;
+    }
+
+    setRows(result.data);
+  }, []);
+
+  useEffect(() => {
+    void fetchRanking(filtros);
+  }, [filtros, fetchRanking]);
+
+  useEffect(() => {
+    setExtrato(null);
+    setSelectedTeamId(null);
+    setExtratoLoading(false);
+  }, [gender, competitionId, seasonId, yearId]);
+
+  useEffect(() => {
+    if (!competitionId) return;
+    const stillValid = competitionOptions.some((option) => option.id === competitionId);
+    if (!stillValid) setCompetitionId("");
+  }, [competitionId, competitionOptions]);
+
+  const handleRecalcular = () => {
+    startRecalc(async () => {
+      const result = await recalcularRanking(gender);
+      if ("error" in result) {
+        toast("error", result.error);
+        return;
+      }
+      toast("success", "Ranking atualizado.");
+      await fetchRanking(filtros);
+      if (selectedTeamId) {
+        setExtratoLoading(true);
+        const extratoResult = await loadRankingExtrato(selectedTeamId, filtros);
+        setExtratoLoading(false);
+        if ("error" in extratoResult) {
+          toast("error", extratoResult.error);
+          setExtrato(null);
+          setSelectedTeamId(null);
+          return;
+        }
+        setExtrato(extratoResult.data);
+      }
+    });
+  };
+
+  const handleOpenExtrato = async (row: RankingRow) => {
+    setSelectedTeamId(row.team_id);
+    setExtrato(null);
+    setExtratoLoading(true);
+
+    const result = await loadRankingExtrato(row.team_id, filtros);
+    setExtratoLoading(false);
+
+    if ("error" in result) {
+      toast("error", result.error);
+      setSelectedTeamId(null);
+      return;
+    }
+
+    setExtrato(result.data);
+  };
+
+  const handleCloseExtrato = () => {
+    setExtrato(null);
+    setSelectedTeamId(null);
+    setExtratoLoading(false);
+  };
+
+  return (
+    <div className={`${styles.entityHub} ${styles.page} ${styles.hubListPage} ${styles.personListHub} ${styles.rankingsHub}`}>
+      <div className={`${styles.content} ${styles.hubListContent}`}>
+        <main className={`${styles.hallMain} ${loading ? styles.hallMainLoading : ""}`}>
+          <div className={styles.rankingsTitleRow}>
+            <h2 className={styles.hallCategoryTitle}>Ranking histórico</h2>
+            <button
+              type="button"
+              onClick={handleRecalcular}
+              disabled={recalcPending || loading}
+              className={styles.hallRecalcBtn}
+            >
+              <RefreshCw size={14} className={recalcPending ? styles.hallRecalcBtnSpin : undefined} />
+              {recalcPending ? "RECALCULANDO…" : "RECALCULAR RANKING"}
+            </button>
           </div>
-        </div>
+          <p className={styles.sectionSubtitle}>Pontuação acumulada por equipe</p>
 
-        <div className="flex flex-col gap-2">
-          <span
-            className="font-mono font-bold uppercase"
-            style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#A6A6A6" }}
-          >
-            Modalidade
-          </span>
-          <div className="flex gap-2">
-            {SPORT_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => setSportSlug(opt.value)}
-                style={pillStyle(sportSlug === opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+          <div className={styles.rankingsFiltersBlock}>
+            <GenderSwitch value={gender} onChange={setGender} />
 
-      {/* Tabela */}
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}
-      >
-        {/* Cabeçalho da tabela */}
-        <div
-          className="grid items-center border-b px-4 py-2"
-          style={{
-            gridTemplateColumns: "40px 1fr 100px",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <span className="font-mono font-bold" style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#A6A6A6" }}>#</span>
-          <span className="font-mono font-bold" style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#A6A6A6" }}>EQUIPE</span>
-          <span className="font-mono font-bold text-right" style={{ fontSize: "9px", letterSpacing: "0.16em", color: "#A6A6A6" }}>PONTOS</span>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>CARREGANDO...</p>
-          </div>
-        ) : rows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Trophy size={28} strokeWidth={1.5} style={{ color: "#A6A6A6" }} />
-            <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>
-              Nenhuma equipe encontrada para este filtro.
-            </p>
-          </div>
-        ) : (
-          rows.map((row, idx) => {
-            const position = idx + 1;
-            const isTop3 = position <= 3;
-            const positionColor =
-              position === 1 ? "#F2C005" :
-              position === 2 ? "#A6A6A6" :
-              position === 3 ? "#CD7F32" :
-              "var(--color-text-secondary)";
-
-            return (
-              <div
-                key={row.team_id}
-                className="grid items-center border-b px-4 py-3 last:border-b-0"
-                style={{
-                  gridTemplateColumns: "40px 1fr 100px",
-                  borderColor: "var(--color-border)",
-                  backgroundColor: position === 1
-                    ? "rgba(242,192,5,0.04)"
-                    : "transparent",
-                }}
-              >
-                {/* Posição */}
-                <span
-                  className="font-mono font-black"
-                  style={{
-                    fontSize: isTop3 ? "14px" : "12px",
-                    color: positionColor,
-                  }}
-                >
-                  {position}
-                </span>
-
-                {/* Equipe */}
-                <div className="flex items-center gap-3 min-w-0">
-                  {row.logo_url ? (
-                    <img
-                      src={row.logo_url}
-                      alt=""
-                      className="h-8 w-8 rounded object-contain shrink-0"
-                    />
-                  ) : (
-                    <div
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded border font-mono text-xs font-bold"
-                      style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
-                    >
-                      {row.team_name.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <span
-                    className="font-mono font-bold truncate"
-                    style={{ fontSize: "13px", color: "var(--color-text-primary)" }}
-                  >
-                    {row.team_name}
-                  </span>
-                </div>
-
-                {/* Pontos */}
-                <div className="text-right">
-                  <span
-                    className="font-mono font-black"
-                    style={{
-                      fontSize: "14px",
-                      color: isTop3 ? positionColor : "var(--color-text-primary)",
-                    }}
-                  >
-                    {row.total_points}
-                  </span>
-                  <span
-                    className="font-mono ml-1"
-                    style={{ fontSize: "9px", color: "#A6A6A6" }}
-                  >
-                    pts
-                  </span>
-                </div>
+            <div className={styles.hallFiltersRow}>
+              <div className={styles.hallFilterField}>
+                <LabPicker
+                  value={competitionId}
+                  onChange={setCompetitionId}
+                  emptyLabel="Competição"
+                  searchPlaceholder="Buscar competição…"
+                  menuSans
+                  triggerSans
+                  options={competitionOptions}
+                />
               </div>
-            );
-          })
-        )}
+              <div className={styles.hallFilterField}>
+                <LabPicker
+                  showLogos={false}
+                  value={seasonId}
+                  onChange={setSeasonId}
+                  emptyLabel="Temporada"
+                  searchPlaceholder="Buscar temporada…"
+                  menuSans
+                  triggerSans
+                  options={opcoesFiltro.seasons.map((season) => ({ id: season.id, label: season.name }))}
+                />
+              </div>
+              <div className={styles.hallFilterField}>
+                <LabPicker
+                  showLogos={false}
+                  value={yearId}
+                  onChange={setYearId}
+                  emptyLabel="Ano"
+                  searchPlaceholder="Buscar ano…"
+                  menuSans
+                  triggerSans
+                  options={opcoesFiltro.years.map((year) => ({ id: year.id, label: String(year.value) }))}
+                />
+              </div>
+              {temFiltroAtivo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetitionId("");
+                    setSeasonId("");
+                    setYearId("");
+                  }}
+                  className={styles.hallClearBtn}
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className={`${styles.hubListBare} ${styles.athleteListStack}`}>
+              <div className={styles.listPanelEmpty}>
+                <p className={styles.listPanelEmptyTitle}>Carregando ranking…</p>
+              </div>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className={`${styles.hubListBare} ${styles.athleteListStack}`}>
+              <div className={styles.listPanelEmpty}>
+                <Trophy size={32} strokeWidth={1.5} className={styles.newsEmptyIcon} />
+                <p className={styles.listPanelEmptyTitle}>Sem equipes neste ranking</p>
+                <p className={styles.newsEmptyDesc}>
+                  {temFiltroAtivo
+                    ? "Tente ajustar os filtros."
+                    : "O ranking aparecerá quando houver pontuação registrada."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className={`${styles.hubListBare} ${styles.athleteListStack}`}>
+              {rows.map((row, idx) => (
+                <TeamRankingRow
+                  key={row.team_id}
+                  rank={idx + 1}
+                  row={row}
+                  onOpenExtrato={handleOpenExtrato}
+                />
+              ))}
+            </div>
+          )}
+        </main>
       </div>
+
+      {(extrato || extratoLoading) && (
+        <RankingExtratoModal
+          extrato={extrato}
+          loading={extratoLoading}
+          onClose={handleCloseExtrato}
+        />
+      )}
     </div>
   );
 }

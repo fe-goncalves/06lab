@@ -95,7 +95,7 @@ export default function Notificacoes({ userId }: { userId: string }) {
         {unread > 0 && (
           <span
             className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
           >
             {unread > 9 ? "9+" : unread}
           </span>
@@ -134,7 +134,7 @@ export default function Notificacoes({ userId }: { userId: string }) {
                     className="flex gap-3 cursor-pointer border-b px-4 py-3 transition-colors last:border-b-0"
                     style={{
                       borderColor: "var(--color-border)",
-                      backgroundColor: n.is_read ? "transparent" : "rgba(191,242,5,0.04)",
+                      backgroundColor: n.is_read ? "transparent" : "var(--color-brand-hover-bg)",
                     }}
                   >
                     <span className="shrink-0 text-sm">{TYPE_ICONS[n.type] ?? "·"}</span>

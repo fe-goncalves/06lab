@@ -7,11 +7,16 @@ import { Bold, Italic, Heading2, Heading3, List, ListOrdered, ImageIcon, Upload 
 import { useEffect, useRef, useState } from "react";
 import { compressNewsImage, newsImageContentType } from "@/lib/images/compress-news-image";
 import { createClient } from "@/lib/supabase";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Props = {
   initialContent?: object;
   onChange: (json: object) => void;
 };
+
+function toolBtnClass(active: boolean) {
+  return `${styles.newsEditorToolBtn} ${active ? styles.newsEditorToolBtnActive : ""}`;
+}
 
 export default function EditorTipTap({ initialContent, onChange }: Props) {
   const [imageUrl, setImageUrl] = useState("");
@@ -25,8 +30,8 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
       Image.configure({ inline: false, allowBase64: false }),
     ],
     content: initialContent ?? {},
-    onUpdate({ editor }) {
-      onChange(editor.getJSON());
+    onUpdate({ editor: ed }) {
+      onChange(ed.getJSON());
     },
     editorProps: {
       attributes: {
@@ -71,103 +76,73 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
     }
   }
 
-  const btnBase: React.CSSProperties = {
-    padding: "4px 8px",
-    borderRadius: "4px",
-    border: "1px solid var(--color-border)",
-    backgroundColor: "transparent",
-    cursor: "pointer",
-    color: "var(--color-text-secondary)",
-    display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    fontSize: "12px",
-    fontFamily: "var(--font-mono)",
-  };
-
-  const btnActive: React.CSSProperties = {
-    ...btnBase,
-    backgroundColor: "rgba(191,242,5,0.15)",
-    color: "var(--color-brand)",
-    borderColor: "var(--color-brand)",
-  };
-
   if (!editor) return null;
 
   return (
-    <div
-      className="rounded-lg overflow-hidden"
-      style={{ border: "1px solid var(--color-border)" }}
-    >
-      {/* Toolbar */}
-      <div
-        className="flex flex-wrap items-center gap-1 p-2"
-        style={{ borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)" }}
-      >
+    <div className={styles.newsEditorWrap}>
+      <div className={styles.newsEditorToolbar}>
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBold().run()}
-          style={editor.isActive("bold") ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("bold"))}
         >
           <Bold size={13} strokeWidth={2.5} />
         </button>
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleItalic().run()}
-          style={editor.isActive("italic") ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("italic"))}
         >
           <Italic size={13} strokeWidth={2.5} />
         </button>
-        <div style={{ width: "1px", height: "20px", backgroundColor: "var(--color-border)", margin: "0 4px" }} />
+        <div className={styles.newsEditorToolDivider} />
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          style={editor.isActive("heading", { level: 2 }) ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("heading", { level: 2 }))}
         >
           <Heading2 size={13} strokeWidth={2.5} />
         </button>
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          style={editor.isActive("heading", { level: 3 }) ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("heading", { level: 3 }))}
         >
           <Heading3 size={13} strokeWidth={2.5} />
         </button>
-        <div style={{ width: "1px", height: "20px", backgroundColor: "var(--color-border)", margin: "0 4px" }} />
+        <div className={styles.newsEditorToolDivider} />
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
-          style={editor.isActive("bulletList") ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("bulletList"))}
         >
           <List size={13} strokeWidth={2.5} />
         </button>
         <button
           type="button"
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          style={editor.isActive("orderedList") ? btnActive : btnBase}
+          className={toolBtnClass(editor.isActive("orderedList"))}
         >
           <ListOrdered size={13} strokeWidth={2.5} />
         </button>
-        <div style={{ width: "1px", height: "20px", backgroundColor: "var(--color-border)", margin: "0 4px" }} />
+        <div className={styles.newsEditorToolDivider} />
         <button
           type="button"
           onClick={() => setShowImageInput((v) => !v)}
-          style={showImageInput ? btnActive : btnBase}
+          className={toolBtnClass(showImageInput)}
         >
           <ImageIcon size={13} strokeWidth={2.5} />
           URL
         </button>
-
         <button
           type="button"
           onClick={() => imageFileRef.current?.click()}
           disabled={uploadingImage}
-          style={btnBase}
+          className={styles.newsEditorToolBtn}
         >
           <Upload size={13} strokeWidth={2.5} />
-          {uploadingImage ? "Enviando..." : "Upload"}
+          {uploadingImage ? "Enviando…" : "Upload"}
         </button>
-
         <input
           ref={imageFileRef}
           type="file"
@@ -175,39 +150,26 @@ export default function EditorTipTap({ initialContent, onChange }: Props) {
           onChange={handleImageFileUpload}
           className="hidden"
         />
-
-        {showImageInput && (
-          <div className="flex items-center gap-2 ml-1">
-            <input
-              type="url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://..."
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); insertImage(); } }}
-              style={{
-                backgroundColor: "var(--color-background)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "4px",
-                padding: "4px 8px",
-                color: "var(--color-text-primary)",
-                fontSize: "12px",
-                fontFamily: "var(--font-mono)",
-                width: "220px",
-                outline: "none",
-              }}
-            />
-            <button type="button" onClick={insertImage} style={{ ...btnBase, color: "var(--color-brand)" }}>
-              Inserir
-            </button>
-          </div>
-        )}
       </div>
 
-      {/* Editor area */}
-      <div
-        className="p-4"
-        style={{ backgroundColor: "var(--color-background)", minHeight: "300px" }}
-      >
+      {showImageInput && (
+        <div className={styles.newsEditorImageBar}>
+          <input
+            type="url"
+            value={imageUrl}
+            onChange={(e) => setImageUrl(e.target.value)}
+            placeholder="https://…"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); insertImage(); } }}
+            className={styles.input}
+            style={{ flex: 1, fontSize: 12 }}
+          />
+          <button type="button" onClick={insertImage} className={styles.newsEditorToolBtn}>
+            Inserir
+          </button>
+        </div>
+      )}
+
+      <div className={styles.newsEditorBody}>
         <style>{`
           .prose-editor { color: var(--color-text-primary); font-family: var(--font-sans); font-size: 15px; line-height: 1.7; }
           .prose-editor h2 { font-size: 20px; font-weight: 700; margin: 20px 0 10px; color: var(--color-text-primary); }

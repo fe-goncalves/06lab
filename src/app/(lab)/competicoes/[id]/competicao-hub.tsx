@@ -7,14 +7,18 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
 import { toast } from "@/app/(lab)/components/toast";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
 import Link from "next/link";
-import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw } from "lucide-react";
-import { criarEdicao, editarEdicao, atualizarVisibilidadeHome, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao } from "./edicoes/actions";
+import { ChevronDown, Plus, ChevronRight, Users, X, Check, Trash2, Ban, RotateCcw, RefreshCw } from "lucide-react";
+import { criarEdicao, editarEdicao, atualizarVisibilidadeHome, inscreverAtleta, removerAtletaEdicao, atribuirPremiacao, removerPremiacao, salvarRankingConfig, criarConfronto, criarPartidaNoConfronto, editarTimesConfronto, adicionarEquipeEdicao, removerEquipeEdicao, salvarConfiguracaoInscricoes } from "./edicoes/actions";
 import { criarPartida, deletarPartida } from "@/app/(lab)/partidas/[matchId]/actions";
 import { criarOuAtualizarTOTW, criarOuAtualizarMOTW, buscarTOTS, criarOuAtualizarTOTS, deletarSquad, recalcularEstatisticasEdicao, salvarAjustesPontosClassificacao } from "./edicoes/actions";
 import { Star, Search, AlertTriangle } from "lucide-react";
 import { criarSuspensao, editarSuspensao, desativarSuspensao } from "@/app/(lab)/suspensoes/actions";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
+import { HubAnimatedTabBar, HubGlassSwitch } from "@/app/(lab)/components/hub-glass-switch";
 
 type Competition = any;
 type Edition = {
@@ -88,7 +92,7 @@ function TableMarkerRow({
     setLocalTo(String(marker.position_to));
   }, [marker.id]);
 
-  const inputStyle = { padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none" } as const;
+  const inputStyle = { padding: "7px 10px", backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 7, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none" } as const;
   const inputStyleSm = { ...inputStyle, fontSize: 10, padding: "7px 8px" } as const;
   const inputStyleNum = { ...inputStyle, textAlign: "center" as const };
 
@@ -109,7 +113,7 @@ function TableMarkerRow({
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <input
           type="color"
-          value={localColorHex?.startsWith("#") ? localColorHex : "#BFF205"}
+          value={localColorHex?.startsWith("#") ? localColorHex : "var(--color-brand)"}
           onChange={e => {
             setLocalColorHex(e.target.value);
             commitField({ color_hex: e.target.value });
@@ -142,7 +146,7 @@ function TableMarkerRow({
         type="button"
         title="Remover marcação"
         onClick={onRemove}
-        style={{ width: 32, height: 32, borderRadius: 7, border: "1px solid rgba(255,68,68,0.3)", background: "rgba(255,68,68,0.08)", color: "var(--color-danger)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
+        style={{ width: 32, height: 32, borderRadius: 7, border: "1px solid var(--color-danger-muted-border)", background: "var(--color-danger-muted-bg)", color: "var(--color-danger)", cursor: "pointer", fontSize: 16, lineHeight: 1 }}
       >
         ×
       </button>
@@ -161,13 +165,13 @@ function StandingsMarkersEditor({
 }) {
   if (!visible) return null;
   return (
-    <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.02)" }}>
-      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.45)", margin: "0 0 12px" }}>
+    <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-border)", backgroundColor: "var(--color-hover-bg-subtle)" }}>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-text-muted)", margin: "0 0 12px" }}>
         Marcações na tabela
       </p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 140px 72px 72px 32px", gap: 8, marginBottom: 6, paddingRight: 0 }}>
         {["Título", "Cor", "Do º", "Até º", ""].map((label, i) => (
-          <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>{label}</span>
+          <span key={i} style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>{label}</span>
         ))}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -180,7 +184,7 @@ function StandingsMarkersEditor({
           />
         ))}
       </div>
-      <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", margin: "10px 0 0", lineHeight: 1.5 }}>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-muted)", margin: "10px 0 0", lineHeight: 1.5 }}>
         Defina faixas de posição (ex.: 1º–4º classificados, 5º–8º repescagem). As cores aparecem na tabela e na legenda abaixo.
       </p>
       <button
@@ -188,13 +192,13 @@ function StandingsMarkersEditor({
         onClick={() => onChange(prev => [...prev, {
           id: `new-${Date.now()}-${prev.length}`,
           description: "",
-          color_hex: "#A6A6A6",
+          color_hex: "var(--color-text-secondary)",
           show_background: true,
           position_from: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 1) : 1,
           position_to: prev.length > 0 ? (Math.max(...prev.map(p => p.position_to)) + 2) : 2,
           display_order: prev.length,
         }])}
-        style={{ marginTop: 10, padding: "6px 12px", borderRadius: 7, border: "1px dashed rgba(255,255,255,0.15)", background: "none", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
+        style={{ marginTop: 10, padding: "6px 12px", borderRadius: 7, border: "1px dashed var(--color-dashed-border)", background: "none", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer" }}
       >
         + Adicionar marcação
       </button>
@@ -203,7 +207,7 @@ function StandingsMarkersEditor({
 }
 
 const STATUS_LABEL: Record<string, string> = { scheduled: "AG", ongoing: "AO VIVO", finished: "FT", postponed: "AD" };
-const STATUS_COLOR: Record<string, string> = { scheduled: "#A6A6A6", ongoing: "#BFF205", finished: "#A6A6A6", postponed: "#FF4444" };
+const STATUS_COLOR: Record<string, string> = { scheduled: "var(--color-text-secondary)", ongoing: "var(--color-brand)", finished: "var(--color-text-secondary)", postponed: "var(--color-danger)" };
 const PHASE_TYPE_LABEL: Record<string, string> = {
   round_robin: "Pontos Corridos",
   group_stage: "Fase de Grupos",
@@ -215,6 +219,32 @@ const AWARD_LABELS: Record<string, string> = {
   revelation: "Revelação", best_defense: "Melhor Defesa", best_performance: "Melhor Desempenho",
   champion: "Campeão", runner_up: "Vice-campeão", third_place: "Terceiro Lugar",
 };
+
+const CARD_ACTION_TYPES = ["yellow_card", "red_card", "red_yellow_card"] as const;
+
+function countCardsByAthlete(
+  actions: { primary_athlete_id: string | null; action_type: string }[],
+): Record<string, { yellow: number; red: number }> {
+  const counts: Record<string, { yellow: number; red: number }> = {};
+  for (const a of actions) {
+    if (!a.primary_athlete_id) continue;
+    const id = a.primary_athlete_id;
+    if (!counts[id]) counts[id] = { yellow: 0, red: 0 };
+    if (a.action_type === "yellow_card" || a.action_type === "red_yellow_card") counts[id].yellow++;
+    if (a.action_type === "red_card" || a.action_type === "red_yellow_card") counts[id].red++;
+  }
+  return counts;
+}
+
+function applyCardCountsToScorers(
+  scorers: Scorer[],
+  cardCounts: Record<string, { yellow: number; red: number }>,
+): Scorer[] {
+  return scorers.map((s) => {
+    const counts = cardCounts[s.athlete_id] ?? { yellow: 0, red: 0 };
+    return { ...s, yellow_cards: counts.yellow, red_cards: counts.red };
+  });
+}
 
 export default function CompeticaoHub({ competition, editions, seasons, allTeams, orgId, initialEditionId }: {
   competition: Competition; editions: Edition[]; seasons: Season[]; allTeams: Team[]; orgId: string;
@@ -279,6 +309,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   const [matchFilterPhaseId, setMatchFilterPhaseId] = useState<string>("");
   const [venues, setVenues] = useState<any[]>([]);
   const [loadingMatches, setLoadingMatches] = useState(false);
+  const [recalcStatsPending, setRecalcStatsPending] = useState(false);
 
   // Novo confronto (fases eliminatórias)
   const [showNovoConfronto, setShowNovoConfronto] = useState(false);
@@ -530,7 +561,36 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     setPhases(phasesResult);
     setRounds((roundsData as any) ?? []);
     setEditionTeams((teamsData as any) ?? []);
-    setScorers(scorersData ?? []);
+
+    const matchIds = ((matchesData as any[]) ?? []).map((m: { id: string }) => m.id);
+    let scorersWithCards: Scorer[] = scorersData ?? [];
+
+    if (matchIds.length > 0) {
+      const { data: cardActions } = await supabase
+        .from("match_actions")
+        .select("primary_athlete_id, action_type")
+        .in("match_id", matchIds)
+        .in("action_type", [...CARD_ACTION_TYPES])
+        .not("primary_athlete_id", "is", null);
+
+      const cardCounts = countCardsByAthlete(cardActions ?? []);
+      const scorerIds = new Set((scorersData ?? []).map((s: Scorer) => s.athlete_id));
+      const missingIds = Object.keys(cardCounts).filter((id) => !scorerIds.has(id));
+
+      let extraScorers: Scorer[] = [];
+      if (missingIds.length > 0) {
+        const { data: extraRows } = await supabase
+          .from("athlete_edition_stats")
+          .select("*, athletes(id, full_name, surname, photo_url), team:teams(id, full_name, abbreviation, logo_url)")
+          .eq("edition_id", editionId)
+          .in("athlete_id", missingIds);
+        extraScorers = extraRows ?? [];
+      }
+
+      scorersWithCards = applyCardCountsToScorers([...(scorersData ?? []), ...extraScorers], cardCounts);
+    }
+
+    setScorers(scorersWithCards);
 
     // Enriquece matchups com dados dos times
     const rawMatchups = (matchupsData as any[]) ?? [];
@@ -956,7 +1016,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
           : [{
             id: `new-${Date.now()}`,
             description: "",
-            color_hex: "#BFF205",
+            color_hex: "var(--color-brand)",
             show_background: true,
             position_from: 1,
             position_to: 2,
@@ -1048,7 +1108,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 ))}
                 {standingsMode === "edit_points" && (
                   <>
-                    <th className="px-4 py-3 text-left font-mono text-xs" style={{ color: "#BFF205" }}>+PTS</th>
+                    <th className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-brand)" }}>+PTS</th>
                     <th className="px-4 py-3 text-left font-mono text-xs" style={{ color: "var(--color-danger)" }}>-PTS</th>
                   </>
                 )}
@@ -1072,7 +1132,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       boxShadow: rankMarker ? `inset 3px 0 0 ${rankMarker.color_hex}` : undefined,
                       transition: "background 0.1s",
                     }}
-                    className="hover:bg-[rgba(255,255,255,0.02)]">
+                    className="hover:bg-[var(--color-hover-bg-subtle)]">
                     <td className="px-4 py-3 font-mono text-xs" style={{ color: rankMarker?.color_hex ?? (useLegacyHighlight ? "var(--color-brand)" : "var(--color-text-secondary)") }}>{rank}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -1095,7 +1155,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     <td className="px-4 py-3 font-mono text-sm font-bold" style={{ color: "var(--color-brand)" }}>
                       {effectivePts}
                       {(awarded > 0 || deducted > 0) && (
-                        <span style={{ fontSize: 9, marginLeft: 4, color: "rgba(191,242,5,0.5)" }}>
+                        <span style={{ fontSize: 9, marginLeft: 4, color: "var(--color-brand-border)" }}>
                           {awarded > 0 ? `+${awarded}` : ""}{deducted > 0 ? `-${deducted}` : ""}
                         </span>
                       )}
@@ -1107,7 +1167,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                             type="number" min="0"
                             value={editedPoints[row.team_id]?.awarded ?? 0}
                             onChange={e => setEditedPoints(prev => ({ ...prev, [row.team_id]: { awarded: Number(e.target.value), deducted: prev[row.team_id]?.deducted ?? 0 } }))}
-                            style={{ width: 52, padding: "4px 8px", backgroundColor: "rgba(191,242,5,0.07)", border: "1px solid rgba(191,242,5,0.25)", borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 12, color: "#BFF205", outline: "none", textAlign: "center" as const }}
+                            style={{ width: 52, padding: "4px 8px", backgroundColor: "var(--color-brand-selected-bg)", border: "1px solid var(--color-brand-border-medium)", borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-brand)", outline: "none", textAlign: "center" as const }}
                           />
                         </td>
                         <td className="px-4 py-2">
@@ -1115,7 +1175,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                             type="number" min="0"
                             value={editedPoints[row.team_id]?.deducted ?? 0}
                             onChange={e => setEditedPoints(prev => ({ ...prev, [row.team_id]: { awarded: prev[row.team_id]?.awarded ?? 0, deducted: Number(e.target.value) } }))}
-                            style={{ width: 52, padding: "4px 8px", backgroundColor: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.25)", borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-danger)", outline: "none", textAlign: "center" as const }}
+                            style={{ width: 52, padding: "4px 8px", backgroundColor: "var(--color-danger-muted-bg)", border: "1px solid var(--color-danger-muted-border)", borderRadius: 6, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-danger)", outline: "none", textAlign: "center" as const }}
                           />
                         </td>
                       </>
@@ -1193,7 +1253,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     setReorderedTeams([]);
                     setEditingMarkers([]);
                   }}
-                  style={{ padding: "5px 14px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "none", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}>
+                  style={{ padding: "5px 14px", borderRadius: 7, border: "1px solid var(--color-dashed-border)", background: "none", color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}>
                   Cancelar
                 </button>
                 <button type="button"
@@ -1202,7 +1262,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                     if (standingsMode === "edit_points") void handleSavePoints(rows);
                     else void handleSaveMarkers();
                   }}
-                  style={{ padding: "5px 14px", borderRadius: 7, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
+                  style={{ padding: "5px 14px", borderRadius: 7, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", opacity: saving ? 0.6 : 1 }}>
                   {saving ? "Salvando…" : "Salvar"}
                 </button>
               </>
@@ -1211,22 +1271,22 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               <div style={{ position: "relative" }}>
                 <button type="button"
                   onClick={() => setStandingsMenuOpen(v => !v)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 12px", borderRadius: 7, border: "1px solid var(--color-dashed-border)", background: "var(--color-input-bg)", color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", cursor: "pointer" }}>
                   Gerenciar
                   <span style={{ fontSize: 14, lineHeight: 1, opacity: 0.5 }}>⋮</span>
                 </button>
                 {standingsMenuOpen && (
                   <>
                     <div style={{ position: "fixed", inset: 0, zIndex: 40 }} onClick={() => setStandingsMenuOpen(false)} />
-                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 220, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 220, borderRadius: 12, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
                       {[
                         { icon: "◧", label: "Gerenciar marcações", action: startEditMarkers },
                         { icon: "✎", label: "Editar pontos", action: () => { setStandingsMode("edit_points"); setStandingsMenuOpen(false); setEditedPoints({}); } },
                         { icon: "↺", label: "Recalcular a classificação", action: () => { setStandingsMenuOpen(false); setStandingsConfirmRecalc(true); }, danger: false },
                       ].map((item, idx) => (
                         <button key={idx} type="button" onClick={item.action}
-                          style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 16px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", backgroundColor: "transparent", border: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
-                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.05)"}
+                          style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "11px 16px", fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", backgroundColor: "transparent", border: "none", borderTop: idx > 0 ? "1px solid var(--color-hover-bg)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"}
                           onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                           <span style={{ width: 18, textAlign: "center" as const, fontSize: 14, opacity: 0.6 }}>{item.icon}</span>
                           {item.label}
@@ -1244,21 +1304,21 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
   
     // ── Modal de confirmação de recálculo ────────────────────────────────
     const RecalcConfirmModal = () => (
-      <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.78)", padding: 16 }}>
-        <div style={{ width: "100%", maxWidth: 360, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+      <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-modal-scrim)", padding: 16 }}>
+        <div style={{ width: "100%", maxWidth: 360, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)" }}>
           <div style={{ padding: "18px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Recalcular a classificação?</p>
             <button onClick={() => setStandingsConfirmRecalc(false)}
-              style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              style={{ width: 24, height: 24, borderRadius: 5, border: "1px solid var(--color-input-border-strong)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
           </div>
           <div style={{ padding: "0 20px 18px" }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0, lineHeight: 1.6, backgroundColor: "rgba(255,255,255,0.04)", borderRadius: 8, padding: "10px 12px", border: "1px solid rgba(255,255,255,0.06)" }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-icon-muted)", margin: 0, lineHeight: 1.6, backgroundColor: "var(--color-input-bg)", borderRadius: 8, padding: "10px 12px", border: "1px solid var(--color-divider-strong)" }}>
               Ao fazer isso, a ordem da classificação será redefinida para o padrão calculado pelas partidas.
             </p>
           </div>
           <div style={{ display: "flex", gap: 8, padding: "0 20px 18px", justifyContent: "flex-end" }}>
             <button onClick={() => setStandingsConfirmRecalc(false)}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.5)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+              style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid var(--color-input-border-strong)", background: "none", color: "var(--color-text-subtle)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
               Cancelar
             </button>
             <button onClick={async () => {
@@ -1269,7 +1329,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               await loadEditionData(selectedEditionId);
               if (selectedPhaseId) await loadPhaseStandings(selectedPhaseId);
             }}
-              style={{ padding: "8px 16px", borderRadius: 8, border: "none", backgroundColor: "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+              style={{ padding: "8px 16px", borderRadius: 8, border: "none", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
               Recalcular
             </button>
           </div>
@@ -1340,9 +1400,9 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
           <button type="button"
             onClick={() => { setMatchFilterPhaseId(selectedPhaseId); setShowNovoConfronto(true); }}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 9, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s" }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}>
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", borderRadius: 9, border: "1px solid var(--color-brand-border-medium)", backgroundColor: "var(--color-brand-hover-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer", transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-glow)"; e.currentTarget.style.borderColor = "var(--color-brand-glow-strong)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-hover-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}>
             <Plus size={13} strokeWidth={2.5} /> Novo confronto
           </button>
         </div>
@@ -1356,133 +1416,120 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
     );
   }
 
-  return (
-    <div className="flex min-h-screen flex-col" style={{ backgroundColor: "var(--color-background)" }}>
-      {/* Header */}
-      <div className="border-b" style={{ borderColor: "var(--color-border)", position: "relative", overflow: "hidden" }}>
-        {/* Degradê com a cor da competição */}
-        <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          background: competition.primary_color
-            ? `linear-gradient(135deg, ${competition.primary_color}22 0%, transparent 50%)`
-            : `linear-gradient(135deg, rgba(191,242,5,0.08) 0%, transparent 50%)`,
-        }} />
-        <div style={{ position: "absolute", inset: 0, backgroundColor: "var(--color-surface)", opacity: 0.85, pointerEvents: "none" }} />
+  const hubTitle = (competition.short_name || competition.full_name || "Competição").toUpperCase();
+  const logoFallback = hubTitle.slice(0, 2);
 
-        <div className="px-8 pt-5 pb-0" style={{ position: "relative", zIndex: 1 }}>
+  const hubTabs = [
+    { key: "jogos" as const, label: "JOGOS" },
+    { key: "classificacao" as const, label: "CLASSIFICAÇÃO" },
+    { key: "estatisticas" as const, label: "ESTATÍSTICAS" },
+    { key: "competicao" as const, label: "COMPETIÇÃO" },
+    { key: "configuracoes" as const, label: "CONFIGURAÇÕES" },
+  ];
+
+  return (
+    <div className={`${styles.entityHub} ${styles.page} ${styles.competicaoHub}`}>
+      <div className={styles.header}>
+        <div className={styles.headerGlow} />
+        <div className={styles.headerSurface} />
+
+        <div className={styles.headerInner}>
           <Breadcrumb items={[{ label: "Competições", href: "/competicoes" }, { label: competition.full_name ?? "Competição" }]} />
 
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 20 }}>
-            {/* Logo */}
-            {competition.logo_url ? (
-              <div style={{ width: 56, height: 56, borderRadius: 12, overflow: "hidden", border: `1px solid ${competition.primary_color ? competition.primary_color + "40" : "var(--color-border)"}`, backgroundColor: "rgba(255,255,255,0.04)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <img src={competition.logo_url} alt="" style={{ width: 48, height: 48, objectFit: "contain" }} />
-              </div>
-            ) : (
-              <div style={{ width: 56, height: 56, borderRadius: 12, border: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.04)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 800, color: competition.primary_color ?? "#BFF205", flexShrink: 0 }}>
-                {competition.full_name?.slice(0, 2).toUpperCase()}
-              </div>
-            )}
+          <div className={styles.heroRow}>
+            <div className={styles.logoSlot}>
+              {competition.logo_url ? (
+                <img src={competition.logo_url} alt="" className={styles.logoImg} />
+              ) : (
+                <span className={styles.logoInitials}>{logoFallback}</span>
+              )}
+            </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Pill de edição */}
-              <div style={{ position: "relative", display: "inline-block", marginBottom: 4 }}>
-                <button type="button" onClick={() => setShowEditionDropdown(v => !v)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 10px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "rgba(255,255,255,0.05)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", cursor: "pointer", letterSpacing: "0.06em", transition: "all 0.12s" }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; e.currentTarget.style.color = "#BFF205"; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(255,255,255,0.5)"; }}>
+            <div className={styles.heroMeta}>
+              <div className={styles.competicaoHubEditionPicker}>
+                <button
+                  type="button"
+                  className={styles.competicaoHubEditionBtn}
+                  onClick={() => setShowEditionDropdown((v) => !v)}
+                >
                   {selectedEdition ? editionLabel(selectedEdition) : "Selecionar edição"}
-                  <ChevronDown size={11} />
+                  <ChevronDown size={12} strokeWidth={2.2} />
                 </button>
 
                 {showEditionDropdown && (
-                  <div style={{ position: "absolute", left: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 200, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                    {sortedEditionsForDropdown.map((e, idx) => (
-                      <button key={e.id} type="button" onClick={() => {
-                        setSelectedEditionId(e.id); setShowEditionDropdown(false);
-                        const params = new URLSearchParams(searchParams.toString()); params.set("edicao", e.id);
-                        router.replace(`?${params.toString()}`, { scroll: false });
-                      }}
-                        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, width: "100%", padding: "9px 14px", fontFamily: "var(--font-mono)", fontSize: 12, color: e.id === selectedEditionId ? "#BFF205" : "var(--color-text-primary)", backgroundColor: e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent", border: "none", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.05)" : "none", cursor: "pointer", textAlign: "left" as const, transition: "background 0.1s" }}
-                        onMouseEnter={ev => { if (e.id !== selectedEditionId) ev.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                        onMouseLeave={ev => { ev.currentTarget.style.backgroundColor = e.id === selectedEditionId ? "rgba(191,242,5,0.07)" : "transparent"; }}>
+                  <div className={styles.competicaoHubEditionMenu}>
+                    {sortedEditionsForDropdown.map((e) => (
+                      <button
+                        key={e.id}
+                        type="button"
+                        className={`${styles.competicaoHubEditionOption} ${e.id === selectedEditionId ? styles.competicaoHubEditionOptionActive : ""}`}
+                        onClick={() => {
+                          setSelectedEditionId(e.id);
+                          setShowEditionDropdown(false);
+                          const params = new URLSearchParams(searchParams.toString());
+                          params.set("edicao", e.id);
+                          router.replace(`?${params.toString()}`, { scroll: false });
+                        }}
+                      >
                         <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, flex: 1 }}>
                           {e.status === "ongoing" && (
                             <span style={{
-                              width: 6, height: 6, borderRadius: "50%", backgroundColor: "#BFF205", flexShrink: 0,
-                              boxShadow: "0 0 6px rgba(191,242,5,0.6)",
+                              width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--color-brand)", flexShrink: 0,
                             }} />
                           )}
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                             {editionLabel(e)}
                           </span>
                           {e.status === "ongoing" && (
-                            <span style={{
-                              fontSize: 8, fontWeight: 800, letterSpacing: "0.08em", flexShrink: 0,
-                              padding: "2px 6px", borderRadius: 4,
-                              backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
-                              border: "1px solid rgba(191,242,5,0.25)",
-                            }}>
-                              EM ANDAMENTO
-                            </span>
+                            <span className={`${styles.hubChip} ${styles.hubChipBrand}`}>EM ANDAMENTO</span>
                           )}
                         </span>
-                        {e.id === selectedEditionId && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                        {e.id === selectedEditionId && (
+                          <Check size={12} strokeWidth={2.5} style={{ color: "var(--color-brand)", flexShrink: 0 }} />
+                        )}
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* Nome da competição */}
-              <h1 style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 900, color: "var(--color-text-primary)", letterSpacing: "0.02em", lineHeight: 1.1, margin: 0 }}>
-                {competition.full_name}
-              </h1>
+              <h1 className={styles.hubHeaderMonoTitle}>{hubTitle}</h1>
             </div>
           </div>
 
-          {/* Faixa colorida na borda inferior do header */}
-          {competition.primary_color && (
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 1, background: `linear-gradient(90deg, ${competition.primary_color}80 0%, transparent 60%)`, pointerEvents: "none" }} />
-          )}
+          <div className={styles.stripe} />
 
-          {/* Abas */}
-          <div style={{ display: "flex", gap: 0 }}>
-          {[
-              { key: "jogos", label: "JOGOS" },
-              { key: "classificacao", label: "CLASSIFICAÇÃO" },
-              { key: "estatisticas", label: "ESTATÍSTICAS" },
-              { key: "competicao", label: "COMPETIÇÃO" },
-              { key: "configuracoes", label: "CONFIGURAÇÕES" },
-            ].map(tab => (
-              <button key={tab.key} type="button"
-                onClick={() => { setActiveTab(tab.key as any); updateTab("aba", tab.key); }}
-                style={{ padding: "11px 18px", border: "none", borderBottom: `2px solid ${activeTab === tab.key ? (competition.primary_color ?? "var(--color-brand)") : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, letterSpacing: "0.1em", color: activeTab === tab.key ? (competition.primary_color ?? "var(--color-brand)") : "#666", cursor: "pointer", transition: "color 0.12s" }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <HubAnimatedTabBar
+            value={activeTab}
+            onChange={(tab) => {
+              setActiveTab(tab);
+              updateTab("aba", tab);
+            }}
+            options={hubTabs.map((tab) => ({ value: tab.key, label: tab.label }))}
+            className={styles.competicaoHubTabBar}
+            aria-label="Seções da competição"
+          />
         </div>
       </div>
 
       {/* Modal nova partida */}
       {showNewMatch && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.78)", padding: 16 }}
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-modal-scrim)", padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowNewMatch(false); }}>
-          <div style={{ width: "100%", maxWidth: 440, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+          <div style={{ width: "100%", maxWidth: 440, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
 
             {/* Header */}
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0 }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "var(--color-brand-faint-bg)", flexShrink: 0 }}>
               <div>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>Nova partida</p>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)", margin: 0, marginTop: 2 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>Nova partida</p>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-icon-muted)", margin: 0, marginTop: 2 }}>
                   {phases.find(p => p.id === newMatchPhaseId)?.custom_label ?? phases.find(p => p.id === newMatchPhaseId)?.full_name ?? "Selecione a fase"}
                 </p>
               </div>
               <button type="button" onClick={() => setShowNewMatch(false)}
-                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"; e.currentTarget.style.color = "#BFF205"; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>×</button>
+                style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-brand-border)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-icon-muted)"; }}>×</button>
             </div>
 
             <div style={{ overflowY: "auto", flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -1490,12 +1537,12 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               {/* Fase — só se houver mais de uma classificatória */}
               {phases.filter(p => isClassificatory(p.phase_type)).length > 1 && (
                 <div>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Fase</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Fase</span>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginTop: 6 }}>
                     {phases.filter(p => isClassificatory(p.phase_type)).map(p => (
                       <button key={p.id} type="button"
                         onClick={() => { setNewMatchPhaseId(p.id); setNewMatchRoundId(""); setNewMatchTeamA(""); setNewMatchTeamB(""); loadPhaseTeams(p.id); }}
-                        style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchPhaseId === p.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: newMatchPhaseId === p.id ? "rgba(191,242,5,0.08)" : "transparent", color: newMatchPhaseId === p.id ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                        style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchPhaseId === p.id ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: newMatchPhaseId === p.id ? "var(--color-brand-selected-bg)" : "transparent", color: newMatchPhaseId === p.id ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                         {p.custom_label ?? p.full_name}
                       </button>
                     ))}
@@ -1508,25 +1555,25 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   {/* Data + Horário */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Data</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Data</span>
                       <input type="date" value={newMatchDate} onChange={e => setNewMatchDate(e.target.value)}
-                        style={{ marginTop: 5, width: "100%", padding: "8px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", outline: "none", colorScheme: "dark" as any }} />
+                        style={{ marginTop: 5, width: "100%", padding: "8px 10px", backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-input-border)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", outline: "none",  }} />
                     </div>
                     <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Horário</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Horário</span>
                       <input type="time" value={newMatchTime} onChange={e => setNewMatchTime(e.target.value)}
-                        style={{ marginTop: 5, width: "100%", padding: "8px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", outline: "none", colorScheme: "dark" as any }} />
+                        style={{ marginTop: 5, width: "100%", padding: "8px 10px", backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-input-border)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-primary)", outline: "none",  }} />
                     </div>
                   </div>
 
                   {/* Rodada */}
                   {roundsForSelectedPhase.length > 0 && (
                     <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Rodada</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Rodada</span>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginTop: 6 }}>
                         {roundsForSelectedPhase.map(r => (
                           <button key={r.id} type="button" onClick={() => setNewMatchRoundId(r.id)}
-                            style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchRoundId === r.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: newMatchRoundId === r.id ? "rgba(191,242,5,0.08)" : "transparent", color: newMatchRoundId === r.id ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                            style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchRoundId === r.id ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: newMatchRoundId === r.id ? "var(--color-brand-selected-bg)" : "transparent", color: newMatchRoundId === r.id ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                             {r.custom_label ?? r.name}
                           </button>
                         ))}
@@ -1537,15 +1584,15 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   {/* Local */}
                   {venues.length > 0 && (
                     <div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Local</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Local</span>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginTop: 6 }}>
                         <button type="button" onClick={() => setNewMatchVenueId("")}
-                          style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${!newMatchVenueId ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: !newMatchVenueId ? "rgba(191,242,5,0.08)" : "transparent", color: !newMatchVenueId ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                          style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${!newMatchVenueId ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: !newMatchVenueId ? "var(--color-brand-selected-bg)" : "transparent", color: !newMatchVenueId ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                           Nenhum
                         </button>
                         {venues.map((v: any) => (
                           <button key={v.id} type="button" onClick={() => setNewMatchVenueId(v.id)}
-                            style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchVenueId === v.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: newMatchVenueId === v.id ? "rgba(191,242,5,0.08)" : "transparent", color: newMatchVenueId === v.id ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                            style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${newMatchVenueId === v.id ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: newMatchVenueId === v.id ? "var(--color-brand-selected-bg)" : "transparent", color: newMatchVenueId === v.id ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                             {v.full_name}
                           </button>
                         ))}
@@ -1555,37 +1602,37 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
                   {/* Times — grid de logos */}
                   <div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Times *</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Times *</span>
                     <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "flex-start" }}>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(191,242,5,0.6)", marginBottom: 6 }}>MANDANTE (A)</p>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-brand-text-soft)", marginBottom: 6 }}>MANDANTE (A)</p>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 5 }}>
                           {teamsForSelectedPhase.map(t => (
                             <div key={t.id} onClick={() => setNewMatchTeamA(t.id)}
-                              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${newMatchTeamA === t.id ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: newMatchTeamA === t.id ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.1s", opacity: t.id === newMatchTeamB ? 0.3 : 1 }}>
+                              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${newMatchTeamA === t.id ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: newMatchTeamA === t.id ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.1s", opacity: t.id === newMatchTeamB ? 0.3 : 1 }}>
                               {t.logo_url
                                 ? <img src={t.logo_url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} />
-                                : <div style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{t.abbreviation?.slice(0,2) ?? "—"}</span></div>
+                                : <div style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: "var(--color-text-faint)" }}>{t.abbreviation?.slice(0,2) ?? "—"}</span></div>
                               }
-                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: newMatchTeamA === t.id ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center" }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: newMatchTeamA === t.id ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center" }}>
                                 {t.abbreviation ?? t.full_name?.slice(0,3)?.toUpperCase()}
                               </span>
                             </div>
                           ))}
                         </div>
                       </div>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, color: "rgba(255,255,255,0.15)", paddingTop: 24, flexShrink: 0 }}>×</span>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, color: "var(--color-dashed-border)", paddingTop: 24, flexShrink: 0 }}>×</span>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.3)", marginBottom: 6 }}>VISITANTE (B)</p>
+                        <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-text-faint)", marginBottom: 6 }}>VISITANTE (B)</p>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(52px, 1fr))", gap: 5 }}>
                           {teamsForSelectedPhase.filter(t => t.id !== newMatchTeamA).map(t => (
                             <div key={t.id} onClick={() => setNewMatchTeamB(t.id)}
-                              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${newMatchTeamB === t.id ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: newMatchTeamB === t.id ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.1s" }}>
+                              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${newMatchTeamB === t.id ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: newMatchTeamB === t.id ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.1s" }}>
                               {t.logo_url
                                 ? <img src={t.logo_url} alt="" style={{ width: 26, height: 26, objectFit: "contain" }} />
-                                : <div style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{t.abbreviation?.slice(0,2) ?? "—"}</span></div>
+                                : <div style={{ width: 26, height: 26, borderRadius: 5, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: "var(--color-text-faint)" }}>{t.abbreviation?.slice(0,2) ?? "—"}</span></div>
                               }
-                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: newMatchTeamB === t.id ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center" }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: newMatchTeamB === t.id ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center" }}>
                                 {t.abbreviation ?? t.full_name?.slice(0,3)?.toUpperCase()}
                               </span>
                             </div>
@@ -1598,30 +1645,30 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   {/* Adicionar outra */}
                   <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
                     <div onClick={() => setNewMatchAddAnother(v => !v)}
-                      style={{ width: 18, height: 18, borderRadius: 5, border: `1px solid ${newMatchAddAnother ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.15)"}`, backgroundColor: newMatchAddAnother ? "rgba(191,242,5,0.1)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}>
-                      {newMatchAddAnother && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      style={{ width: 18, height: 18, borderRadius: 5, border: `1px solid ${newMatchAddAnother ? "var(--color-brand-border)" : "var(--color-dashed-border)"}`, backgroundColor: newMatchAddAnother ? "var(--color-brand-muted-bg)" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}>
+                      {newMatchAddAnother && <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                     </div>
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.4)" }}>Adicionar outra com mesma data</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-icon-muted)" }}>Adicionar outra com mesma data</span>
                   </label>
                 </>
               )}
 
               {newMatchError && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", backgroundColor: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", backgroundColor: "var(--color-danger-muted-bg)", border: "1px solid var(--color-danger-muted-border)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
                   {newMatchError}
                 </p>
               )}
             </div>
 
             {/* Footer */}
-            <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid var(--color-hover-bg)", flexShrink: 0 }}>
               <button type="button" onClick={() => setShowNewMatch(false)}
-                style={{ flex: 1, padding: 10, borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+                style={{ flex: 1, padding: 10, borderRadius: 9, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
                 Cancelar
               </button>
               <button type="button" onClick={handleCreateMatch}
                 disabled={creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB}
-                style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+                style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB ? "var(--color-brand-muted-bg)" : "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: creatingMatch || !newMatchPhaseId || !newMatchTeamA || !newMatchTeamB ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
                 {creatingMatch ? "Criando…" : "Criar partida"}
               </button>
             </div>
@@ -1674,7 +1721,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             </div>
             <div className="overflow-y-auto flex-1 px-6 py-4 space-y-4">
               {loadingRoster ? (
-                <p className="font-mono text-sm text-center" style={{ color: "#A6A6A6" }}>Carregando…</p>
+                <p className="font-mono text-sm text-center" style={{ color: "var(--color-text-secondary)" }}>Carregando…</p>
               ) : (
                 <>
                   <div>
@@ -1686,13 +1733,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         {rosterEntries.map((entry: any, idx: number) => (
                           <div key={entry.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                             {entry.athletes?.photo_url ? <img src={entry.athletes.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" /> : (
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                                {(entry.athletes?.surname ?? entry.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-                              </div>
+                              <PersonAvatar photoUrl={null} size={32} style={{ backgroundColor: "var(--color-border)" }} />
                             )}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{entry.athletes?.surname ?? entry.athletes?.full_name ?? "—"}</p>
-                              <p className="font-mono text-xs" style={{ color: entry.status === "approved" ? "var(--color-brand)" : "#A6A6A6" }}>{entry.status === "approved" ? "Aprovado" : "Pendente"}</p>
+                              <p className="font-mono text-xs" style={{ color: entry.status === "approved" ? "var(--color-brand)" : "var(--color-text-secondary)" }}>{entry.status === "approved" ? "Aprovado" : "Pendente"}</p>
                             </div>
                             <button type="button" onClick={() => handleRemoverInscricao(entry.id)} className="shrink-0 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-danger)]" style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}>Remover</button>
                           </div>
@@ -1707,9 +1752,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         {availableAthletes.map((athlete: any, idx: number) => (
                           <div key={athlete.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                             {athlete.photo_url ? <img src={athlete.photo_url} alt="" className="h-8 w-8 rounded-full object-cover shrink-0" /> : (
-                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-                                {(athlete.surname ?? athlete.full_name ?? "?").slice(0, 2).toUpperCase()}
-                              </div>
+                              <PersonAvatar photoUrl={null} size={32} style={{ backgroundColor: "var(--color-border)" }} />
                             )}
                             <p className="flex-1 text-sm font-medium truncate" style={{ color: "var(--color-text-primary)" }}>{athlete.surname ?? athlete.full_name ?? "—"}</p>
                             <button type="button" onClick={() => handleInscrever(athlete.id, athlete.position_id)} className="shrink-0 flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs hover:border-[var(--color-brand)]" style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}>
@@ -1743,7 +1786,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             </label>
             <div className="flex gap-2 justify-end">
               <button type="button" onClick={() => setShowNewEdition(false)} className="rounded-lg border px-4 py-2 text-sm" style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>Cancelar</button>
-              <button type="button" onClick={handleCreateEdition} disabled={savingEdition || !newEditionSeasonId} className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              <button type="button" onClick={handleCreateEdition} disabled={savingEdition || !newEditionSeasonId} className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50" style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 {savingEdition ? "Criando…" : "Criar"}
               </button>
             </div>
@@ -1752,267 +1795,232 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
       )}
 
       {/* Conteúdo */}
-      <div className="flex-1 px-8 py-6">
+      <div className={
+        activeTab === "jogos"
+          ? `${styles.content} ${styles.competicaoHubJogos}`
+          : activeTab === "estatisticas"
+            ? `${styles.content} ${styles.competicaoHubEstatisticas}`
+            : styles.content
+      }>
 
         {/* ABA JOGOS */}
         {activeTab === "jogos" && (
-  <div>
-    {/* Filtros de fase + botão de ação */}
-    <div className="mb-4 flex flex-wrap items-center gap-3">
-      {phases.length > 1 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          {sortedPhases.map(p => (
-            <button key={p.id} type="button"
-              onClick={() => {
-                setMatchFilterPhaseId(p.id);
-                setJobsSubTab("partidas");
-              }}
-              className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-              style={{
-                borderColor: matchFilterPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)",
-                backgroundColor: matchFilterPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent",
-                color: matchFilterPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6",
-              }}>
-              {p.custom_label ?? p.full_name}
-              {p.is_current && (
-                <span style={{ marginLeft: 5, fontSize: 8, opacity: 0.6 }}>●</span>
+          <div>
+            <div className={styles.hubTabPanelTools} style={{ marginBottom: 16 }}>
+              {phases.length > 0 && (
+                <HubGlassSwitch
+                  value={matchFilterPhaseId}
+                  onChange={(phaseId) => {
+                    setMatchFilterPhaseId(phaseId);
+                    setJobsSubTab("partidas");
+                  }}
+                  options={[
+                    { value: "", label: "TODOS" },
+                    ...sortedPhases.map((p) => ({
+                      value: p.id,
+                      label: (p.custom_label ?? p.full_name).toUpperCase(),
+                    })),
+                  ]}
+                  className={styles.competicaoHubPhaseSwitch}
+                  draggable
+                  aria-label="Filtrar por fase"
+                />
               )}
-            </button>
-          ))}
-        </div>
-      )}
- 
-      <div className="ml-auto flex items-center gap-3">
-        {/* Contador — só para sub-aba partidas */}
-        {(!isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") || jobsSubTab === "partidas") && (
-          <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-            {filteredMatches.length} {filteredMatches.length === 1 ? "partida" : "partidas"}
-          </p>
-        )}
- 
-        {/* Botão contextual */}
-        {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") ? (
-          jobsSubTab === "confrontos" ? (
-            <button type="button" onClick={() => {
-              setNovoMatchPreselectedPhaseId(matchFilterPhaseId);
-              setShowNovoConfronto(true);
-            }}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-              <Plus size={14} strokeWidth={2.5} /> Novo confronto
-            </button>
-          ) : null
-        ) : (
-          <button type="button" onClick={() => {
-            setNewMatchPhaseId(matchFilterPhaseId || (phases.find(p => isClassificatory(p.phase_type))?.id ?? ""));
-            if (matchFilterPhaseId) loadPhaseTeams(matchFilterPhaseId || (phases.find(p => isClassificatory(p.phase_type))?.id ?? ""));
-            setShowNewMatch(true);
-          }}
-            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
-            <Plus size={14} strokeWidth={2.5} /> Nova partida
-          </button>
-        )}
-      </div>
-    </div>
- 
-    {/* Sub-abas — só para fases eliminatórias */}
-    {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") && (
-      <div className="mb-4 flex gap-6 border-b" style={{ borderColor: "var(--color-border)" }}>
-        {[
-          { key: "partidas", label: "PARTIDAS" },
-          { key: "confrontos", label: "CONFRONTOS" },
-        ].map(sub => (
-          <button key={sub.key} type="button"
-            onClick={() => setJobsSubTab(sub.key as "confrontos" | "partidas")}
-            className="border-b-2 pb-3 font-mono text-xs transition-colors"
-            style={{
-              borderColor: jobsSubTab === sub.key ? "var(--color-brand)" : "transparent",
-              color: jobsSubTab === sub.key ? "var(--color-brand)" : "#A6A6A6",
-            }}>
-            {sub.label}
-          </button>
-        ))}
-      </div>
-    )}
- 
-    {loadingMatches ? (
-      <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>
-    ) : (
-      <>
-        {/* ── SUB-ABA CONFRONTOS ── */}
-        {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") && jobsSubTab === "confrontos" && (() => {
-          const phaseMatchups = matchups
-            .filter(m => m.phase_id === matchFilterPhaseId)
-            .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
- 
-          // Agrupa por round_label, ordenando pelo display_order da rodada correspondente
-          const byRound: Record<string, { matchups: any[]; roundOrder: number }> = {};
-          phaseMatchups.forEach(mu => {
-            const rd = rounds.find(r =>
-              r.phase_id === matchFilterPhaseId &&
-              (r.custom_label ?? r.name) === mu.round_label
-            );
-            const order = rd?.display_order ?? 999;
-            if (!byRound[mu.round_label]) byRound[mu.round_label] = { matchups: [], roundOrder: order };
-            byRound[mu.round_label].matchups.push(mu);
-          });
- 
-          const sortedGroups = Object.entries(byRound).sort((a, b) => a[1].roundOrder - b[1].roundOrder);
- 
-          if (sortedGroups.length === 0) {
-            return (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
-                <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem confrontos</p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                  Clique em "Novo confronto" para começar.
-                </p>
+
+              <div className={styles.hubHeaderToolbarActions} style={{ flex: "0 0 auto" }}>
+                {(() => {
+                  const filterPhase = phases.find((p) => p.id === matchFilterPhaseId);
+                  const filterIsEliminatoria = filterPhase ? isEliminatoria(filterPhase.phase_type) : false;
+
+                  if (filterIsEliminatoria && jobsSubTab === "confrontos") {
+                    return (
+                      <button
+                        type="button"
+                        className={styles.saveBtn}
+                        onClick={() => {
+                          setNovoMatchPreselectedPhaseId(matchFilterPhaseId);
+                          setShowNovoConfronto(true);
+                        }}
+                      >
+                        <Plus size={14} strokeWidth={2.5} />
+                        Novo confronto
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <button
+                      type="button"
+                      className={styles.saveBtn}
+                      onClick={() => {
+                        const phaseId = matchFilterPhaseId || (phases.find((p) => isClassificatory(p.phase_type))?.id ?? "");
+                        setNewMatchPhaseId(phaseId);
+                        if (phaseId) loadPhaseTeams(phaseId);
+                        setShowNewMatch(true);
+                      }}
+                    >
+                      <Plus size={14} strokeWidth={2.5} />
+                      Nova partida
+                    </button>
+                  );
+                })()}
               </div>
-            );
-          }
- 
-          return (
-            <div className="space-y-6">
-              {sortedGroups.map(([label, group]) => (
-                <div key={label}>
-                  <p className="mb-3 font-mono text-xs uppercase tracking-widest"
-                    style={{ color: "var(--color-text-secondary)" }}>
-                    {label}
-                  </p>
-                  <div className="rounded-xl border overflow-hidden"
-                    style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                    {group.matchups.map((mu, idx) => {
-                      const tA = mu.teams_a?.abbreviation ?? mu.teams_a?.full_name ?? "A definir";
-                      const tB = mu.teams_b?.abbreviation ?? mu.teams_b?.full_name ?? "A definir";
-                      const logoA = mu.teams_a?.logo_url ?? null;
-                      const logoB = mu.teams_b?.logo_url ?? null;
-                      const matchCount = matches.filter(m => m.matchup_id === mu.id).length;
- 
-                      return (
-                        <div key={mu.id}
-                          className="flex items-center gap-4 px-5 py-3 group"
-                          style={{
-                            borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-                            opacity: 0.8,
-                            transition: "opacity 0.15s",
-                          }}
-                          onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = "0.8")}>
- 
-                          {/* Times */}
-                          <div className="flex-1 flex items-center gap-3 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              {logoA
-                                ? <img src={logoA} alt="" style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3 }} />
-                                : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-border)" }} />
-                              }
-                              <span className="font-mono text-sm font-bold"
-                                style={{ color: mu.teams_a ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
-                                {tA}
-                              </span>
-                            </div>
-                            <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>×</span>
-                            <div className="flex items-center gap-1.5">
-                              {logoB
-                                ? <img src={logoB} alt="" style={{ width: 18, height: 18, objectFit: "contain", borderRadius: 3 }} />
-                                : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-border)" }} />
-                              }
-                              <span className="font-mono text-sm font-bold"
-                                style={{ color: mu.teams_b ? "var(--color-text-primary)" : "var(--color-text-secondary)" }}>
-                                {tB}
-                              </span>
-                            </div>
-                          </div>
- 
-                          {/* Info de partidas */}
-                          <span className="font-mono text-xs shrink-0"
-                            style={{ color: "var(--color-text-secondary)" }}>
-                            {matchCount} {matchCount === 1 ? "partida" : "partidas"}
-                          </span>
- 
-                          {/* Ações */}
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                            <button type="button"
-                              onClick={() => setEditingMatchup(mu)}
-                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-brand)" }}
-                              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
-                              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
-                              Editar
-                            </button>
-                            <button type="button"
-                              onClick={async () => {
-                                if (!confirm(`Remover confronto ${tA} × ${tB}? As partidas vinculadas também serão removidas.`)) return;
-                                const supabase = createClient();
-                                await supabase.from("matches").delete().eq("matchup_id", mu.id);
-                                await supabase.from("matchups").delete().eq("id", mu.id);
-                                await loadEditionData(selectedEditionId);
-                                toast("success", "Confronto removido.");
-                              }}
-                              className="flex items-center gap-1.5 rounded border px-2 py-1 font-mono text-xs"
-                              style={{ borderColor: "var(--color-border)", color: "var(--color-danger)" }}
-                              onMouseEnter={e => (e.currentTarget.style.borderColor = "var(--color-danger)")}
-                              onMouseLeave={e => (e.currentTarget.style.borderColor = "var(--color-border)")}>
-                              Remover
-                            </button>
+            </div>
+
+            {isEliminatoria(phases.find((p) => p.id === matchFilterPhaseId)?.phase_type ?? "") && (
+              <HubGlassSwitch
+                value={jobsSubTab}
+                onChange={(sub) => setJobsSubTab(sub as "confrontos" | "partidas")}
+                options={[
+                  { value: "partidas", label: "PARTIDAS" },
+                  { value: "confrontos", label: "CONFRONTOS" },
+                ]}
+                className={styles.competicaoHubJogosSubTabs}
+                aria-label="Tipo de listagem"
+              />
+            )}
+
+            {loadingMatches ? (
+              <p className={styles.fieldHint}>Carregando…</p>
+            ) : (
+              <>
+                {isEliminatoria(phases.find((p) => p.id === matchFilterPhaseId)?.phase_type ?? "") && jobsSubTab === "confrontos" && (() => {
+                  const phaseMatchups = matchups
+                    .filter((m) => m.phase_id === matchFilterPhaseId)
+                    .sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+
+                  const byRound: Record<string, { matchups: any[]; roundOrder: number }> = {};
+                  phaseMatchups.forEach((mu) => {
+                    const rd = rounds.find((r) =>
+                      r.phase_id === matchFilterPhaseId
+                      && (r.custom_label ?? r.name) === mu.round_label,
+                    );
+                    const order = rd?.display_order ?? 999;
+                    if (!byRound[mu.round_label]) byRound[mu.round_label] = { matchups: [], roundOrder: order };
+                    byRound[mu.round_label].matchups.push(mu);
+                  });
+
+                  const sortedGroups = Object.entries(byRound).sort((a, b) => a[1].roundOrder - b[1].roundOrder);
+
+                  if (sortedGroups.length === 0) {
+                    return (
+                      <div className={styles.competicaoHubEmpty}>
+                        <p className={styles.competicaoHubEmptyTitle}>Sem confrontos</p>
+                        <p className={styles.competicaoHubEmptyDesc}>
+                          Clique em &quot;Novo confronto&quot; para começar.
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                      {sortedGroups.map(([label, group]) => (
+                        <div key={label}>
+                          <span className={`${styles.hubSectionLabel} ${styles.hubSectionLabelFirst}`}>{label}</span>
+                          <div className={styles.matchList}>
+                            {group.matchups.map((mu) => {
+                              const tA = mu.teams_a?.abbreviation ?? mu.teams_a?.full_name ?? "A definir";
+                              const tB = mu.teams_b?.abbreviation ?? mu.teams_b?.full_name ?? "A definir";
+                              const logoA = mu.teams_a?.logo_url ?? null;
+                              const logoB = mu.teams_b?.logo_url ?? null;
+                              const matchCount = matches.filter((m) => m.matchup_id === mu.id).length;
+
+                              return (
+                                <div key={mu.id} className={styles.competicaoHubConfrontoRow}>
+                                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                                    <div className={styles.matchRowLogo}>
+                                      {logoA
+                                        ? <img src={logoA} alt="" />
+                                        : <span className={styles.matchRowLogoFallback}>{tA.slice(0, 2).toUpperCase()}</span>}
+                                    </div>
+                                    <span className={styles.matchRowTeamName} style={{ flex: "0 1 auto" }}>{tA}</span>
+                                    <span className={styles.matchRowScoreSep}>×</span>
+                                    <span className={styles.matchRowTeamName} style={{ flex: "0 1 auto" }}>{tB}</span>
+                                    <div className={styles.matchRowLogo}>
+                                      {logoB
+                                        ? <img src={logoB} alt="" />
+                                        : <span className={styles.matchRowLogoFallback}>{tB.slice(0, 2).toUpperCase()}</span>}
+                                    </div>
+                                  </div>
+                                  <span className={styles.fieldHint} style={{ margin: 0, flexShrink: 0 }}>
+                                    {matchCount} {matchCount === 1 ? "partida" : "partidas"}
+                                  </span>
+                                  <div className={styles.hubRowActionsHover} style={{ opacity: 1 }}>
+                                    <button
+                                      type="button"
+                                      className={styles.hubInlineBtn}
+                                      onClick={() => setEditingMatchup(mu)}
+                                    >
+                                      Editar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`${styles.hubInlineBtn} ${styles.hubIconActionBtnDanger}`}
+                                      onClick={async () => {
+                                        if (!confirm(`Remover confronto ${tA} × ${tB}? As partidas vinculadas também serão removidas.`)) return;
+                                        const supabase = createClient();
+                                        await supabase.from("matches").delete().eq("matchup_id", mu.id);
+                                        await supabase.from("matchups").delete().eq("id", mu.id);
+                                        await loadEditionData(selectedEditionId);
+                                        toast("success", "Confronto removido.");
+                                      }}
+                                    >
+                                      Remover
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          );
-        })()}
- 
-        {/* ── SUB-ABA PARTIDAS (ou fase classificatória) ── */}
-        {(!isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "") || jobsSubTab === "partidas") && (
-          filteredMatches.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>Sem partidas</p>
-              <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
-                {isEliminatoria(phases.find(p => p.id === matchFilterPhaseId)?.phase_type ?? "")
-                  ? "Adicione partidas pelos confrontos na aba Confrontos."
-                  : "Clique em \"Nova partida\" para começar."}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {Object.values(filteredMatchesByRound)
-                .sort((a, b) => a.order - b.order)
-                .map(group => ({
-                  ...group,
-                  matches: [...group.matches].sort((a, b) => {
-                    const da = a.match_date ?? "9999";
-                    const db = b.match_date ?? "9999";
-                    if (da !== db) return da.localeCompare(db);
-                    const ta = a.match_time ?? "00:00";
-                    const tb = b.match_time ?? "00:00";
-                    return ta.localeCompare(tb);
-                  }),
-                }))
-                .map(group => (
-                  <div key={group.label}>
-                    <p className="mb-3 font-mono text-xs uppercase tracking-widest"
-                      style={{ color: "var(--color-text-secondary)" }}>
-                      {group.label}
-                    </p>
-                    <div className="rounded-xl border overflow-hidden"
-                      style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-                      {group.matches.map((m, idx) => (
-                        <MatchRow key={m.id} match={m} idx={idx} onDelete={() => handleDeleteMatch(m.id)} />
                       ))}
                     </div>
-                  </div>
-                ))}
-            </div>
-          )
+                  );
+                })()}
+
+                {(!isEliminatoria(phases.find((p) => p.id === matchFilterPhaseId)?.phase_type ?? "") || jobsSubTab === "partidas") && (
+                  filteredMatches.length === 0 ? (
+                    <div className={styles.competicaoHubEmpty}>
+                      <p className={styles.competicaoHubEmptyTitle}>Sem partidas</p>
+                      <p className={styles.competicaoHubEmptyDesc}>
+                        {isEliminatoria(phases.find((p) => p.id === matchFilterPhaseId)?.phase_type ?? "")
+                          ? "Adicione partidas pelos confrontos na aba Confrontos."
+                          : "Clique em \"Nova partida\" para começar."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+                      {Object.values(filteredMatchesByRound)
+                        .sort((a, b) => a.order - b.order)
+                        .map((group) => ({
+                          ...group,
+                          matches: [...group.matches].sort((a, b) => {
+                            const da = a.match_date ?? "9999";
+                            const db = b.match_date ?? "9999";
+                            if (da !== db) return da.localeCompare(db);
+                            const ta = a.match_time ?? "00:00";
+                            const tb = b.match_time ?? "00:00";
+                            return ta.localeCompare(tb);
+                          }),
+                        }))
+                        .map((group) => (
+                          <div key={group.label}>
+                            <span className={`${styles.hubSectionLabel} ${styles.hubSectionLabelFirst}`}>{group.label}</span>
+                            <div className={styles.matchList}>
+                              {group.matches.map((m) => (
+                                <MatchRow key={m.id} match={m} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )
+                )}
+              </>
+            )}
+          </div>
         )}
-      </>
-    )}
-  </div>
-)}
 
         {/* ABA CLASSIFICAÇÃO */}
         {activeTab === "classificacao" && (
@@ -2022,7 +2030,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 {sortedPhases.map(p => (
                   <button key={p.id} type="button" onClick={() => setSelectedPhaseId(p.id)}
                     className="rounded-lg border px-3 py-1.5 font-mono text-xs transition-colors"
-                    style={{ borderColor: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: selectedPhaseId === p.id ? "rgba(191,242,5,0.1)" : "transparent", color: selectedPhaseId === p.id ? "var(--color-brand)" : "#A6A6A6" }}>
+                    style={{ borderColor: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-border)", backgroundColor: selectedPhaseId === p.id ? "var(--color-brand-muted-bg)" : "transparent", color: selectedPhaseId === p.id ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                     {p.custom_label ?? p.full_name}
                   </button>
                 ))}
@@ -2035,24 +2043,41 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
         {/* ABA ESTATÍSTICAS */}
         {activeTab === "estatisticas" && (
           <div>
-            <div className="mb-6 flex items-center justify-end gap-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-              <button type="button"
-                onClick={async () => {
-                  const r = await recalcularEstatisticasEdicao(selectedEditionId);
-                  if ("error" in r) { toast("error", r.error); return; }
-                  toast("success", "Estatísticas atualizadas.");
-                  await loadEditionData(selectedEditionId);
-                }}
-                style={{ marginBottom: 1, padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.45)"; }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.06)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.25)"; }}>
-                ↻ Atualizar dados
-              </button>
+            <div className={styles.hubTabPanelTools} style={{ marginBottom: 20 }}>
+              <p className={styles.fieldHint} style={{ margin: 0 }}>
+                Rankings da edição
+              </p>
+              <div className={styles.hubHeaderToolbarActions}>
+                <button
+                  type="button"
+                  className={styles.hallRecalcBtn}
+                  disabled={recalcStatsPending || !selectedEditionId}
+                  onClick={async () => {
+                    if (!selectedEditionId) return;
+                    setRecalcStatsPending(true);
+                    try {
+                      const r = await recalcularEstatisticasEdicao(selectedEditionId);
+                      if ("error" in r) {
+                        toast("error", r.error);
+                        return;
+                      }
+                      toast("success", "Estatísticas atualizadas.");
+                      await loadEditionData(selectedEditionId);
+                    } finally {
+                      setRecalcStatsPending(false);
+                    }
+                  }}
+                >
+                  <RefreshCw size={14} className={recalcStatsPending ? styles.hallRecalcBtnSpin : undefined} />
+                  {recalcStatsPending ? "Atualizando…" : "Atualizar dados"}
+                </button>
+              </div>
             </div>
-            <div className="grid gap-6 lg:grid-cols-2">
+
+            <div className={styles.competicaoHubStatsGrid}>
               <StatRanking title="Artilharia" data={topScorers} valueKey="goals" valueLabel="gols" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum gol registrado." />
               <StatRanking title="Assistências" data={topAssists} valueKey="assists" valueLabel="assist." allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhuma assistência registrada." />
-              <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="#F2C005" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão amarelo registrado." />
+              <StatRanking title="Cartões Amarelos" data={topYellow} valueKey="yellow_cards" valueLabel="amarelos" valueColor="var(--color-warning)" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão amarelo registrado." />
               <StatRanking title="Cartões Vermelhos" data={topRed} valueKey="red_cards" valueLabel="vermelhos" valueColor="var(--color-danger)" allScorers={athleteScorers} phases={phases} rounds={rounds} editionTeams={editionTeams} emptyMessage="Nenhum cartão vermelho registrado." />
             </div>
           </div>
@@ -2065,7 +2090,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
             {[{ key: "equipes", label: "EQUIPES" }, { key: "fases", label: "FASES" }].map(sub => (
                 <button key={sub.key} type="button" onClick={() => { setActiveCompTab(sub.key as any); updateTab("comp", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
-                  style={{ borderColor: activeCompTab === sub.key ? "var(--color-brand)" : "transparent", color: activeCompTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                  style={{ borderColor: activeCompTab === sub.key ? "var(--color-brand)" : "transparent", color: activeCompTab === sub.key ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                   {sub.label}
                 </button>
               ))}
@@ -2085,14 +2110,14 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                 ) : (
                   phases.map((phase, idx) => (
                     <Link key={phase.id} href={`/competicoes/${competition.id}/edicoes/${selectedEditionId}/fases/${phase.id}`}
-                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                      className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-[var(--color-hover-bg-subtle)]"
                       style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                       <div className="flex-1">
                         <p className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>{phase.custom_label ?? phase.full_name}</p>
                         <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{PHASE_TYPE_LABEL[phase.phase_type] ?? phase.phase_type}</p>
                       </div>
-                      {phase.is_current && <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "rgba(191,242,5,0.15)", color: "var(--color-brand)" }}>atual</span>}
-                      <ChevronRight size={14} style={{ color: "#555" }} />
+                      {phase.is_current && <span className="font-mono text-xs rounded px-2 py-0.5" style={{ backgroundColor: "var(--color-brand-filter-bg)", color: "var(--color-brand)" }}>atual</span>}
+                      <ChevronRight size={14} style={{ color: "var(--color-kbd-text)" }} />
                     </Link>
                   ))
                 )}
@@ -2122,11 +2147,11 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         <div key={et.id} className="group relative flex items-center gap-3 px-4 py-3 transition-all duration-150"
                           style={{
                             borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-                            opacity: isInactive ? 0.45 : 0.75,
+                            opacity: isInactive ? "var(--list-row-opacity-inactive)" : "var(--list-row-opacity-dim)",
                             cursor: "pointer",
                           }}
                           onMouseEnter={e => (e.currentTarget.style.opacity = "1")}
-                          onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "0.45" : "0.75")}
+                          onMouseLeave={e => (e.currentTarget.style.opacity = isInactive ? "var(--list-row-opacity-inactive)" : "var(--list-row-opacity-dim)")}
                           onClick={() => {
                             if (!et.team_id || !selectedEditionId) return;
                             router.push(`/competicoes/${competition.id}/equipes/${et.team_id}?edicao=${selectedEditionId}`);
@@ -2157,7 +2182,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                               </p>
                               {isInactive && (
                                 <span className="font-mono text-xs rounded px-1.5 py-0.5 shrink-0"
-                                  style={{ backgroundColor: "rgba(242,192,5,0.15)", color: "#F2C005" }}>
+                                  style={{ backgroundColor: "var(--color-warning-filter-bg)", color: "var(--color-warning)" }}>
                                   Desativada
                                 </span>
                               )}
@@ -2188,7 +2213,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                                 icon={<Ban size={14} strokeWidth={2.5} />}
                                 label="Desativar"
                                 onClick={e => { e.stopPropagation(); handleDesativarEquipeHub(et.id); }}
-                                color="#F2C005"
+                                color="var(--color-warning)"
                               />
                             )}
                             <HubActionButton
@@ -2265,7 +2290,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
               ].map(sub => (
                 <button key={sub.key} type="button" onClick={() => { setActiveConfigTab(sub.key as any); updateTab("config", sub.key); }}
                   className="border-b-2 pb-3 font-mono text-xs transition-colors"
-                  style={{ borderColor: activeConfigTab === sub.key ? "var(--color-brand)" : "transparent", color: activeConfigTab === sub.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                  style={{ borderColor: activeConfigTab === sub.key ? "var(--color-brand)" : "transparent", color: activeConfigTab === sub.key ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                   {sub.label}
                 </button>
               ))}
@@ -2362,7 +2387,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   style={{ color: suspActiveFilter === "active" ? "var(--color-brand)" : "#666" }}>
                   ATIVAS
                   <span className="rounded px-1.5 py-0.5 font-mono text-xs"
-                    style={{ backgroundColor: suspActiveFilter === "active" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)", color: suspActiveFilter === "active" ? "var(--color-brand)" : "#555" }}>
+                    style={{ backgroundColor: suspActiveFilter === "active" ? "var(--color-brand-filter-bg)" : "var(--color-divider-strong)", color: suspActiveFilter === "active" ? "var(--color-brand)" : "var(--color-inactive-label)" }}>
                     {suspensions.filter(s => s.is_active).length}
                   </span>
                 </button>
@@ -2371,14 +2396,14 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                   style={{ color: suspActiveFilter === "all" ? "var(--color-brand)" : "#666" }}>
                   TODAS
                   <span className="rounded px-1.5 py-0.5 font-mono text-xs"
-                    style={{ backgroundColor: suspActiveFilter === "all" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)", color: suspActiveFilter === "all" ? "var(--color-brand)" : "#555" }}>
+                    style={{ backgroundColor: suspActiveFilter === "all" ? "var(--color-brand-filter-bg)" : "var(--color-divider-strong)", color: suspActiveFilter === "all" ? "var(--color-brand)" : "var(--color-inactive-label)" }}>
                     {suspensions.length}
                   </span>
                 </button>
               </div>
               <button type="button" onClick={() => setShowSuspModal(true)}
                 className="flex items-center gap-2 rounded-lg px-4 py-2 font-mono text-xs font-bold transition-opacity hover:opacity-80"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 <Plus size={13} strokeWidth={2.5} />
                 Nova suspensão
               </button>
@@ -2418,7 +2443,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                           <label className="flex flex-col gap-1">
                             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Início</span>
                             <input type="date" value={suspEditStartsAt} onChange={e => setSuspEditStartsAt(e.target.value)}
-                              className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }} />
+                              className={inputClass} style={{ ...inputStyle }} />
                           </label>
                           <label className="flex flex-col gap-1">
                             <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Total de jogos</span>
@@ -2439,7 +2464,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         <div className="flex gap-2">
                           <button type="button" disabled={suspSaving}
                             className="rounded-lg px-3 py-1.5 font-mono text-xs font-bold disabled:opacity-50"
-                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+                            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
                             onClick={async () => {
                               setSuspSaving(true);
                               const fd = new FormData();
@@ -2472,7 +2497,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
 
                     return (
                       <div key={s.id} className="flex items-center gap-6 px-5 py-4 group"
-                        style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: s.is_active ? 1 : 0.45 }}>
+                        style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none", opacity: s.is_active ? 1 : "var(--list-row-opacity-inactive)" }}>
                         <div className="flex-1 min-w-0">
                           <p className="font-mono text-sm font-bold truncate" style={{ color: "var(--color-text-primary)" }}>
                             {athleteName}
@@ -2587,7 +2612,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                             className="flex-1 rounded-lg border py-2 font-mono text-xs font-bold transition-colors"
                             style={{
                               borderColor: suspMemberType === type ? "var(--color-brand)" : "var(--color-border)",
-                              backgroundColor: suspMemberType === type ? "rgba(191,242,5,0.08)" : "transparent",
+                              backgroundColor: suspMemberType === type ? "var(--color-brand-selected-bg)" : "transparent",
                               color: suspMemberType === type ? "var(--color-brand)" : "var(--color-text-secondary)",
                             }}>
                             {type === "athlete" ? "Atleta" : "Comissão técnica"}
@@ -2662,7 +2687,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                         <label className="flex flex-col gap-1">
                           <span className="font-mono text-xs font-bold" style={{ color: "var(--color-text-secondary)" }}>DATA DE INÍCIO *</span>
                           <input type="date" value={suspStartsAt} onChange={e => setSuspStartsAt(e.target.value)}
-                            className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }} />
+                            className={inputClass} style={{ ...inputStyle }} />
                         </label>
                       </div>
 
@@ -2683,7 +2708,7 @@ export default function CompeticaoHub({ competition, editions, seasons, allTeams
                       </button>
                       <button type="button" disabled={suspCreating}
                         className="rounded-lg px-4 py-2 font-mono text-xs font-bold disabled:opacity-50"
-                        style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+                        style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
                         onClick={async () => {
                           const memberId = suspMemberType === "athlete" ? suspAthleteId : suspStaffId;
                           if (!suspTeamId) { toast("error", "Selecione a equipe."); return; }
@@ -2832,7 +2857,7 @@ function AddTeamModal({
                 available.map((team, idx) => (
                   <button key={team.id} type="button"
                     onClick={() => setSelectedTeam(team)}
-                    className="flex items-center gap-3 w-full px-6 py-3 text-left transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                    className="flex items-center gap-3 w-full px-6 py-3 text-left transition-colors hover:bg-[var(--color-hover-bg-subtle)]"
                     style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
                     {team.logo_url ? (
                       <img src={team.logo_url} alt="" className="h-10 w-10 rounded-lg object-contain shrink-0 border"
@@ -2853,7 +2878,7 @@ function AddTeamModal({
                         {team.full_name}
                       </p>
                     </div>
-                    <ChevronRight size={14} style={{ color: "#555" }} />
+                    <ChevronRight size={14} style={{ color: "var(--color-kbd-text)" }} />
                   </button>
                 ))
               )}
@@ -2898,7 +2923,7 @@ function AddTeamModal({
                 onClick={() => onAdd(selectedTeam.id)}
                 disabled={addingTeamId === selectedTeam.id}
                 className="rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                 {addingTeamId === selectedTeam.id ? "Adicionando…" : "Confirmar"}
               </button>
             </div>
@@ -2910,6 +2935,23 @@ function AddTeamModal({
 }
 
 // ─── InscricoesConfigTab ─────────────────────────────────────────────────────
+
+function toDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function formatRegistrationWindowSummary(start: string, end: string): string {
+  if (!start && !end) return "Sem restrição de data";
+  const fmt = (value: string) =>
+    new Date(value).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  if (start && end) return `Inscrições abertas de ${fmt(start)} até ${fmt(end)}`;
+  if (start) return `Inscrições a partir de ${fmt(start)}`;
+  return `Inscrições até ${fmt(end)}`;
+}
 
 function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   selectedEditionId: string;
@@ -2925,7 +2967,6 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
   const [maxBirthYear, setMaxBirthYear] = useState("");
   const [windowOpensAt, setWindowOpensAt] = useState("");
   const [windowClosesAt, setWindowClosesAt] = useState("");
-  const [windowId, setWindowId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
@@ -2956,11 +2997,12 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
     if (!selectedEditionId || loaded) return;
     async function load() {
       const supabase = createClient();
-      const [{ data: settings }, { data: windows }] = await Promise.all([
-        supabase.from("edition_settings").select("*").eq("edition_id", selectedEditionId).maybeSingle(),
-        supabase.from("edition_registration_windows").select("id, opens_at, closes_at")
-          .eq("edition_id", selectedEditionId).order("opens_at").limit(1),
-      ]);
+      const { data: settings } = await supabase
+        .from("edition_settings")
+        .select("*")
+        .eq("edition_id", selectedEditionId)
+        .maybeSingle();
+
       if (settings) {
         setAthleteDocType(settings.athlete_doc_type ?? "rg");
         setStaffDocType(settings.staff_doc_type ?? "rg");
@@ -2969,12 +3011,11 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
         setMaxTransfers(settings.max_transfers ? String(settings.max_transfers) : "");
         setMinBirthYear(settings.min_birth_year ? String(settings.min_birth_year) : "");
         setMaxBirthYear(settings.max_birth_year ? String(settings.max_birth_year) : "");
-      }
-      const win = windows?.[0];
-      if (win) {
-        setWindowId(win.id);
-        setWindowOpensAt(win.opens_at ? win.opens_at.slice(0, 16) : "");
-        setWindowClosesAt(win.closes_at ? win.closes_at.slice(0, 16) : "");
+        setWindowOpensAt(toDatetimeLocalValue(settings.registration_window_start));
+        setWindowClosesAt(toDatetimeLocalValue(settings.registration_window_end));
+      } else {
+        setWindowOpensAt("");
+        setWindowClosesAt("");
       }
       setLoaded(true);
     }
@@ -2983,55 +3024,35 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
 
   async function handleSave() {
     setSaving(true);
-    const supabase = createClient();
-    const { error: settingsError } = await supabase
-      .from("edition_settings")
-      .upsert({
-        edition_id: selectedEditionId,
-        athlete_doc_type: athleteDocType,
-        staff_doc_type: staffDocType,
-        max_athletes: maxAthletes ? Number(maxAthletes) : null,
-        max_staff: maxStaff ? Number(maxStaff) : null,
-        max_transfers: maxTransfers ? Number(maxTransfers) : null,
-        min_birth_year: minBirthYear ? Number(minBirthYear) : null,
-        max_birth_year: maxBirthYear ? Number(maxBirthYear) : null,
-      }, { onConflict: "edition_id" });
-
-    if (settingsError) { toast("error", settingsError.message); setSaving(false); return; }
-
-    if (windowOpensAt && windowClosesAt) {
-      if (windowId) {
-        await supabase.from("edition_registration_windows")
-          .update({ opens_at: windowOpensAt, closes_at: windowClosesAt, is_active: true })
-          .eq("id", windowId);
-      } else {
-        const { data: inserted } = await supabase
-          .from("edition_registration_windows")
-          .insert({ edition_id: selectedEditionId, opens_at: windowOpensAt, closes_at: windowClosesAt, is_active: true })
-          .select("id").single();
-        if (inserted) setWindowId(inserted.id);
-      }
-    } else if (windowId && !windowOpensAt && !windowClosesAt) {
-      await supabase.from("edition_registration_windows")
-        .update({ is_active: false }).eq("id", windowId);
-    }
-
+    const result = await salvarConfiguracaoInscricoes(selectedEditionId, {
+      athlete_doc_type: athleteDocType,
+      staff_doc_type: staffDocType,
+      max_athletes: maxAthletes ? Number(maxAthletes) : null,
+      max_staff: maxStaff ? Number(maxStaff) : null,
+      max_transfers: maxTransfers ? Number(maxTransfers) : null,
+      min_birth_year: minBirthYear ? Number(minBirthYear) : null,
+      max_birth_year: maxBirthYear ? Number(maxBirthYear) : null,
+      registration_window_start: windowOpensAt || null,
+      registration_window_end: windowClosesAt || null,
+    });
     setSaving(false);
+    if ("error" in result) { toast("error", result.error); return; }
     toast("success", "Configurações salvas.");
   }
 
   function getWindowStatus(): { label: string; color: string } | null {
     if (!windowOpensAt || !windowClosesAt) return null;
     const now = new Date();
-    if (now < new Date(windowOpensAt)) return { label: "Agendada", color: "#F2C005" };
-    if (now > new Date(windowClosesAt)) return { label: "Encerrada", color: "#555" };
+    if (now < new Date(windowOpensAt)) return { label: "Agendada", color: "var(--color-warning)" };
+    if (now > new Date(windowClosesAt)) return { label: "Encerrada", color: "var(--color-kbd-text)" };
     return { label: "Aberta agora", color: "var(--color-brand)" };
   }
 
   const windowStatus = getWindowStatus();
   const windowInvalid = !!windowOpensAt && !!windowClosesAt && new Date(windowOpensAt) >= new Date(windowClosesAt);
+  const windowSummary = formatRegistrationWindowSummary(windowOpensAt, windowClosesAt);
 
-  if (!loaded) return <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando…</p>;
+  if (!loaded) return <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>Carregando…</p>;
 
   // Estilos reutilizáveis
   const card: React.CSSProperties = {
@@ -3115,7 +3136,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
                         fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, cursor: "pointer",
                         transition: "all 0.15s",
                         borderColor: val === doc ? "var(--color-brand)" : "var(--color-border)",
-                        backgroundColor: val === doc ? "rgba(191,242,5,0.1)" : "transparent",
+                        backgroundColor: val === doc ? "var(--color-brand-muted-bg)" : "transparent",
                         color: val === doc ? "var(--color-brand)" : "var(--color-text-secondary)",
                       }}>
                       {doc.toUpperCase()}
@@ -3180,7 +3201,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
           {minBirthYear && maxBirthYear && Number(minBirthYear) <= Number(maxBirthYear) && (
             <div style={{
               marginTop: 14, padding: "8px 12px", borderRadius: 8,
-              border: "1px solid rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)",
+              border: "1px solid var(--color-brand-border-light)", backgroundColor: "var(--color-brand-hover-bg)",
               fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)",
             }}>
               Atletas elegíveis: nascidos entre {minBirthYear} e {maxBirthYear}
@@ -3189,7 +3210,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
           {minBirthYear && maxBirthYear && Number(minBirthYear) > Number(maxBirthYear) && (
             <div style={{
               marginTop: 14, padding: "8px 12px", borderRadius: 8,
-              border: "1px solid rgba(255,68,68,0.2)", backgroundColor: "rgba(255,68,68,0.05)",
+              border: "1px solid var(--color-danger-muted-border)", backgroundColor: "var(--color-danger-muted-bg)",
               fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)",
             }}>
               O ano mínimo não pode ser maior que o máximo.
@@ -3198,7 +3219,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
         </div>
 
         {/* ── 4. Janela de inscrição ── */}
-        <div style={{ ...card, borderColor: windowStatus?.color === "var(--color-brand)" ? "rgba(191,242,5,0.3)" : "var(--color-border)" }}>
+        <div style={{ ...card, borderColor: windowStatus?.color === "var(--color-brand)" ? "var(--color-brand-muted-bg)" : "var(--color-border)" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
             <p style={sectionTitle}>Janela de inscrição</p>
             {windowStatus && (
@@ -3217,9 +3238,18 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
             Representantes só podem submeter inscrições dentro deste período.{" "}
             <span style={{ color: "var(--color-text-primary)" }}>Admins inscrevem a qualquer momento.</span>
           </p>
+          <p style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: 11,
+            color: windowOpensAt || windowClosesAt ? "var(--color-text-primary)" : "var(--color-text-secondary)",
+            marginBottom: 16,
+            lineHeight: 1.5,
+          }}>
+            {windowSummary}
+          </p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div>
-              <span style={fieldLabel}>Abertura</span>
+              <span style={fieldLabel}>Início das inscrições</span>
               <input
                 type="datetime-local"
                 value={windowOpensAt}
@@ -3229,7 +3259,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
               />
             </div>
             <div>
-              <span style={fieldLabel}>Encerramento</span>
+              <span style={fieldLabel}>Fim das inscrições</span>
               <input
                 type="datetime-local"
                 value={windowClosesAt}
@@ -3242,7 +3272,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
           {windowInvalid && (
             <div style={{
               marginTop: 12, padding: "8px 12px", borderRadius: 8,
-              border: "1px solid rgba(255,68,68,0.2)", backgroundColor: "rgba(255,68,68,0.05)",
+              border: "1px solid var(--color-danger-muted-border)", backgroundColor: "var(--color-danger-muted-bg)",
               fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)",
             }}>
               A data de abertura deve ser anterior ao encerramento.
@@ -3256,7 +3286,7 @@ function InscricoesConfigTab({ selectedEditionId, inputClass, inputStyle }: {
             disabled={saving || windowInvalid}
             style={{
               padding: "10px 28px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer",
-              backgroundColor: "var(--color-brand)", color: "var(--color-background)",
+              backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)",
               fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
               opacity: saving || windowInvalid ? 0.5 : 1, transition: "opacity 0.15s",
             }}>
@@ -3558,7 +3588,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", textAlign: "center" }}>
         <p style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--color-text-primary)" }}>Sem rodadas</p>
-        <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Crie rodadas na fase para atribuir premiações semanais.</p>
+        <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Crie rodadas na fase para atribuir premiações semanais.</p>
       </div>
     );
   }
@@ -3566,13 +3596,13 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
   // ── Renderizar Histórico ──
   function renderHistorico() {
     if (loadingHistorico) {
-      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6", padding: "40px 0", textAlign: "center" }}>Carregando…</p>;
+      return <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)", padding: "40px 0", textAlign: "center" }}>Carregando…</p>;
     }
     if (historico.length === 0) {
       return (
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 0", textAlign: "center" }}>
           <p style={{ fontFamily: "var(--font-display)", fontSize: 20, color: "var(--color-text-primary)" }}>Nenhum TOTW salvo</p>
-          <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Selecione uma rodada e salve o Time da Semana.</p>
+          <p style={{ marginTop: 8, fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Selecione uma rodada e salve o Time da Semana.</p>
         </div>
       );
     }
@@ -3595,11 +3625,11 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <button type="button" onClick={() => handleEditTotw(squad)}
-                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid var(--color-brand-border-medium)", backgroundColor: "var(--color-brand-hover-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                     Editar
                   </button>
                   <button type="button" onClick={() => handleDeleteTotw(squad.id)} disabled={deletingId === squad.id}
-                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid rgba(255,68,68,0.25)", backgroundColor: "rgba(255,68,68,0.06)", color: "var(--color-danger)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: deletingId === squad.id ? 0.5 : 1 }}>
+                    style={{ padding: "5px 14px", borderRadius: 8, border: "1px solid var(--color-danger-muted-border)", backgroundColor: "var(--color-danger-muted-bg)", color: "var(--color-danger)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, cursor: "pointer", opacity: deletingId === squad.id ? 0.5 : 1 }}>
                     {deletingId === squad.id ? "Excluindo…" : "Excluir"}
                   </button>
                 </div>
@@ -3613,13 +3643,11 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                   const photo = person?.photo_url ?? null;
                   const team = m.teams;
                   return (
-                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "rgba(255,255,255,0.03)" }}>
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)", backgroundColor: "var(--color-hover-bg-subtle)" }}>
                       {photo ? (
                         <img src={photo} alt="" style={{ width: 24, height: 24, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                       ) : (
-                        <div style={{ width: 24, height: 24, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "var(--color-text-secondary)" }}>
-                          {name.slice(0, 2).toUpperCase()}
-                        </div>
+                        <PersonAvatar photoUrl={null} size={24} style={{ backgroundColor: "var(--color-border)" }} />
                       )}
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)" }}>{name}</span>
                       {team && (
@@ -3635,7 +3663,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                   const person = coachMember.athlete_id ? coachMember.athletes : coachMember.staff_members;
                   const name = person?.surname ?? person?.full_name ?? "—";
                   return (
-                    <div key={coachMember.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.2)", backgroundColor: "rgba(191,242,5,0.05)" }}>
+                    <div key={coachMember.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-brand-border-light)", backgroundColor: "var(--color-brand-hover-bg)" }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)", fontWeight: 700 }}>TEC</span>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)" }}>{name}</span>
                     </div>
@@ -3656,7 +3684,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
       <div style={{ display: "flex", gap: 24, borderBottom: "1px solid var(--color-border)" }}>
         {[{ key: "selecao", label: "SELEÇÃO" }, { key: "historico", label: "HISTÓRICO" }].map(t => (
           <button key={t.key} type="button" onClick={() => setActiveSemanasTab(t.key as any)}
-            style={{ paddingBottom: 12, background: "none", border: "none", borderBottom: `2px solid ${activeSemanasTab === t.key ? "var(--color-brand)" : "transparent"}`, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: activeSemanasTab === t.key ? "var(--color-brand)" : "#A6A6A6", cursor: "pointer", transition: "all 0.12s" }}>
+            style={{ paddingBottom: 12, background: "none", border: "none", borderBottom: `2px solid ${activeSemanasTab === t.key ? "var(--color-brand)" : "transparent"}`, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: activeSemanasTab === t.key ? "var(--color-brand)" : "var(--color-text-secondary)", cursor: "pointer", transition: "all 0.12s" }}>
             {t.label}
           </button>
         ))}
@@ -3670,7 +3698,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
         <>
           {/* Search modal */}
           {searchOpen && (
-            <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
+            <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-search-scrim)", padding: 16 }}>
               <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
@@ -3686,8 +3714,8 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                       <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
                         style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
                           borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
-                          backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
-                          color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                          backgroundColor: searchType === t.key ? "var(--color-brand-muted-bg)" : "transparent",
+                          color: searchType === t.key ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                         {t.label}
                       </button>
                     ))}
@@ -3720,14 +3748,12 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                           setSearchOpen(false); setSearchQuery("");
                         }}
                         style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
-                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-hover-bg)")}
                         onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
                         {person?.photo_url ? (
                           <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                         ) : (
-                          <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
-                            {name.slice(0, 2).toUpperCase()}
-                          </div>
+                          <PersonAvatar photoUrl={null} size={38} style={{ backgroundColor: "var(--color-border)" }} />
                         )}
                         <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                           <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -3765,8 +3791,8 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                   onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); setMotwIndex(null); }}
                   style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
                     borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
-                    backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
-                    color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
+                    backgroundColor: formation === f ? "var(--color-brand-muted-bg)" : "transparent",
+                    color: formation === f ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                   {FORMATIONS[f].label}
                 </button>
               ))}
@@ -3774,7 +3800,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
           </div>
 
           {loading ? (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Carregando…</p>
           ) : (
             <>
               {/* Field SVG with player slots */}
@@ -3785,20 +3811,20 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                   xmlns="http://www.w3.org/2000/svg">
 
                   <rect width={FW} height={FH} fill="var(--color-surface)" />
-                  <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-                  <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
-                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-                  <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
-                  <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-                  <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-                  <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
-                  <line x1={FW/2 - 20} y1={PAD_Y} x2={FW/2 - 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
-                  <line x1={FW/2 + 20} y1={PAD_Y} x2={FW/2 + 20} y2={PAD_Y - 8} stroke="rgba(191,242,5,0.4)" strokeWidth="1.5" />
+                  <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="var(--color-field-line)" strokeWidth="1.5" />
+                  <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <circle cx={FW/2} cy={FH/2} r="3" fill="var(--color-text-ghost)" />
+                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="var(--color-field-line-strong)" strokeWidth="1.5" />
+                  <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="var(--color-text-ghost)" />
+                  <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+                  <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="var(--color-field-line-strong)" strokeWidth="1.5" />
+                  <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="var(--color-text-ghost)" />
+                  <line x1={FW/2 - 20} y1={PAD_Y} x2={FW/2 - 20} y2={PAD_Y - 8} stroke="var(--color-brand-border)" strokeWidth="1.5" />
+                  <line x1={FW/2 + 20} y1={PAD_Y} x2={FW/2 + 20} y2={PAD_Y - 8} stroke="var(--color-brand-border)" strokeWidth="1.5" />
 
                   {formationSlots.map((slot, i) => {
                     const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
@@ -3811,8 +3837,8 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                       <g key={i}>
                         {!data && (
                           <>
-                            <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
-                            <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
+                            <circle cx={cx} cy={cy} r={AVATAR_R} fill="var(--color-divider)" stroke="var(--color-field-line)" strokeWidth="1.5" strokeDasharray="4 3" />
+                            <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="var(--color-field-line-strong)">{slot.label}</text>
                             <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
                               onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
                           </>
@@ -3820,28 +3846,28 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                         {data && (
                           <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
                             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
-                              <style>{`.sa${i}:hover .sg${i}{opacity:1}.sa${i}:hover .sr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
+                              <style>{`.sa${i}:hover .sg${i}{opacity:1}.sa${i}:hover .sr${i}{box-shadow:0 0 0 2px ${teamColor ?? "var(--color-brand)"},0 0 12px 3px ${teamColor ? teamColor+"55" : "var(--color-brand-muted-bg)"}}`}</style>
                               <div className={`sa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
                                 onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
                                 <div className={`sg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
-                                  background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
+                                  background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,var(--color-brand-border-medium) 0%,transparent 70%)" }} />
                                 <div className={`sr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
-                                  border: `2px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.3)"}`, backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
+                                  border: `2px solid ${isMotw ? "var(--color-brand)" : "var(--color-field-avatar-border)"}`, backgroundColor: "var(--color-field-avatar-bg)", transition: "box-shadow 0.2s" }}>
                                   {data.photo
                                     ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
+                                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-field-text-strong)" }}><PersonAvatarPlaceholder fill /></div>
                                   }
                                 </div>
                                 {!data.isStaff && (
                                   <div onClick={e => { e.stopPropagation(); setMotwIndex(isMotw ? null : i); }}
                                     style={{ position: "absolute", top: -3, right: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, transition: "all 0.15s",
-                                      backgroundColor: isMotw ? "#BFF205" : "rgba(0,0,0,0.85)", border: `1px solid ${isMotw ? "#BFF205" : "rgba(255,255,255,0.2)"}`, color: isMotw ? "#0D0D0D" : "rgba(255,255,255,0.4)" }}>★</div>
+                                      backgroundColor: isMotw ? "var(--color-brand)" : "rgba(0,0,0,0.85)", border: `1px solid ${isMotw ? "var(--color-brand)" : "var(--color-text-ghost)"}`, color: isMotw ? "#0D0D0D" : "var(--color-icon-muted)" }}>★</div>
                                 )}
                                 <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); if (motwIndex === i) setMotwIndex(null); }}
-                                  style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
+                                  style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "var(--color-danger-solid)", color: "var(--color-on-danger)", lineHeight: 1 }}>×</div>
                               </div>
-                              <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: isMotw ? "#BFF205" : "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
-                              {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
+                              <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: isMotw ? "var(--color-brand)" : "var(--color-field-text)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
+                              {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "var(--color-text-muted)", textAlign: "center" }}>{data.teamName}</p>}
                             </div>
                           </foreignObject>
                         )}
@@ -3859,9 +3885,7 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                     {coach.photo ? (
                       <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                     ) : (
-                      <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
-                        {coach.name.slice(0, 2).toUpperCase()}
-                      </div>
+                      <PersonAvatar photoUrl={null} size={34} style={{ backgroundColor: "var(--color-border)" }} />
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
@@ -3882,11 +3906,11 @@ if (motwSlot && motwSlot.athleteId !== null && motwSlot.athleteId !== undefined)
                 <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-secondary)" }}>
                   {rounds.find((r: any) => r.id === selectedRoundId)?.custom_label ?? rounds.find((r: any) => r.id === selectedRoundId)?.name}
                   {motwIndex !== null && slots[motwIndex] && (
-                    <span style={{ marginLeft: 12, color: "#BFF205" }}>★ MOTW: {slots[motwIndex]!.name}</span>
+                    <span style={{ marginLeft: 12, color: "var(--color-brand)" }}>★ MOTW: {slots[motwIndex]!.name}</span>
                   )}
                 </p>
                 <button type="button" onClick={handleSave} disabled={saving}
-                  style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+                  style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
                   {saving ? "Salvando…" : totwSquadId ? "Atualizar TOTW" : "Salvar TOTW"}
                 </button>
               </div>
@@ -4111,12 +4135,12 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em" }}>
+      <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-muted)", letterSpacing: "0.06em" }}>
         TOTS — Seleção da Temporada
       </p>
 
       {searchOpen && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.65)", padding: 16 }}>
+        <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-search-scrim)", padding: 16 }}>
           <div style={{ width: "100%", maxWidth: 460, borderRadius: 16, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden" }}>
             <div style={{ padding: "16px 20px", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <p style={{ fontFamily: "var(--font-display)", fontSize: 16, color: "var(--color-text-primary)", margin: 0 }}>
@@ -4132,8 +4156,8 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
                   <button key={t.key} type="button" onClick={() => { setSearchType(t.key as any); setSearchQuery(""); }}
                     style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
                       borderColor: searchType === t.key ? "var(--color-brand)" : "var(--color-border)",
-                      backgroundColor: searchType === t.key ? "rgba(191,242,5,0.1)" : "transparent",
-                      color: searchType === t.key ? "var(--color-brand)" : "#A6A6A6" }}>
+                      backgroundColor: searchType === t.key ? "var(--color-brand-muted-bg)" : "transparent",
+                      color: searchType === t.key ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
                     {t.label}
                   </button>
                 ))}
@@ -4165,14 +4189,12 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
                       setSearchOpen(false); setSearchQuery("");
                     }}
                     style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", background: "none", border: "none", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)")}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--color-hover-bg)")}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
                     {person?.photo_url ? (
                       <img src={person.photo_url} alt="" style={{ width: 38, height: 38, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                     ) : (
-                      <div style={{ width: 38, height: 38, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)" }}>
-                        {name.slice(0, 2).toUpperCase()}
-                      </div>
+                      <PersonAvatar photoUrl={null} size={38} style={{ backgroundColor: "var(--color-border)" }} />
                     )}
                     <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
                       <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -4200,37 +4222,37 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
             onClick={() => { setFormation(f); setSlots(Array(7).fill(null)); }}
             style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid", fontFamily: "var(--font-mono)", fontSize: 11, cursor: "pointer",
               borderColor: formation === f ? "var(--color-brand)" : "var(--color-border)",
-              backgroundColor: formation === f ? "rgba(191,242,5,0.1)" : "transparent",
-              color: formation === f ? "var(--color-brand)" : "#A6A6A6" }}>
+              backgroundColor: formation === f ? "var(--color-brand-muted-bg)" : "transparent",
+              color: formation === f ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
             {FORMATIONS[f].label}
           </button>
         ))}
       </div>
 
       {loading ? (
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "#A6A6A6" }}>Carregando…</p>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--color-text-secondary)" }}>Carregando…</p>
       ) : (
         <>
           <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--color-border)" }}>
             <div style={{ position: "absolute", top: 12, left: 0, right: 0, textAlign: "center", zIndex: 2, pointerEvents: "none" }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.2em", color: "rgba(191,242,5,0.55)", textTransform: "uppercase" as const }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.2em", color: "var(--color-brand-text-muted)", textTransform: "uppercase" as const }}>
                 SELEÇÃO DA TEMPORADA
               </span>
             </div>
             <svg viewBox={`0 0 ${FW} ${FH}`} style={{ width: "100%", display: "block" }} xmlns="http://www.w3.org/2000/svg">
               <rect width={FW} height={FH} fill="var(--color-surface)" />
-              <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" />
-              <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <circle cx={FW/2} cy={FH/2} r="3" fill="rgba(255,255,255,0.2)" />
-              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-              <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
-              <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="1" />
-              <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" />
-              <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="rgba(255,255,255,0.2)" />
+              <rect x={PAD_X} y={PAD_Y} width={INNER_W} height={INNER_H} fill="none" stroke="var(--color-field-line)" strokeWidth="1.5" />
+              <line x1={FW/2} y1={PAD_Y} x2={FW/2} y2={PAD_Y + INNER_H} stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <circle cx={FW/2} cy={FH/2} r={Math.min(INNER_H, INNER_W) * 0.13} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <circle cx={FW/2} cy={FH/2} r="3" fill="var(--color-text-ghost)" />
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <rect x={PAD_X} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <rect x={PAD_X - 14} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="var(--color-field-line-strong)" strokeWidth="1.5" />
+              <circle cx={PAD_X + INNER_W * 0.12} cy={FH/2} r="2.5" fill="var(--color-text-ghost)" />
+              <rect x={PAD_X + INNER_W * 0.82} y={PAD_Y + INNER_H * 0.22} width={INNER_W * 0.18} height={INNER_H * 0.56} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <rect x={PAD_X + INNER_W * 0.92} y={PAD_Y + INNER_H * 0.35} width={INNER_W * 0.08} height={INNER_H * 0.30} fill="none" stroke="var(--color-dashed-border)" strokeWidth="1" />
+              <rect x={PAD_X + INNER_W} y={PAD_Y + INNER_H * 0.40} width={14} height={INNER_H * 0.20} fill="none" stroke="var(--color-field-line-strong)" strokeWidth="1.5" />
+              <circle cx={PAD_X + INNER_W * 0.88} cy={FH/2} r="2.5" fill="var(--color-text-ghost)" />
 
               {formationSlots.map((slot, i) => {
                 const { cx, cy } = slotPosition(slot.col, slot.row, slot.total);
@@ -4242,8 +4264,8 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
                   <g key={i}>
                     {!data && (
                       <>
-                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.5" strokeDasharray="4 3" />
-                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="rgba(255,255,255,0.25)">{slot.label}</text>
+                        <circle cx={cx} cy={cy} r={AVATAR_R} fill="var(--color-divider)" stroke="var(--color-field-line)" strokeWidth="1.5" strokeDasharray="4 3" />
+                        <text x={cx} y={cy + 4} textAnchor="middle" fontSize="10" fontFamily="var(--font-mono)" fontWeight="700" fill="var(--color-field-line-strong)">{slot.label}</text>
                         <circle cx={cx} cy={cy} r={AVATAR_R} fill="transparent" style={{ cursor: "pointer" }}
                           onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }} />
                       </>
@@ -4251,23 +4273,23 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
                     {data && (
                       <foreignObject x={cx - foSize/2 - 8} y={cy - foSize/2 - 8} width={foSize + 16} height={foSize + 40}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 8px 0" }}>
-                          <style>{`.tsa${i}:hover .tsg${i}{opacity:1}.tsa${i}:hover .tsr${i}{box-shadow:0 0 0 2px ${teamColor ?? "#BFF205"},0 0 12px 3px ${teamColor ? teamColor+"55" : "rgba(191,242,5,0.3)"}}`}</style>
+                          <style>{`.tsa${i}:hover .tsg${i}{opacity:1}.tsa${i}:hover .tsr${i}{box-shadow:0 0 0 2px ${teamColor ?? "var(--color-brand)"},0 0 12px 3px ${teamColor ? teamColor+"55" : "var(--color-brand-muted-bg)"}}`}</style>
                           <div className={`tsa${i}`} style={{ position: "relative", width: foSize, height: foSize, cursor: "pointer", flexShrink: 0 }}
                             onClick={() => { setSearchSlotIndex(i); setSearchIsCoach(false); setSearchType("athlete"); setSearchQuery(""); setSearchOpen(true); }}>
                             <div className={`tsg${i}`} style={{ position: "absolute", inset: -6, borderRadius: "50%", opacity: 0, pointerEvents: "none", transition: "opacity 0.2s",
-                              background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,rgba(191,242,5,0.25) 0%,transparent 70%)" }} />
+                              background: teamColor ? `radial-gradient(circle,${teamColor}44 0%,transparent 70%)` : "radial-gradient(circle,var(--color-brand-border-medium) 0%,transparent 70%)" }} />
                             <div className={`tsr${i}`} style={{ width: "100%", height: "100%", borderRadius: "50%", overflow: "hidden",
-                              border: "2px solid rgba(255,255,255,0.3)", backgroundColor: "rgba(0,0,0,0.5)", transition: "box-shadow 0.2s" }}>
+                              border: "2px solid var(--color-field-avatar-border)", backgroundColor: "var(--color-field-avatar-bg)", transition: "box-shadow 0.2s" }}>
                               {data.photo
                                 ? <img src={data.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)" }}>{data.name.slice(0,2).toUpperCase()}</div>
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--color-field-text-strong)" }}><PersonAvatarPlaceholder fill /></div>
                               }
                             </div>
                             <div onClick={e => { e.stopPropagation(); setSlots(prev => { const n = [...prev]; n[i] = null; return n; }); }}
-                              style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "rgba(255,68,68,0.9)", color: "white", lineHeight: 1 }}>×</div>
+                              style={{ position: "absolute", top: -3, left: -3, width: 15, height: 15, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, backgroundColor: "var(--color-danger-solid)", color: "var(--color-on-danger)", lineHeight: 1 }}>×</div>
                           </div>
-                          <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: "rgba(255,255,255,0.85)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
-                          {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "rgba(255,255,255,0.35)", textAlign: "center" }}>{data.teamName}</p>}
+                          <p style={{ margin: "3px 0 0", fontSize: 9, fontFamily: "var(--font-mono)", fontWeight: 700, color: "var(--color-field-text)", whiteSpace: "nowrap", maxWidth: foSize + 12, overflow: "hidden", textOverflow: "ellipsis", textAlign: "center" }}>{data.name}</p>
+                          {data.teamName && <p style={{ margin: "1px 0 0", fontSize: 8, fontFamily: "var(--font-mono)", color: "var(--color-text-muted)", textAlign: "center" }}>{data.teamName}</p>}
                         </div>
                       </foreignObject>
                     )}
@@ -4284,9 +4306,7 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
                 {coach.photo ? (
                   <img src={coach.photo} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                 ) : (
-                  <div style={{ width: 34, height: 34, borderRadius: "50%", backgroundColor: "var(--color-border)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-secondary)", flexShrink: 0 }}>
-                    {coach.name.slice(0, 2).toUpperCase()}
-                  </div>
+                  <PersonAvatar photoUrl={null} size={34} style={{ backgroundColor: "var(--color-border)" }} />
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ margin: 0, fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{coach.name}</p>
@@ -4304,7 +4324,7 @@ function TotsTab({ selectedEditionId }: { selectedEditionId: string }) {
 
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <button type="button" onClick={handleSave} disabled={saving}
-              style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
+              style={{ padding: "9px 22px", borderRadius: 10, border: "none", cursor: saving ? "not-allowed" : "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, opacity: saving ? 0.6 : 1 }}>
               {saving ? "Salvando…" : totsSquadId ? "Atualizar TOTS" : "Salvar TOTS"}
             </button>
           </div>
@@ -4435,12 +4455,12 @@ function BracketTeamRow({
   const nameColor = isWinner
     ? "var(--color-brand)"
     : isLoser
-    ? "rgba(255,255,255,0.18)"
+    ? "var(--color-field-line)"
     : "var(--color-text-primary)";
   const scoreColor = isWinner
     ? "var(--color-brand)"
     : isLoser
-    ? "rgba(255,255,255,0.12)"
+    ? "var(--color-dashed-border)"
     : "var(--color-text-primary)";
   const isTbd = !team;
 
@@ -4448,7 +4468,7 @@ function BracketTeamRow({
     <div style={{
       display: "flex", alignItems: "center", gap: 7, padding: "7px 9px", minHeight: 34,
       borderTop: hasBorderTop ? "1px solid var(--color-border)" : "none",
-      backgroundColor: isWinner ? "rgba(191,242,5,0.04)" : "transparent",
+      backgroundColor: isWinner ? "var(--color-brand-hover-bg)" : "transparent",
     }}>
       {/* Logo */}
       {team?.logo_url ? (
@@ -4471,7 +4491,7 @@ function BracketTeamRow({
       {score !== null && (
         <div style={{ display: "flex", alignItems: "baseline", gap: 3, flexShrink: 0 }}>
           {penScore !== null && (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(191,242,5,0.65)", lineHeight: 1 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-brand-text-faint)", lineHeight: 1 }}>
               ({penScore})
             </span>
           )}
@@ -4527,12 +4547,12 @@ function BracketMatchupCard({
         cursor: hasMatches ? "pointer" : "default",
         transition: "border-color 0.15s",
       }}
-      onMouseEnter={e => { if (hasMatches) (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.35)"; }}
+      onMouseEnter={e => { if (hasMatches) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-brand-border)"; }}
       onMouseLeave={e => { if (hasMatches) (e.currentTarget as HTMLElement).style.borderColor = "var(--color-border)"; }}
     >
       {/* Barra de agregado */}
       {showAggBar && (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 9px", backgroundColor: "rgba(191,242,5,0.05)", borderBottom: "1px solid var(--color-border)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "5px 9px", backgroundColor: "var(--color-brand-hover-bg)", borderBottom: "1px solid var(--color-border)" }}>
           <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-text-secondary)" }}>
             Agregado
           </span>
@@ -4541,7 +4561,7 @@ function BracketMatchupCard({
             <span style={{ margin: "0 3px", color: "var(--color-border)" }}>–</span>
             <span style={{ color: aggWinnerB ? "var(--color-brand)" : "var(--color-text-secondary)", fontWeight: aggWinnerB ? 700 : 400 }}>{aggB} {tB}</span>
             {aggPenA !== null && (
-              <span style={{ marginLeft: 4, color: "rgba(191,242,5,0.6)", fontSize: 8 }}>
+              <span style={{ marginLeft: 4, color: "var(--color-brand-text-soft)", fontSize: 8 }}>
                 pen {aggPenA}–{aggPenB}
               </span>
             )}
@@ -4573,7 +4593,7 @@ function BracketMatchupCard({
             VER JOGOS ›
           </span>
           {showOrder && (
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(191,242,5,0.4)", background: "rgba(191,242,5,0.07)", borderRadius: 3, padding: "2px 5px" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "var(--color-brand-border)", background: "var(--color-brand-selected-bg)", borderRadius: 3, padding: "2px 5px" }}>
               #{matchup.display_order}
             </span>
           )}
@@ -4581,7 +4601,7 @@ function BracketMatchupCard({
       )}
       {!hasMatches && showOrder && (
         <div style={{ display: "flex", justifyContent: "flex-end", padding: "4px 9px", borderTop: "1px solid var(--color-border)" }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "rgba(191,242,5,0.4)", background: "rgba(191,242,5,0.07)", borderRadius: 3, padding: "2px 5px" }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, color: "var(--color-brand-border)", background: "var(--color-brand-selected-bg)", borderRadius: 3, padding: "2px 5px" }}>
             #{matchup.display_order}
           </span>
         </div>
@@ -4630,49 +4650,49 @@ function BracketSeriesModal({
 
   return (
     <div
-      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.78)", padding: 16 }}
+      style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-modal-scrim)", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div style={{ width: "100%", maxWidth: 360, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+      <div style={{ width: "100%", maxWidth: 360, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)" }}>
 
         {/* Cabeçalho */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, backgroundColor: "rgba(191,242,5,0.03)" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, backgroundColor: "var(--color-brand-faint-bg)" }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>Confronto</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>Confronto</p>
             {/* Times com logos */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
               {/* Time A */}
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {logoA
                   ? <img src={logoA} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />
-                  : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+                  : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "var(--color-surface-raised)", flexShrink: 0 }} />
                 }
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.04em" }}>{tA}</span>
               </div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flexShrink: 0 }}>×</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-ghost)", flexShrink: 0 }}>×</span>
               {/* Time B */}
               <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 {logoB
                   ? <img src={logoB} alt="" style={{ width: 20, height: 20, objectFit: "contain", flexShrink: 0 }} />
-                  : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+                  : <div style={{ width: 20, height: 20, borderRadius: 4, backgroundColor: "var(--color-surface-raised)", flexShrink: 0 }} />
                 }
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 800, color: "var(--color-text-primary)", letterSpacing: "0.04em" }}>{tB}</span>
               </div>
             </div>
           </div>
           <button onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", flexShrink: 0 }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; (e.currentTarget as HTMLElement).style.color = "#BFF205"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.4)"; }}>×</button>
+            style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s", flexShrink: 0 }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-brand-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-input-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-icon-muted)"; }}>×</button>
         </div>
 
         {/* Resumo agregado / série */}
         {summaryLabel && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 18px", backgroundColor: "rgba(191,242,5,0.05)", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "rgba(255,255,255,0.3)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 18px", backgroundColor: "var(--color-brand-hover-bg)", borderBottom: "1px solid var(--color-divider-strong)" }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase" as const, letterSpacing: "0.08em", color: "var(--color-text-faint)" }}>
               {summaryLabel}
             </span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#BFF205", fontWeight: 700 }}>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-brand)", fontWeight: 700 }}>
               {summaryValue}
             </span>
           </div>
@@ -4689,13 +4709,13 @@ function BracketSeriesModal({
             : "Jogo único";
 
           return (
-            <div key={m.id} style={{ borderBottom: i < allMatches.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none" }}>
+            <div key={m.id} style={{ borderBottom: i < allMatches.length - 1 ? "1px solid var(--color-hover-bg)" : "none" }}>
 
               {/* Label do jogo */}
-              <div style={{ padding: "10px 18px 6px", fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase" as const, letterSpacing: "0.12em", color: "rgba(255,255,255,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ padding: "10px 18px 6px", fontFamily: "var(--font-mono)", fontSize: 8, textTransform: "uppercase" as const, letterSpacing: "0.12em", color: "var(--color-text-hint)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span>{gameLabel}</span>
                 {!isFinished && (
-                  <span style={{ color: "#F2C005", fontSize: 8, letterSpacing: "0.06em" }}>
+                  <span style={{ color: "var(--color-warning)", fontSize: 8, letterSpacing: "0.06em" }}>
                     {m.status === "scheduled" ? "Agendado" : m.status === "ongoing" ? "Ao vivo" : m.status}
                   </span>
                 )}
@@ -4705,15 +4725,15 @@ function BracketSeriesModal({
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 18px" }}>
                 {logoA
                   ? <img src={logoA} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0, filter: wB ? "grayscale(1) opacity(0.3)" : "none" }} />
-                  : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.05)", flexShrink: 0 }} />
+                  : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-hover-bg)", flexShrink: 0 }} />
                 }
-                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: wA ? "#BFF205" : wB ? "rgba(255,255,255,0.2)" : "var(--color-text-primary)" }}>
+                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: wA ? "var(--color-brand)" : wB ? "var(--color-text-ghost)" : "var(--color-text-primary)" }}>
                   {tA}
                 </span>
                 {hasPen && (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "rgba(191,242,5,0.1)", color: "#BFF205", padding: "2px 6px", borderRadius: 4 }}>pen</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "var(--color-brand-muted-bg)", color: "var(--color-brand)", padding: "2px 6px", borderRadius: 4 }}>pen</span>
                 )}
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 800, lineHeight: 1, color: wA ? "#BFF205" : wB ? "rgba(255,255,255,0.1)" : isFinished ? "var(--color-text-primary)" : "#333", minWidth: 18, textAlign: "right" as const }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 800, lineHeight: 1, color: wA ? "var(--color-brand)" : wB ? "var(--color-input-border-strong)" : isFinished ? "var(--color-text-primary)" : "#333", minWidth: 18, textAlign: "right" as const }}>
                   {isFinished ? m.score_a : "–"}
                 </span>
               </div>
@@ -4722,26 +4742,26 @@ function BracketSeriesModal({
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "4px 18px 10px" }}>
                 {logoB
                   ? <img src={logoB} alt="" style={{ width: 18, height: 18, objectFit: "contain", flexShrink: 0, filter: wA ? "grayscale(1) opacity(0.3)" : "none" }} />
-                  : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.05)", flexShrink: 0 }} />
+                  : <div style={{ width: 18, height: 18, borderRadius: 3, backgroundColor: "var(--color-hover-bg)", flexShrink: 0 }} />
                 }
-                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: wB ? "#BFF205" : wA ? "rgba(255,255,255,0.2)" : "var(--color-text-primary)" }}>
+                <span style={{ flex: 1, fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: wB ? "var(--color-brand)" : wA ? "var(--color-text-ghost)" : "var(--color-text-primary)" }}>
                   {tB}
                 </span>
                 {hasPen && (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "rgba(191,242,5,0.1)", color: "#BFF205", padding: "2px 6px", borderRadius: 4 }}>pen</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, background: "var(--color-brand-muted-bg)", color: "var(--color-brand)", padding: "2px 6px", borderRadius: 4 }}>pen</span>
                 )}
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 800, lineHeight: 1, color: wB ? "#BFF205" : wA ? "rgba(255,255,255,0.1)" : isFinished ? "var(--color-text-primary)" : "#333", minWidth: 18, textAlign: "right" as const }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 20, fontWeight: 800, lineHeight: 1, color: wB ? "var(--color-brand)" : wA ? "var(--color-input-border-strong)" : isFinished ? "var(--color-text-primary)" : "#333", minWidth: 18, textAlign: "right" as const }}>
                   {isFinished ? m.score_b : "–"}
                 </span>
               </div>
 
               {/* Pênaltis */}
               {hasPen && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 18px 10px", backgroundColor: "rgba(191,242,5,0.04)", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 18px 10px", backgroundColor: "var(--color-brand-hover-bg)", borderTop: "1px solid var(--color-hover-bg)" }}>
                   <span style={{ fontSize: 10 }}>⚽</span>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-faint)" }}>
                     Pênaltis:{" "}
-                    <span style={{ color: "#BFF205", fontWeight: 700 }}>{tA} {m.pen_a} × {m.pen_b} {tB}</span>
+                    <span style={{ color: "var(--color-brand)", fontWeight: 700 }}>{tA} {m.pen_a} × {m.pen_b} {tB}</span>
                   </span>
                 </div>
               )}
@@ -4749,9 +4769,9 @@ function BracketSeriesModal({
               {/* Link para a partida */}
               <div style={{ padding: "0 18px 12px", display: "flex", justifyContent: "flex-end" }}>
                 <button onClick={() => router.push(`/partidas/${m.id}`)}
-                  style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", transition: "all 0.12s" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "#BFF205"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.3)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.08)"; }}>
+                  style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, color: "var(--color-text-faint)", background: "transparent", border: "1px solid var(--color-input-border)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", transition: "all 0.12s" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = "var(--color-brand)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--color-brand-border)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = "var(--color-field-avatar-border)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--color-input-border)"; }}>
                   Ver partida →
                 </button>
               </div>
@@ -4762,7 +4782,7 @@ function BracketSeriesModal({
         {/* Fallback vazio */}
         {allMatches.length === 0 && (
           <div style={{ padding: "28px 18px", textAlign: "center" }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)" }}>Nenhuma partida adicionada.</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-ghost)" }}>Nenhuma partida adicionada.</p>
           </div>
         )}
       </div>
@@ -4782,7 +4802,7 @@ function drawBracketConnectors(
   svgEl.style.width = canvasEl.scrollWidth + "px";
   svgEl.style.height = canvasEl.scrollHeight + "px";
   // Limpa somente os paths desta direção para não apagar paths do lado oposto
-  const color = direction === "ltr" ? "rgba(191,242,5,0.14)" : "rgba(191,242,5,0.14)";
+  const color = direction === "ltr" ? "var(--color-brand-border-subtle)" : "var(--color-brand-border-subtle)";
 
   const mainLabels = orderedLabels.filter(l => l !== "Disputa de Terceiro Lugar");
   for (let ci = 0; ci < mainLabels.length - 1; ci++) {
@@ -5057,8 +5077,8 @@ function KnockoutBracket({
           onClick={onToggleReorder}
           style={{
             padding: "5px 12px", borderRadius: 6,
-            border: `1px solid ${reorderMode ? "rgba(191,242,5,0.5)" : "var(--color-border)"}`,
-            background: reorderMode ? "rgba(191,242,5,0.08)" : "transparent",
+            border: `1px solid ${reorderMode ? "var(--color-brand-border)" : "var(--color-border)"}`,
+            background: reorderMode ? "var(--color-brand-selected-bg)" : "transparent",
             color: reorderMode ? "var(--color-brand)" : "var(--color-text-secondary)",
             fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.06em",
             textTransform: "uppercase", cursor: "pointer",
@@ -5281,61 +5301,57 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
   const visible = data.slice(0, LIMIT);
   const hasMore = data.length > LIMIT;
 
-  // Derive team list from editionTeams
   const teamOptions = editionTeams.map((et: any) => ({ id: et.team_id, label: et.teams?.abbreviation ?? et.teams?.full_name ?? "—" }));
   const phaseOptions = phases.map((p: any) => ({ id: p.id, label: p.custom_label ?? p.full_name }));
   const roundOptions = rounds.filter((r: any) => !filterPhaseId || r.phase_id === filterPhaseId).map((r: any) => ({ id: r.id, label: r.custom_label ?? r.name }));
 
-  // Build phase→rounds map for match-level filtering
-  // We filter allScorers by team only (phase/round filtering on edition-level stats
-  // isn't directly supported without per-match data; we filter by team_id instead)
   const filteredForModal = allScorers.filter(s => {
     if (!s.athlete_id || !s.athletes) return false;
     if (filterTeamId && s.team_id !== filterTeamId) return false;
     return true;
   }).filter(s => (s[valueKey] ?? 0) > 0).sort((a, b) => (b[valueKey] ?? 0) - (a[valueKey] ?? 0));
 
-  const selectStyle = {
-    padding: "5px 10px", borderRadius: 8, border: "1px solid var(--color-border)",
-    backgroundColor: "var(--color-background)", color: "var(--color-text-primary)",
-    fontSize: 11, fontFamily: "var(--font-mono)", outline: "none", cursor: "pointer",
-  };
-
   function AthleteRow({ row, idx, inModal }: { row: any; idx: number; inModal?: boolean }) {
-    const sz = inModal ? "h-8 w-8" : "h-7 w-7";
-    const valSz = inModal ? "text-xl" : "text-lg";
+    const avatarSize = inModal ? 36 : 32;
+
     return (
-      <div className={`flex items-center gap-3 ${inModal ? "px-6" : "px-5"} py-3`}
-        style={{ borderTop: idx > 0 ? "1px solid var(--color-border)" : "none" }}>
-        <span className="font-mono text-xs text-right shrink-0" style={{ width: inModal ? 20 : 16, color: idx < 3 ? "var(--color-brand)" : "var(--color-text-secondary)" }}>
-          {idx + 1}
-        </span>
-        {row.athletes?.photo_url ? (
-          <img src={row.athletes.photo_url} alt="" className={`${sz} rounded-full object-cover shrink-0`} />
-        ) : (
-          <div className={`flex ${sz} shrink-0 items-center justify-center rounded-full text-xs font-bold`}
-            style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-secondary)" }}>
-            {(row.athletes?.surname ?? row.athletes?.full_name ?? "?").slice(0, 2).toUpperCase()}
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate" style={{ color: "var(--color-text-primary)" }}>
+      <div className={`${styles.competicaoHubStatRow} ${inModal ? styles.competicaoHubStatRowModal : ""}`}>
+        <span className={styles.competicaoHubStatRank}>{idx + 1}</span>
+
+        <div className={styles.competicaoHubStatAvatar} style={{ width: avatarSize, height: avatarSize }}>
+          {row.athletes?.photo_url ? (
+            <img src={row.athletes.photo_url} alt="" />
+          ) : (
+            <PersonAvatarPlaceholder fill className={styles.competicaoHubStatAvatarPlaceholder} />
+          )}
+        </div>
+
+        <div className={styles.competicaoHubStatInfo}>
+          <p className={styles.competicaoHubStatName}>
             {row.athletes?.surname ?? row.athletes?.full_name ?? "—"}
           </p>
           {row.team && (
-            <div className="flex items-center gap-1.5 mt-0.5">
-              {row.team.logo_url && <img src={row.team.logo_url} alt="" style={{ width: 12, height: 12, objectFit: "contain" }} />}
-              <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
+            <div className={styles.competicaoHubStatTeam}>
+              {row.team.logo_url && (
+                <img src={row.team.logo_url} alt="" className={styles.competicaoHubStatTeamLogo} />
+              )}
+              <span className={styles.competicaoHubStatTeamName}>
                 {row.team.abbreviation ?? row.team.full_name}
               </span>
             </div>
           )}
         </div>
-        <div className="flex items-baseline gap-1 shrink-0">
-          <span className={`font-display ${valSz} font-bold`} style={{ color: valueColor ?? "var(--color-brand)" }}>
+
+        <div className={styles.competicaoHubStatValueWrap}>
+          <span
+            className={styles.competicaoHubStatValue}
+            style={{ color: valueColor ?? "var(--color-brand)" }}
+          >
             {isDecimal ? (row[valueKey] ?? 0).toFixed(1) : (row[valueKey] ?? 0)}
           </span>
-          {inModal && <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>{valueLabel}</span>}
+          {inModal && (
+            <span className={styles.competicaoHubStatValueLabel}>{valueLabel}</span>
+          )}
         </div>
       </div>
     );
@@ -5343,58 +5359,97 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
 
   return (
     <>
-      <div className="rounded-xl border overflow-hidden" style={{ borderColor: "var(--color-border)", backgroundColor: "var(--color-surface)" }}>
-        <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
-          <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
+      <div className={styles.competicaoHubStatPanel}>
+        <div className={styles.competicaoHubStatPanelHeader}>
+          <h2 className={styles.competicaoHubStatPanelTitle}>{title}</h2>
         </div>
+
         {data.length === 0 ? (
-          <p className="px-5 py-6 text-center text-sm" style={{ color: "var(--color-text-secondary)" }}>{emptyMessage}</p>
+          <div className={styles.competicaoHubStatEmpty}>
+            <p>{emptyMessage}</p>
+          </div>
         ) : (
           <>
-            {visible.map((row: any, idx: number) => <AthleteRow key={row.athlete_id} row={row} idx={idx} />)}
+            <div className={styles.competicaoHubStatList}>
+              {visible.map((row: any, idx: number) => (
+                <AthleteRow key={row.athlete_id} row={row} idx={idx} />
+              ))}
+            </div>
             {hasMore && (
-              <button type="button" onClick={() => setShowAll(true)}
-                className="w-full py-3 font-mono text-xs transition-colors hover:bg-[rgba(255,255,255,0.03)]"
-                style={{ color: "var(--color-brand)", borderTop: "1px solid var(--color-border)" }}>
+              <button
+                type="button"
+                onClick={() => setShowAll(true)}
+                className={styles.competicaoHubStatMoreBtn}
+              >
                 Ver mais ({data.length})
               </button>
             )}
           </>
         )}
       </div>
+
       {showAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <div className="w-full max-w-lg rounded-xl border shadow-xl flex flex-col max-h-[85vh]"
-            style={{ backgroundColor: "#0e0e0e", borderColor: "var(--color-border)" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between border-b px-6 py-4 shrink-0" style={{ borderColor: "var(--color-border)" }}>
-              <h2 className="font-mono text-xs uppercase tracking-widest" style={{ color: "var(--color-text-secondary)" }}>{title}</h2>
-              <button type="button" onClick={() => setShowAll(false)} style={{ color: "var(--color-text-secondary)" }}><X size={18} /></button>
+        <div
+          className={styles.competicaoHubStatModalOverlay}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAll(false); }}
+        >
+          <div className={styles.competicaoHubStatModal}>
+            <div className={styles.competicaoHubStatModalHeader}>
+              <h2 className={styles.competicaoHubStatPanelTitle}>{title}</h2>
+              <button
+                type="button"
+                onClick={() => setShowAll(false)}
+                className={styles.hubIconActionBtn}
+                aria-label="Fechar"
+              >
+                <X size={14} strokeWidth={2.2} />
+              </button>
             </div>
-            {/* Filters */}
-            <div className="flex flex-wrap gap-3 px-6 py-3 border-b shrink-0" style={{ borderColor: "var(--color-border)" }}>
-              <LabSelect value={filterTeamId} onChange={setFilterTeamId} placeholder="Todas as equipes"
-                options={teamOptions.map((t: any) => ({ value: t.id, label: t.label }))} />
-              <LabSelect value={filterPhaseId} onChange={(v) => { setFilterPhaseId(v); setFilterRoundId(""); }} placeholder="Todas as fases"
-                options={phaseOptions.map((p: any) => ({ value: p.id, label: p.label }))} />
+
+            <div className={styles.competicaoHubStatModalFilters}>
+              <LabSelect
+                value={filterTeamId}
+                onChange={setFilterTeamId}
+                placeholder="Todas as equipes"
+                options={teamOptions.map((t: any) => ({ value: t.id, label: t.label }))}
+              />
+              <LabSelect
+                value={filterPhaseId}
+                onChange={(v) => { setFilterPhaseId(v); setFilterRoundId(""); }}
+                placeholder="Todas as fases"
+                options={phaseOptions.map((p: any) => ({ value: p.id, label: p.label }))}
+              />
               {filterPhaseId && (
-                <LabSelect value={filterRoundId} onChange={setFilterRoundId} placeholder="Todas as rodadas"
-                  options={roundOptions.map((r: any) => ({ value: r.id, label: r.label }))} />
+                <LabSelect
+                  value={filterRoundId}
+                  onChange={setFilterRoundId}
+                  placeholder="Todas as rodadas"
+                  options={roundOptions.map((r: any) => ({ value: r.id, label: r.label }))}
+                />
               )}
               {(filterTeamId || filterPhaseId || filterRoundId) && (
-                <button type="button" onClick={() => { setFilterTeamId(""); setFilterPhaseId(""); setFilterRoundId(""); }}
-                  style={{ ...selectStyle, color: "var(--color-brand)", borderColor: "rgba(191,242,5,0.25)", backgroundColor: "rgba(191,242,5,0.06)" }}>
+                <button
+                  type="button"
+                  onClick={() => { setFilterTeamId(""); setFilterPhaseId(""); setFilterRoundId(""); }}
+                  className={styles.hubInlineBtn}
+                >
                   Limpar
                 </button>
               )}
             </div>
-            {/* List */}
-            <div className="overflow-y-auto flex-1">
+
+            <div className={styles.competicaoHubStatModalBody}>
               {filteredForModal.length === 0 ? (
-                <p className="py-10 text-center font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>Nenhum resultado.</p>
-              ) : filteredForModal.map((row: any, idx: number) => (
-                <AthleteRow key={row.athlete_id} row={row} idx={idx} inModal />
-              ))}
+                <div className={styles.competicaoHubStatEmpty}>
+                  <p>Nenhum resultado.</p>
+                </div>
+              ) : (
+                <div className={styles.competicaoHubStatList}>
+                  {filteredForModal.map((row: any, idx: number) => (
+                    <AthleteRow key={row.athlete_id} row={row} idx={idx} inModal />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5404,137 +5459,64 @@ function StatRanking({ title, data, valueKey, valueLabel, valueColor, emptyMessa
 }
 // ─── MatchRow ─────────────────────────────────────────────────────────────────
 
-function MatchRow({ match, idx, onDelete }: { match: Match; idx: number; onDelete: () => void }) {
-  const [hovered, setHovered] = useState(false);
+function MatchRow({ match }: { match: Match }) {
   const isScheduled = match.status === "scheduled";
-  const colorA = match.teams_a?.primary_color ?? "#444444";
-  const colorB = match.teams_b?.primary_color ?? "#444444";
-  const nameA = match.teams_a?.short_name ?? match.teams_a?.full_name ?? "A definir";
-  const nameB = match.teams_b?.short_name ?? match.teams_b?.full_name ?? "A definir";
+  const nameA = (match.teams_a?.short_name ?? match.teams_a?.full_name ?? "A definir").toUpperCase();
+  const nameB = (match.teams_b?.short_name ?? match.teams_b?.full_name ?? "A definir").toUpperCase();
 
   return (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        borderTop: idx > 0 ? "1px solid var(--color-border)" : "none",
-        position: "relative",
-        opacity: hovered ? 1 : 0.82,
-        transition: "opacity 0.12s ease",
-      }}
-    >
-      <div style={{
-        position: "absolute", bottom: 0, left: 0, right: 0, height: 1,
-        background: `linear-gradient(90deg, ${colorA} 50%, ${colorB} 50%)`,
-        opacity: hovered ? 1 : 0,
-        transition: "opacity 0.2s ease",
-        pointerEvents: "none", zIndex: 1,
-      }} />
-
-      <Link
-        href={`/partidas/${match.id}`}
-        className="hover:bg-[rgba(255,255,255,0.025)]"
-        style={{ display: "flex", alignItems: "center", padding: "0 16px", height: 54, textDecoration: "none" }}
-      >
-        {/* Data + status — largura fixa, sempre legível */}
-        <div style={{ width: 52, flexShrink: 0, display: "flex", flexDirection: "column", gap: 3 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)" }}>
+    <div className={styles.matchRowWrap}>
+      <Link href={`/partidas/${match.id}`} className={styles.matchRow}>
+        <div className={styles.matchRowDate}>
+          <span className={styles.matchRowDateMain}>
             {match.match_date
               ? new Date(match.match_date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
               : "—"}
           </span>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-secondary)" }}>
+          <span className={styles.matchRowDateSub}>
             {match.match_time ? match.match_time.slice(0, 5) : STATUS_LABEL[match.status] ?? "—"}
           </span>
         </div>
 
-        <div style={{ width: 1, height: 24, background: "var(--color-border)", flexShrink: 0, margin: "0 16px" }} />
+        <div className={styles.matchRowDivider} />
 
-        {/* Bloco central — ocupa todo o espaço restante, conteúdo centralizado */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, minWidth: 0 }}>
-
-          {/* Nome A */}
-          <span style={{
-            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
-            color: "var(--color-text-primary)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            textAlign: "right", flex: 1, minWidth: 0,
-          }}>
+        <div className={styles.matchRowCenter}>
+          <span className={`${styles.matchRowTeamNameSans} ${styles.matchRowTeamNameSansRight}`}>
             {nameA}
           </span>
 
-          {/* Logo A — sem fundo */}
-          <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className={styles.matchRowLogo}>
             {match.teams_a?.logo_url
-              ? <img src={match.teams_a.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
-              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: colorA }}>
-                  {nameA.slice(0, 2).toUpperCase()}
-                </span>
-            }
+              ? <img src={match.teams_a.logo_url} alt="" />
+              : <span className={styles.matchRowLogoFallback}>{nameA.slice(0, 2)}</span>}
           </div>
 
-          {/* Placar */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, width: 68, justifyContent: "center" }}>
-            <span style={{
-              fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, lineHeight: 1,
-              color: isScheduled ? "#2a2a2a" : "var(--color-brand)",
-              width: 20, textAlign: "center",
-            }}>
+          <div className={styles.matchRowScore}>
+            <span
+              className={styles.matchRowScoreVal}
+              style={{ color: isScheduled ? "var(--hub-body-subtle)" : "var(--color-brand)" }}
+            >
               {isScheduled ? "–" : match.score_a}
             </span>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#333", lineHeight: 1 }}>–</span>
-            <span style={{
-              fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, lineHeight: 1,
-              color: isScheduled ? "#2a2a2a" : "var(--color-brand)",
-              width: 20, textAlign: "center",
-            }}>
+            <span className={styles.matchRowScoreSepColon}>:</span>
+            <span
+              className={styles.matchRowScoreVal}
+              style={{ color: isScheduled ? "var(--hub-body-subtle)" : "var(--color-brand)" }}
+            >
               {isScheduled ? "–" : match.score_b}
             </span>
           </div>
 
-          {/* Logo B — sem fundo */}
-          <div style={{ width: 32, height: 32, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className={styles.matchRowLogo}>
             {match.teams_b?.logo_url
-              ? <img src={match.teams_b.logo_url} alt="" style={{ width: 32, height: 32, objectFit: "contain" }} />
-              : <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: colorB }}>
-                  {nameB.slice(0, 2).toUpperCase()}
-                </span>
-            }
+              ? <img src={match.teams_b.logo_url} alt="" />
+              : <span className={styles.matchRowLogoFallback}>{nameB.slice(0, 2)}</span>}
           </div>
 
-          {/* Nome B */}
-          <span style={{
-            fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700,
-            color: "var(--color-text-primary)",
-            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            flex: 1, minWidth: 0,
-          }}>
+          <span className={styles.matchRowTeamNameSans}>
             {nameB}
           </span>
-
         </div>
-
-        <div style={{ width: 1, height: 24, background: "var(--color-border)", flexShrink: 0, margin: "0 16px" }} />
-
-        {/* Delete */}
-        <button
-          type="button"
-          onClick={e => { e.preventDefault(); e.stopPropagation(); onDelete(); }}
-          style={{
-            flexShrink: 0, width: 26, height: 26, borderRadius: 6,
-            border: "1px solid rgba(255,255,255,0.07)",
-            backgroundColor: "rgba(255,255,255,0.03)",
-            color: "var(--color-danger)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer",
-            opacity: hovered ? 1 : 0.25,
-            transition: "opacity 0.12s, border-color 0.12s",
-          }}
-          onMouseEnter={e => (e.currentTarget.style.borderColor = "rgba(255,68,68,0.45)")}
-          onMouseLeave={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)")}
-        >
-          <Trash2 size={12} strokeWidth={2} />
-        </button>
       </Link>
     </div>
   );
@@ -5660,16 +5642,16 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
 
   if (!loaded) return <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "#666", padding: "32px 0" }}>Carregando…</p>;
 
-  const border = "1px solid rgba(255,255,255,0.08)";
+  const border = "1px solid var(--color-input-border)";
 
   function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}>
         <div>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>{title}</span>
-          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 1 }}>{subtitle}</p>}
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)" }}>{title}</span>
+          {subtitle && <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", marginTop: 1 }}>{subtitle}</p>}
         </div>
-        <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+        <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
       </div>
     );
   }
@@ -5696,19 +5678,19 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
         {STATUS_OPTIONS.map((opt, idx) => (
           <div key={opt.v}
             onClick={() => setEditionStatus(opt.v)}
-            style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", backgroundColor: editionStatus === opt.v ? "rgba(191,242,5,0.04)" : "transparent", transition: "background 0.12s", position: "relative" as const }}
-            onMouseEnter={e => { if (editionStatus !== opt.v) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.03)"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = editionStatus === opt.v ? "rgba(191,242,5,0.04)" : "transparent"; }}
+            style={{ display: "flex", alignItems: "center", gap: 14, padding: "13px 16px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-divider-strong)" : "none", backgroundColor: editionStatus === opt.v ? "var(--color-brand-hover-bg)" : "transparent", transition: "background 0.12s", position: "relative" as const }}
+            onMouseEnter={e => { if (editionStatus !== opt.v) e.currentTarget.style.backgroundColor = "var(--color-hover-bg-subtle)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = editionStatus === opt.v ? "var(--color-brand-hover-bg)" : "transparent"; }}
           >
             {editionStatus === opt.v && (
-              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, backgroundColor: "#BFF205", borderRadius: 1 }} />
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 2, backgroundColor: "var(--color-brand)", borderRadius: 1 }} />
             )}
-            <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${editionStatus === opt.v ? "#BFF205" : "rgba(255,255,255,0.2)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 0.12s" }}>
-              {editionStatus === opt.v && <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#BFF205" }} />}
+            <div style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${editionStatus === opt.v ? "var(--color-brand)" : "var(--color-text-ghost)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "border-color 0.12s" }}>
+              {editionStatus === opt.v && <div style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "var(--color-brand)" }} />}
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: editionStatus === opt.v ? "var(--color-text-primary)" : "rgba(255,255,255,0.4)", margin: 0 }}>{opt.l}</p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", margin: 0, marginTop: 1 }}>{opt.desc}</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: editionStatus === opt.v ? "var(--color-text-primary)" : "var(--color-icon-muted)", margin: 0 }}>{opt.l}</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", margin: 0, marginTop: 1 }}>{opt.desc}</p>
             </div>
           </div>
         ))}
@@ -5719,23 +5701,23 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
       <div style={{ borderRadius: 14, border, backgroundColor: "var(--color-surface)", padding: "14px 16px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.4)", margin: "0 0 6px" }}>Data de início</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-icon-muted)", margin: "0 0 6px" }}>Data de início</p>
             <input
               type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
               className={inputClass}
-              style={{ ...inputStyle, colorScheme: "dark" as const }}
+              style={{ ...inputStyle,  }}
             />
           </div>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.4)", margin: "0 0 6px" }}>Data de fim</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-icon-muted)", margin: "0 0 6px" }}>Data de fim</p>
             <input
               type="date"
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
               className={inputClass}
-              style={{ ...inputStyle, colorScheme: "dark" as const }}
+              style={{ ...inputStyle,  }}
             />
           </div>
         </div>
@@ -5748,21 +5730,21 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px" }}>
           <div>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Visível no 06.score</p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>Dados públicos disponíveis para o site</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", margin: 0, marginTop: 2 }}>Dados públicos disponíveis para o site</p>
           </div>
           <button type="button" onClick={() => setIsPublic(v => !v)}
-            style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: isPublic ? "#BFF205" : "rgba(255,255,255,0.1)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0 }}>
+            style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", backgroundColor: isPublic ? "var(--color-brand)" : "var(--color-input-border-strong)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0 }}>
             <div style={{ position: "absolute", top: 3, left: isPublic ? 23 : 3, width: 18, height: 18, borderRadius: "50%", backgroundColor: isPublic ? "#0a0a0a" : "#555", transition: "left 0.15s" }} />
           </button>
         </div>
-        <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "14px 16px" }}>
+        <div style={{ borderTop: "1px solid var(--color-divider-strong)", padding: "14px 16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div>
               <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Exibir na home</p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: homeVisibilityHint.gray ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.25)", margin: 0, marginTop: 2 }}>{homeVisibilityHint.text}</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: homeVisibilityHint.gray ? "var(--color-text-ghost)" : "var(--color-field-line-strong)", margin: 0, marginTop: 2 }}>{homeVisibilityHint.text}</p>
             </div>
             <button type="button" disabled={updatingShowInHome} onClick={() => void handleShowInHomeChange(!showInHome)}
-              style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: updatingShowInHome ? "wait" : "pointer", backgroundColor: showInHome ? "#BFF205" : "rgba(255,255,255,0.1)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0, opacity: updatingShowInHome ? 0.6 : 1 }}>
+              style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: updatingShowInHome ? "wait" : "pointer", backgroundColor: showInHome ? "var(--color-brand)" : "var(--color-input-border-strong)", transition: "background 0.15s", position: "relative" as const, flexShrink: 0, opacity: updatingShowInHome ? 0.6 : 1 }}>
               <div style={{ position: "absolute", top: 3, left: showInHome ? 23 : 3, width: 18, height: 18, borderRadius: "50%", backgroundColor: showInHome ? "#0a0a0a" : "#555", transition: "left 0.15s" }} />
             </button>
           </div>
@@ -5772,7 +5754,7 @@ function EdicaoConfigTab({ selectedEditionId, selectedEditionName, inputClass, i
       {/* Salvar */}
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button type="button" onClick={handleSave} disabled={saving}
-          style={{ padding: "10px 28px", borderRadius: 9, border: "none", cursor: "pointer", backgroundColor: saving ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}>
+          style={{ padding: "10px 28px", borderRadius: 9, border: "none", cursor: "pointer", backgroundColor: saving ? "var(--color-brand-muted-bg)" : "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}>
           {saving ? "Salvando…" : "Salvar configurações"}
         </button>
       </div>
@@ -5831,12 +5813,6 @@ function RankingConfigTab({
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const hiddenRankingCategories = new Set(["participation_knockout", "advance_knockout"]);
-  const visibleRankingGroups = RANKING_GROUPS.map(group => ({
-    ...group,
-    categories: group.categories.filter(c => !hiddenRankingCategories.has(c.code)),
-  })).filter(group => group.categories.length > 0);
-
   useEffect(() => {
     if (!selectedEditionId) return;
     setLoaded(false);
@@ -5860,7 +5836,7 @@ function RankingConfigTab({
 
   async function handleSave() {
     setSaving(true);
-    const allCodes = visibleRankingGroups.flatMap(g => g.categories.map(c => c.code));
+    const allCodes = RANKING_GROUPS.flatMap(g => g.categories.map(c => c.code));
     const configs = allCodes.map(code => ({
       category_code: code,
       points_value: parseInt(values[code] ?? "0", 10) || 0,
@@ -5874,19 +5850,19 @@ function RankingConfigTab({
   if (!loaded) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>CARREGANDO...</p>
+        <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>CARREGANDO...</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-xl">
-      <p className="mb-6 font-mono text-xs leading-relaxed" style={{ color: "#A6A6A6" }}>
+      <p className="mb-6 font-mono text-xs leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
         Define quantos pontos cada equipe acumula no ranking histórico desta competição por cada resultado ou conquista nesta edição.
       </p>
 
       <div className="flex flex-col gap-8">
-        {visibleRankingGroups.map(group => (
+        {RANKING_GROUPS.map(group => (
           <div key={group.label}>
             <p className="mb-3 font-mono text-xs font-bold tracking-widest uppercase"
               style={{ color: "var(--color-text-secondary)", fontSize: "10px", letterSpacing: "0.16em" }}>
@@ -5903,7 +5879,7 @@ function RankingConfigTab({
                     {cat.label}
                   </span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="font-mono text-xs" style={{ color: "#A6A6A6" }}>pts</span>
+                    <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>pts</span>
                     <input
                       type="number"
                       min={0}
@@ -5926,7 +5902,7 @@ function RankingConfigTab({
           onClick={handleSave}
           disabled={saving}
           className="font-mono text-xs font-bold px-5 py-2.5 rounded-lg transition-opacity disabled:opacity-50"
-          style={{ backgroundColor: "var(--color-brand)", color: "#0a0a0a" }}
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
         >
           {saving ? "SALVANDO..." : "SALVAR CONFIGURAÇÃO DE RANKING"}
         </button>
@@ -5952,7 +5928,7 @@ function PremiacoesTab({
   const [activeSub, setActiveSub] = useState<"individuais" | "coletivas" | "tots">("individuais");
   const [savingBatch, setSavingBatch] = useState(false);
   const [savingColetiva, setSavingColetiva] = useState<string | null>(null);
-  const border = "1px solid rgba(255,255,255,0.08)";
+  const border = "1px solid var(--color-input-border)";
 
   // Equipes reais (sem free agent pool)
   const realTeams = editionTeams.filter((et: any) => !et.is_free_agent_pool && et.teams);
@@ -6118,33 +6094,33 @@ function PremiacoesTab({
     const isDirty = selectedMemberId !== savedMemberId;
 
     return (
-      <div style={{ borderRadius: 12, border: isDirty ? "1px solid rgba(191,242,5,0.25)" : border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
+      <div style={{ borderRadius: 12, border: isDirty ? "1px solid var(--color-brand-border-medium)" : border, backgroundColor: existing ? "var(--color-brand-faint-bg)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
         <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${existing ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "var(--color-brand-muted-bg)" : "var(--color-divider)", border: `1px solid ${existing ? "var(--color-brand-border)" : "var(--color-input-border)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 16 }}>
             {icon}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "#BFF205" : "rgba(255,255,255,0.35)", margin: 0 }}>{label}</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "var(--color-brand)" : "var(--color-text-muted)", margin: 0 }}>{label}</p>
             {existing && selectedPerson && (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                 {selectedPerson.photo_url
                   ? <img src={selectedPerson.photo_url} alt="" style={{ width: 18, height: 18, borderRadius: "50%", objectFit: "cover" }} />
-                  : <div style={{ width: 18, height: 18, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555" }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                  : <PersonAvatar photoUrl={null} size={18} style={{ backgroundColor: "var(--color-input-border-strong)" }} />
                 }
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedPerson.surname ?? selectedPerson.full_name}</p>
                 {selectedET?.teams?.logo_url && <img src={selectedET.teams.logo_url} alt="" style={{ width: 14, height: 14, objectFit: "contain" }} />}
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.3)" }}>{selectedET?.teams?.abbreviation ?? selectedET?.teams?.full_name ?? ""}</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-faint)" }}>{selectedET?.teams?.abbreviation ?? selectedET?.teams?.full_name ?? ""}</span>
               </div>
             )}
             {!existing && (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", margin: 0, marginTop: 1 }}>Não atribuído</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", margin: 0, marginTop: 1 }}>Não atribuído</p>
             )}
           </div>
           {existing && (
             <button type="button" onClick={() => onRemover(existing.id)}
-              style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid rgba(255,100,100,0.2)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.5)"; e.currentTarget.style.color = "#FF4444"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,100,100,0.2)"; e.currentTarget.style.color = "rgba(255,100,100,0.5)"; }}>×</button>
+              style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid var(--color-danger-icon-border)", background: "none", color: "var(--color-danger-icon)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-danger-border-active)"; e.currentTarget.style.color = "var(--color-danger)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-danger-icon-border)"; e.currentTarget.style.color = "var(--color-danger-icon)"; }}>×</button>
           )}
         </div>
 
@@ -6158,12 +6134,12 @@ function PremiacoesTab({
               return (
                 <div key={et.id}
                   onClick={() => { setTeamForAward(awardType, isSelected ? "" : et.id); setSearch(""); }}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: "pointer", transition: "all 0.1s" }}>
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: isSelected ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)", cursor: "pointer", transition: "all 0.1s" }}>
                   {et.teams?.logo_url
                     ? <img src={et.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
-                    : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{(et.teams?.abbreviation ?? "?").slice(0, 2)}</span></div>
+                    : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "var(--color-text-faint)" }}>{(et.teams?.abbreviation ?? "?").slice(0, 2)}</span></div>
                   }
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: isSelected ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center" as const }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: isSelected ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center" as const }}>
                     {et.teams?.abbreviation ?? et.teams?.full_name?.slice(0, 3)?.toUpperCase()}
                   </span>
                 </div>
@@ -6175,17 +6151,17 @@ function PremiacoesTab({
           {selectedTeamId && (
             <div style={{ position: "relative" }}>
               <div onClick={() => { setShowDropdown(v => !v); setSearch(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", backgroundColor: "rgba(255,255,255,0.03)", border: `1px solid ${showDropdown ? "rgba(191,242,5,0.3)" : "rgba(255,255,255,0.08)"}`, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}>
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", backgroundColor: "var(--color-hover-bg-subtle)", border: `1px solid ${showDropdown ? "var(--color-brand-muted-bg)" : "var(--color-input-border)"}`, borderRadius: 9, cursor: "pointer", transition: "border-color 0.12s" }}>
                 {selectedMemberId && selectedPerson ? (
                   <>
                     {selectedPerson.photo_url
                       ? <img src={selectedPerson.photo_url} alt="" style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 22, height: 22, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.08)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(selectedPerson.surname ?? selectedPerson.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                      : <PersonAvatar photoUrl={null} size={22} style={{ backgroundColor: "var(--color-hover-bg)" }} />
                     }
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 600, color: "var(--color-text-primary)", flex: 1 }}>{selectedPerson.surname ?? selectedPerson.full_name}</span>
                   </>
                 ) : (
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.2)", flex: 1 }}>{isCoach ? "Selecionar técnico…" : "Selecionar atleta…"}</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-ghost)", flex: 1 }}>{isCoach ? "Selecionar técnico…" : "Selecionar atleta…"}</span>
                 )}
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ opacity: 0.3 }}>
                   <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -6193,8 +6169,8 @@ function PremiacoesTab({
               </div>
 
               {showDropdown && (
-                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "#0e0e0e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
-                  <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 200, backgroundColor: "var(--color-modal-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 10, boxShadow: "0 20px 60px rgba(0,0,0,0.8)", overflow: "hidden" }}>
+                  <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--color-divider-strong)" }}>
                     <input autoFocus type="text" value={search} onChange={e => setSearch(e.target.value)}
                       placeholder={isCoach ? "Buscar técnico…" : "Buscar atleta…"}
                       style={{ width: "100%", background: "none", border: "none", outline: "none", fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }} />
@@ -6208,17 +6184,17 @@ function PremiacoesTab({
                           return (
                             <div key={entry[idField]}
                               onClick={() => { setMemberForAward(awardType, entry[idField]); setShowDropdown(false); setSearch(""); }}
-                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.04)" : "none", backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "transparent", transition: "background 0.1s" }}
-                              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "rgba(191,242,5,0.07)" : "transparent"; }}>
+                              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", cursor: "pointer", borderTop: idx > 0 ? "1px solid var(--color-divider)" : "none", backgroundColor: isSelected ? "var(--color-brand-selected-bg)" : "transparent", transition: "background 0.1s" }}
+                              onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                              onMouseLeave={e => { e.currentTarget.style.backgroundColor = isSelected ? "var(--color-brand-selected-bg)" : "transparent"; }}>
                               {person?.photo_url
                                 ? <img src={person.photo_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                                : <div style={{ width: 26, height: 26, borderRadius: "50%", backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700, color: "#555", flexShrink: 0 }}>{(person?.surname ?? person?.full_name ?? "?").slice(0, 2).toUpperCase()}</div>
+                                : <PersonAvatar photoUrl={null} size={26} style={{ backgroundColor: "var(--color-surface-raised)" }} />
                               }
                               <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "#BFF205" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{person?.surname ?? person?.full_name ?? "—"}</p>
+                                <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: isSelected ? "var(--color-brand)" : "var(--color-text-primary)", margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" as const }}>{person?.surname ?? person?.full_name ?? "—"}</p>
                               </div>
-                              {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#BFF205" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              {isSelected && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="var(--color-brand)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                             </div>
                           );
                         })
@@ -6254,27 +6230,27 @@ function PremiacoesTab({
     );
 
     return (
-      <div style={{ borderRadius: 12, border: isDirty ? "1px solid rgba(191,242,5,0.25)" : border, backgroundColor: existing ? "rgba(191,242,5,0.03)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
+      <div style={{ borderRadius: 12, border: isDirty ? "1px solid var(--color-brand-border-medium)" : border, backgroundColor: existing ? "var(--color-brand-faint-bg)" : "var(--color-surface)", overflow: "visible", transition: "all 0.15s" }}>
         <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "rgba(191,242,5,0.1)" : "rgba(255,255,255,0.04)", border: `1px solid ${existing ? "rgba(191,242,5,0.25)" : "rgba(255,255,255,0.08)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            {icon ?? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: existing ? "#BFF205" : "rgba(255,255,255,0.3)" }}>{rank}°</span>}
+          <div style={{ width: 36, height: 36, borderRadius: 9, backgroundColor: existing ? "var(--color-brand-muted-bg)" : "var(--color-divider)", border: `1px solid ${existing ? "var(--color-brand-border)" : "var(--color-input-border)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {icon ?? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 800, color: existing ? "var(--color-brand)" : "var(--color-field-avatar-border)" }}>{rank}°</span>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "#BFF205" : "rgba(255,255,255,0.35)", margin: 0 }}>{label}</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase" as const, color: existing ? "var(--color-brand)" : "var(--color-text-muted)", margin: 0 }}>{label}</p>
             {selectedET ? (
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
                 {selectedET.teams?.logo_url && <img src={selectedET.teams.logo_url} alt="" style={{ width: 18, height: 18, objectFit: "contain" }} />}
                 <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>{selectedET.teams?.short_name ?? selectedET.teams?.full_name}</p>
               </div>
             ) : (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.2)", margin: 0, marginTop: 1 }}>Não atribuído</p>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-ghost)", margin: 0, marginTop: 1 }}>Não atribuído</p>
             )}
           </div>
           {existing && (
             <button type="button" onClick={() => onRemover(existing.id)}
-              style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid rgba(255,100,100,0.2)", background: "none", color: "rgba(255,100,100,0.5)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,68,68,0.5)"; e.currentTarget.style.color = "#FF4444"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,100,100,0.2)"; e.currentTarget.style.color = "rgba(255,100,100,0.5)"; }}>×</button>
+              style={{ width: 26, height: 26, borderRadius: 6, border: "1px solid var(--color-danger-icon-border)", background: "none", color: "var(--color-danger-icon)", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all 0.12s" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-danger-border-active)"; e.currentTarget.style.color = "var(--color-danger)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-danger-icon-border)"; e.currentTarget.style.color = "var(--color-danger-icon)"; }}>×</button>
           )}
         </div>
 
@@ -6286,12 +6262,12 @@ function PremiacoesTab({
               return (
                 <div key={et.team_id}
                   onClick={() => !isUsed && setCollectiveSelections(prev => ({ ...prev, [awardType]: isSelected ? "" : et.team_id }))}
-                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`, backgroundColor: isSelected ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)", cursor: isUsed ? "default" : "pointer", transition: "all 0.1s", opacity: isUsed && !isSelected ? 0.25 : 1 }}>
+                  style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, padding: "7px 4px", borderRadius: 8, border: `1px solid ${isSelected ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`, backgroundColor: isSelected ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)", cursor: isUsed ? "default" : "pointer", transition: "all 0.1s", opacity: isUsed && !isSelected ? 0.25 : 1 }}>
                   {et.teams?.logo_url
                     ? <img src={et.teams.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
-                    : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>{(et.teams?.abbreviation ?? "?").slice(0, 2)}</span></div>
+                    : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "var(--color-text-faint)" }}>{(et.teams?.abbreviation ?? "?").slice(0, 2)}</span></div>
                   }
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: isSelected ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center" as const }}>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: isSelected ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center" as const }}>
                     {et.teams?.abbreviation ?? et.teams?.full_name?.slice(0, 3)?.toUpperCase()}
                   </span>
                 </div>
@@ -6356,10 +6332,10 @@ function PremiacoesTab({
   return (
     <div style={{ maxWidth: activeSub === "tots" ? "100%" : 640, display: "flex", flexDirection: "column", gap: 24 }}>
       {/* Sub-abas */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--color-input-border)" }}>
         {[{ key: "individuais", label: "INDIVIDUAIS" }, { key: "coletivas", label: "COLETIVAS" }, { key: "tots", label: "TOTS" }].map(sub => (
           <button key={sub.key} type="button" onClick={() => setActiveSub(sub.key as any)}
-            style={{ padding: "10px 20px", border: "none", borderBottom: `2px solid ${activeSub === sub.key ? "#BFF205" : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: activeSub === sub.key ? "#BFF205" : "rgba(255,255,255,0.3)", cursor: "pointer", transition: "all 0.12s", marginBottom: -1 }}>
+            style={{ padding: "10px 20px", border: "none", borderBottom: `2px solid ${activeSub === sub.key ? "var(--color-brand)" : "transparent"}`, backgroundColor: "transparent", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: activeSub === sub.key ? "var(--color-brand)" : "var(--color-field-avatar-border)", cursor: "pointer", transition: "all 0.12s", marginBottom: -1 }}>
             {sub.label}
           </button>
         ))}
@@ -6374,7 +6350,7 @@ function PremiacoesTab({
           {/* Botão unificado */}
           <button type="button" onClick={handleSaveBatchIndividual}
             disabled={savingBatch || !hasIndividualChanges}
-            style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasIndividualChanges ? "#BFF205" : "rgba(255,255,255,0.06)", color: hasIndividualChanges ? "#0a0a0a" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasIndividualChanges ? "pointer" : "default", opacity: savingBatch ? 0.5 : 1, transition: "all 0.15s" }}>
+            style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasIndividualChanges ? "var(--color-brand)" : "var(--color-divider-strong)", color: hasIndividualChanges ? "#0a0a0a" : "var(--color-text-ghost)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasIndividualChanges ? "pointer" : "default", opacity: savingBatch ? 0.5 : 1, transition: "all 0.15s" }}>
             {savingBatch ? "Salvando…" : "Salvar Premiações Individuais"}
           </button>
         </div>
@@ -6384,12 +6360,12 @@ function PremiacoesTab({
       {activeSub === "coletivas" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {teamCount === 0 ? (
-            <div style={{ padding: "40px", textAlign: "center", borderRadius: 14, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "var(--color-surface)" }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.2)" }}>Nenhuma equipe inscrita nesta edição.</p>
+            <div style={{ padding: "40px", textAlign: "center", borderRadius: 14, border: "1px solid var(--color-divider-strong)", backgroundColor: "var(--color-surface)" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-text-ghost)" }}>Nenhuma equipe inscrita nesta edição.</p>
             </div>
           ) : (
             <>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.06em" }}>
+              <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", letterSpacing: "0.06em" }}>
                 {teamCount} equipes participando — {collectiveSlots.length} posições disponíveis
               </p>
               {collectiveSlots.map(slot => (
@@ -6397,7 +6373,7 @@ function PremiacoesTab({
               ))}
               <button type="button" onClick={handleSaveBatchColetiva}
                 disabled={savingBatchColetiva || !hasCollectiveChanges}
-                style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasCollectiveChanges ? "#BFF205" : "rgba(255,255,255,0.06)", color: hasCollectiveChanges ? "#0a0a0a" : "rgba(255,255,255,0.2)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasCollectiveChanges ? "pointer" : "default", opacity: savingBatchColetiva ? 0.5 : 1, transition: "all 0.15s" }}>
+                style={{ marginTop: 4, width: "100%", padding: "12px", borderRadius: 10, border: "none", backgroundColor: hasCollectiveChanges ? "var(--color-brand)" : "var(--color-divider-strong)", color: hasCollectiveChanges ? "#0a0a0a" : "var(--color-text-ghost)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: hasCollectiveChanges ? "pointer" : "default", opacity: savingBatchColetiva ? 0.5 : 1, transition: "all 0.15s" }}>
                 {savingBatchColetiva ? "Salvando…" : "Salvar Premiações Coletivas"}
               </button>
             </>
@@ -6491,7 +6467,7 @@ export function NovoConfrontoModal({
     onSuccess();
   }
 
-  const border = "1px solid rgba(255,255,255,0.08)";
+  const border = "1px solid var(--color-input-border)";
 
   function TeamCard({ id, selected, onClick, disabled }: { id: string; selected: boolean; onClick: () => void; disabled?: boolean }) {
     const team = teamsForPhase.find(t => t.id === id);
@@ -6500,23 +6476,23 @@ export function NovoConfrontoModal({
       <div onClick={disabled ? undefined : onClick} style={{
         flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
         padding: "14px 8px", borderRadius: 10,
-        border: `1px solid ${selected ? "rgba(191,242,5,0.45)" : "rgba(255,255,255,0.07)"}`,
-        backgroundColor: selected ? "rgba(191,242,5,0.06)" : "rgba(255,255,255,0.02)",
+        border: `1px solid ${selected ? "var(--color-brand-glow-strong)" : "var(--color-hover-bg)"}`,
+        backgroundColor: selected ? "var(--color-brand-hover-bg)" : "var(--color-hover-bg-subtle)",
         cursor: disabled ? "default" : "pointer", transition: "all 0.12s",
         opacity: disabled ? 0.4 : 1,
       }}
-        onMouseEnter={e => { if (!disabled && !selected) { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; } }}
-        onMouseLeave={e => { if (!disabled && !selected) { e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"; e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.02)"; } }}
+        onMouseEnter={e => { if (!disabled && !selected) { e.currentTarget.style.borderColor = "var(--color-dashed-border)"; e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; } }}
+        onMouseLeave={e => { if (!disabled && !selected) { e.currentTarget.style.borderColor = "var(--color-hover-bg)"; e.currentTarget.style.backgroundColor = "var(--color-hover-bg-subtle)"; } }}
       >
         <div style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center" }}>
           {!isTbd && team?.logo_url
             ? <img src={team.logo_url} alt="" style={{ width: 40, height: 40, objectFit: "contain" }} />
-            : <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "rgba(255,255,255,0.05)", border: "1px dashed rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.2)" }}>?</span>
+            : <div style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: "var(--color-hover-bg)", border: "1px dashed var(--color-input-border-strong)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-ghost)" }}>?</span>
               </div>
           }
         </div>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: selected ? "#BFF205" : "rgba(255,255,255,0.5)", textAlign: "center", letterSpacing: "0.04em" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: selected ? "var(--color-brand)" : "var(--color-text-subtle)", textAlign: "center", letterSpacing: "0.04em" }}>
           {isTbd ? "A definir" : (team?.abbreviation ?? team?.full_name ?? "—")}
         </span>
       </div>
@@ -6524,22 +6500,22 @@ export function NovoConfrontoModal({
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "rgba(0,0,0,0.78)", padding: 16 }}
+    <div style={{ position: "fixed", inset: 0, zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", backgroundColor: "var(--color-modal-scrim)", padding: 16 }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ width: "100%", maxWidth: 420, borderRadius: 16, border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "#0e0e0e", overflow: "hidden", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}>
+      <div style={{ width: "100%", maxWidth: 420, borderRadius: 16, border: "1px solid var(--color-input-border-strong)", backgroundColor: "var(--color-modal-bg)", overflow: "hidden", boxShadow: "var(--color-modal-shadow)" }}>
 
         {/* Header */}
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.03)" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "var(--color-brand-faint-bg)" }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>Novo confronto</p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(255,255,255,0.4)", margin: 0, marginTop: 2 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>Novo confronto</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--color-icon-muted)", margin: 0, marginTop: 2 }}>
               {selectedPhase?.custom_label ?? selectedPhase?.full_name ?? "—"}
             </p>
           </div>
           <button onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(191,242,5,0.4)"; e.currentTarget.style.color = "#BFF205"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}>×</button>
+            style={{ width: 28, height: 28, borderRadius: 6, border, background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.12s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--color-brand-border)"; e.currentTarget.style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "var(--color-input-border)"; e.currentTarget.style.color = "var(--color-icon-muted)"; }}>×</button>
         </div>
 
         <div style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -6547,11 +6523,11 @@ export function NovoConfrontoModal({
           {/* Fase — só mostra se há mais de uma */}
           {phases.length > 1 && (
             <div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Fase</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Fase</span>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginTop: 6 }}>
                 {phases.map(p => (
                   <button key={p.id} type="button" onClick={() => setPhaseId(p.id)}
-                    style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${phaseId === p.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: phaseId === p.id ? "rgba(191,242,5,0.08)" : "transparent", color: phaseId === p.id ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                    style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${phaseId === p.id ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: phaseId === p.id ? "var(--color-brand-selected-bg)" : "transparent", color: phaseId === p.id ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                     {p.custom_label ?? p.full_name}
                   </button>
                 ))}
@@ -6561,23 +6537,23 @@ export function NovoConfrontoModal({
 
           {/* Estágio */}
           <div>
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Estágio *</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Estágio *</span>
             {roundsForPhase.length === 0 ? (
-              <p style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "#F2C005", backgroundColor: "rgba(242,192,5,0.06)", border: "1px solid rgba(242,192,5,0.2)", borderRadius: 8, padding: "8px 12px" }}>
+              <p style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-warning)", backgroundColor: "var(--color-warning-row-bg)", border: "1px solid var(--color-warning-border-medium)", borderRadius: 8, padding: "8px 12px" }}>
                 Nenhuma rodada cadastrada nesta fase.
               </p>
             ) : (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginTop: 6 }}>
                 {roundsForPhase.map(r => (
                   <button key={r.id} type="button" onClick={() => setRoundId(r.id)}
-                    style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${roundId === r.id ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`, backgroundColor: roundId === r.id ? "rgba(191,242,5,0.08)" : "transparent", color: roundId === r.id ? "#BFF205" : "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
+                    style={{ padding: "5px 12px", borderRadius: 7, border: `1px solid ${roundId === r.id ? "var(--color-brand-border)" : "var(--color-input-border)"}`, backgroundColor: roundId === r.id ? "var(--color-brand-selected-bg)" : "transparent", color: roundId === r.id ? "var(--color-brand)" : "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, cursor: "pointer", transition: "all 0.12s" }}>
                     {r.custom_label ?? r.name}
                   </button>
                 ))}
               </div>
             )}
             {selectedRound && (
-              <p style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.04em" }}>
+              <p style={{ marginTop: 6, fontFamily: "var(--font-mono)", fontSize: 9, color: "var(--color-text-hint)", letterSpacing: "0.04em" }}>
                 {isLegs ? "Ida e volta" : "Jogo único"}
                 {selectedRound.aggregate_score ? " · Placar agregado" : ""}
               </p>
@@ -6586,14 +6562,14 @@ export function NovoConfrontoModal({
 
           {/* Times — visual com logos */}
           {loadingPhaseTeams ? (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)" }}>Carregando equipes…</p>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-faint)" }}>Carregando equipes…</p>
           ) : (
             <div>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "rgba(255,255,255,0.3)" }}>Times</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase" as const, color: "var(--color-text-faint)" }}>Times</span>
               <div style={{ display: "flex", gap: 10, marginTop: 8, alignItems: "center" }}>
                 {/* Time A — dropdown estilizado */}
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(191,242,5,0.6)", marginBottom: 4 }}>TIME A</p>
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-brand-text-soft)", marginBottom: 4 }}>TIME A</p>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", gap: 6 }}>
                     {teamsForPhase.map(t => (
                       <div key={t.id}
@@ -6601,18 +6577,18 @@ export function NovoConfrontoModal({
                         style={{
                           display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                           padding: "8px 4px", borderRadius: 8,
-                          border: `1px solid ${teamAId === t.id ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`,
-                          backgroundColor: teamAId === t.id ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)",
+                          border: `1px solid ${teamAId === t.id ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`,
+                          backgroundColor: teamAId === t.id ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)",
                           cursor: "pointer", transition: "all 0.1s",
                           opacity: t.id === teamBId && t.id !== "tbd" ? 0.3 : 1,
                         }}>
                         {t.logo_url
                           ? <img src={t.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
-                          : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>?</span>
+                          : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "var(--color-text-faint)" }}>?</span>
                             </div>
                         }
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: teamAId === t.id ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center", letterSpacing: "0.02em" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: teamAId === t.id ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center", letterSpacing: "0.02em" }}>
                           {t._tbd ? "TBD" : (t.abbreviation ?? t.full_name?.slice(0, 3)?.toUpperCase() ?? "—")}
                         </span>
                       </div>
@@ -6620,11 +6596,11 @@ export function NovoConfrontoModal({
                   </div>
                 </div>
 
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, color: "rgba(255,255,255,0.15)", flexShrink: 0 }}>×</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, color: "var(--color-dashed-border)", flexShrink: 0 }}>×</span>
 
                 {/* Time B */}
                 <div style={{ flex: 1 }}>
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(255,255,255,0.3)", marginBottom: 4 }}>TIME B</p>
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, letterSpacing: "0.08em", color: "var(--color-text-faint)", marginBottom: 4 }}>TIME B</p>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", gap: 6 }}>
                     {teamsForPhase.map(t => (
                       <div key={t.id}
@@ -6632,18 +6608,18 @@ export function NovoConfrontoModal({
                         style={{
                           display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                           padding: "8px 4px", borderRadius: 8,
-                          border: `1px solid ${teamBId === t.id ? "rgba(191,242,5,0.5)" : "rgba(255,255,255,0.06)"}`,
-                          backgroundColor: teamBId === t.id ? "rgba(191,242,5,0.07)" : "rgba(255,255,255,0.02)",
+                          border: `1px solid ${teamBId === t.id ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`,
+                          backgroundColor: teamBId === t.id ? "var(--color-brand-selected-bg)" : "var(--color-hover-bg-subtle)",
                           cursor: "pointer", transition: "all 0.1s",
                           opacity: t.id === teamAId && t.id !== "tbd" ? 0.3 : 1,
                         }}>
                         {t.logo_url
                           ? <img src={t.logo_url} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
-                          : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>?</span>
+                          : <div style={{ width: 28, height: 28, borderRadius: 6, backgroundColor: "var(--color-surface-raised)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700, color: "var(--color-text-faint)" }}>?</span>
                             </div>
                         }
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: teamBId === t.id ? "#BFF205" : "rgba(255,255,255,0.3)", textAlign: "center", letterSpacing: "0.02em" }}>
+                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 7, fontWeight: 700, color: teamBId === t.id ? "var(--color-brand)" : "var(--color-field-avatar-border)", textAlign: "center", letterSpacing: "0.02em" }}>
                           {t._tbd ? "TBD" : (t.abbreviation ?? t.full_name?.slice(0, 3)?.toUpperCase() ?? "—")}
                         </span>
                       </div>
@@ -6655,20 +6631,20 @@ export function NovoConfrontoModal({
           )}
 
           {error && (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", backgroundColor: "rgba(255,68,68,0.07)", border: "1px solid rgba(255,68,68,0.2)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", backgroundColor: "var(--color-danger-muted-bg)", border: "1px solid var(--color-danger-muted-border)", borderRadius: 8, padding: "8px 12px", margin: 0 }}>
               {error}
             </p>
           )}
         </div>
 
         {/* Footer */}
-        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+        <div style={{ display: "flex", gap: 8, padding: "14px 18px", borderTop: "1px solid var(--color-hover-bg)" }}>
           <button type="button" onClick={onClose}
-            style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
+            style={{ flex: 1, padding: 10, borderRadius: 9, border, background: "none", color: "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: "pointer" }}>
             Cancelar
           </button>
           <button type="button" onClick={handleCriar} disabled={creating || !roundId}
-            style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: creating || !roundId ? "rgba(191,242,5,0.3)" : "#BFF205", color: "#0a0a0a", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: creating || !roundId ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+            style={{ flex: 2, padding: 10, borderRadius: 9, border: "none", backgroundColor: creating || !roundId ? "var(--color-brand-muted-bg)" : "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const, cursor: creating || !roundId ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
             {creating ? "Criando…" : "Criar confronto"}
           </button>
         </div>
@@ -6795,9 +6771,9 @@ function MatchupEditModal({
       <div style={{ width: "100%", maxWidth: 460, borderRadius: 14, border: "1px solid var(--color-border)", backgroundColor: "var(--color-surface)", overflow: "hidden", maxHeight: "85vh", display: "flex", flexDirection: "column" }}>
  
         {/* Header */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, backgroundColor: "rgba(191,242,5,0.03)" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, backgroundColor: "var(--color-brand-faint-bg)" }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205", margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)", margin: 0 }}>
               Editar confronto
             </p>
             <p style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700, color: "var(--color-text-primary)", margin: 0, marginTop: 3 }}>
@@ -6805,9 +6781,9 @@ function MatchupEditModal({
             </p>
           </div>
           <button onClick={onClose}
-            style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(255,255,255,0.4)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(191,242,5,0.4)"; (e.currentTarget as HTMLElement).style.color = "#BFF205"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.1)"; (e.currentTarget as HTMLElement).style.color = "rgba(255,255,255,0.4)"; }}>×</button>
+            style={{ width: 28, height: 28, borderRadius: 6, border: "1px solid var(--color-input-border-strong)", background: "none", color: "var(--color-icon-muted)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}
+            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-brand-border)"; (e.currentTarget as HTMLElement).style.color = "var(--color-brand)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = "var(--color-input-border-strong)"; (e.currentTarget as HTMLElement).style.color = "var(--color-icon-muted)"; }}>×</button>
         </div>
  
         <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -6815,8 +6791,8 @@ function MatchupEditModal({
           {/* Seção times */}
           <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>Times do confronto</span>
-              <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)" }}>Times do confronto</span>
+              <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -6846,7 +6822,7 @@ function MatchupEditModal({
             </div>
             {error && <p style={{ fontSize: 12, color: "var(--color-danger)", marginBottom: 8 }}>{error}</p>}
             <button onClick={handleSaveTeams} disabled={saving}
-              style={{ padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}
+              style={{ padding: "7px 16px", borderRadius: 8, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" as const, opacity: saving ? 0.6 : 1 }}
               onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = saving ? "0.6" : "0.85"; }}
               onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = saving ? "0.6" : "1"; }}>
               {saving ? "Salvando…" : "Salvar times"}
@@ -6856,10 +6832,10 @@ function MatchupEditModal({
           {/* Seção partidas */}
           <div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#BFF205" }}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "var(--color-brand)" }}>
                 Partidas {isLegs ? "· Ida e Volta" : "· Jogo único"}
               </span>
-              <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.3), transparent)" }} />
+              <div style={{ flex: 1, height: 1, background: "var(--gradient-section-line)" }} />
             </div>
  
             {loadingMatches ? (
@@ -6871,15 +6847,15 @@ function MatchupEditModal({
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {matchesLocal.map((m, i) => (
-                  <div key={m.id} style={{ borderRadius: 10, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden", backgroundColor: "rgba(255,255,255,0.02)" }}>
-                    <div style={{ padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "rgba(191,242,5,0.04)" }}>
-                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, color: "#BFF205", textTransform: "uppercase" as const, letterSpacing: "0.12em" }}>
+                  <div key={m.id} style={{ borderRadius: 10, border: "1px solid var(--color-input-border)", overflow: "hidden", backgroundColor: "var(--color-hover-bg-subtle)" }}>
+                    <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--color-divider-strong)", display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "var(--color-brand-hover-bg)" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 800, color: "var(--color-brand)", textTransform: "uppercase" as const, letterSpacing: "0.12em" }}>
                         {isLegs ? (m.is_second_leg ? "✈ Volta" : "🏠 Ida") : "Jogo único"}
                       </span>
                       <button onClick={() => handleDeleteMatch(m.id)}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,100,100,0.5)", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.04em", transition: "color 0.12s" }}
-                        onMouseEnter={e => (e.currentTarget.style.color = "#FF4444")}
-                        onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,100,100,0.5)")}>
+                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--color-danger-icon)", fontSize: 10, fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.04em", transition: "color 0.12s" }}
+                        onMouseEnter={e => (e.currentTarget.style.color = "var(--color-danger)")}
+                        onMouseLeave={e => (e.currentTarget.style.color = "var(--color-danger-icon)")}>
                         Remover
                       </button>
                     </div>
@@ -6888,7 +6864,7 @@ function MatchupEditModal({
                       {isLegs && (
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                           <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            <span style={{ fontSize: 10, color: "#BFF205", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Mandante</span>
+                            <span style={{ fontSize: 10, color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Mandante</span>
                             <LabSelect
                               value={m.team_a_id ?? ""}
                               onChange={(v) => handleUpdateMatch(m.id, "team_a_id", v)}
@@ -6897,7 +6873,7 @@ function MatchupEditModal({
                             />
                           </label>
                           <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Visitante</span>
+                            <span style={{ fontSize: 10, color: "var(--color-icon-muted)", fontFamily: "var(--font-mono)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" as const }}>Visitante</span>
                             <LabSelect
                               value={m.team_b_id ?? ""}
                               onChange={(v) => handleUpdateMatch(m.id, "team_b_id", v)}
@@ -6911,12 +6887,12 @@ function MatchupEditModal({
                         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Data</span>
                           <input type="date" defaultValue={m.match_date ?? ""} onBlur={e => handleUpdateMatch(m.id, "match_date", e.target.value)}
-                            style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", colorScheme: "dark" as any, width: "100%" }} />
+                            style={{ padding: "7px 10px", backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none",  width: "100%" }} />
                         </label>
                         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Horário</span>
                           <input type="time" defaultValue={m.match_time?.slice(0,5) ?? ""} onBlur={e => handleUpdateMatch(m.id, "match_time", e.target.value)}
-                            style={{ padding: "7px 10px", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none", colorScheme: "dark" as any, width: "100%" }} />
+                            style={{ padding: "7px 10px", backgroundColor: "var(--color-input-bg)", border: "1px solid var(--color-input-border-strong)", borderRadius: 8, fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)", outline: "none",  width: "100%" }} />
                         </label>
                         <label style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                           <span style={{ fontSize: 10, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono)" }}>Local</span>
@@ -6939,25 +6915,25 @@ function MatchupEditModal({
               <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" as const }}>
                 {!isLegs && matchesLocal.length === 0 && (
                   <button onClick={() => handleAddMatch(false)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.3)", backgroundColor: "rgba(191,242,5,0.07)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.5)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.07)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; }}>
+                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-brand-border)", backgroundColor: "var(--color-brand-selected-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-glow)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-selected-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; }}>
                     + Adicionar partida
                   </button>
                 )}
                 {isLegs && !matchesLocal.find(m => !m.is_second_leg) && (
                   <button onClick={() => handleAddMatch(false)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.3)", backgroundColor: "rgba(191,242,5,0.07)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.5)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.07)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; }}>
+                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-brand-border)", backgroundColor: "var(--color-brand-selected-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-glow)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-selected-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; }}>
                     🏠 + Jogo de ida
                   </button>
                 )}
                 {isLegs && matchesLocal.find(m => !m.is_second_leg) && !matchesLocal.find(m => m.is_second_leg) && (
                   <button onClick={() => handleAddMatch(true)}
-                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid rgba(191,242,5,0.3)", backgroundColor: "rgba(191,242,5,0.07)", color: "#BFF205", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.12)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.5)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(191,242,5,0.07)"; e.currentTarget.style.borderColor = "rgba(191,242,5,0.3)"; }}>
+                    style={{ padding: "7px 14px", borderRadius: 8, border: "1px solid var(--color-brand-border)", backgroundColor: "var(--color-brand-selected-bg)", color: "var(--color-brand)", fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800, letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.12s" }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-glow)"; e.currentTarget.style.borderColor = "var(--color-brand-border)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "var(--color-brand-selected-bg)"; e.currentTarget.style.borderColor = "var(--color-brand-muted-bg)"; }}>
                     ✈ + Jogo de volta
                   </button>
                 )}
@@ -6967,9 +6943,9 @@ function MatchupEditModal({
         </div>
  
         {/* Footer */}
-        <div style={{ padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", justifyContent: "flex-end", flexShrink: 0, backgroundColor: "rgba(255,255,255,0.01)" }}>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid var(--color-hover-bg)", display: "flex", justifyContent: "flex-end", flexShrink: 0, backgroundColor: "var(--color-hover-bg-subtle)" }}>
           <button onClick={onSuccess}
-            style={{ padding: "9px 24px", borderRadius: 9, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-background)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const }}
+            style={{ padding: "9px 24px", borderRadius: 9, border: "none", cursor: "pointer", backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)", fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" as const }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.opacity = "0.85"; }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}>
             Concluir

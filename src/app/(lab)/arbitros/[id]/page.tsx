@@ -108,7 +108,7 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
         .from("match_actions")
         .select("id, match_id, action_type, team_id")
         .in("match_id", matchIds)
-        .in("action_type", ["yellow_card", "red_card", "yellow_red_card"])
+        .in("action_type", ["yellow_card", "red_card", "red_yellow_card"])
     : { data: [] as any[] };
 
   const { data: refereeRoles } = await supabase
@@ -119,7 +119,7 @@ export default async function ArbitroPage({ params }: { params: Promise<{ id: st
   const cardActions = (actionsData ?? []).map((a: any) => ({
     id: a.id as string,
     matchId: a.match_id as string,
-    actionType: a.action_type as "yellow_card" | "red_card" | "yellow_red_card",
+    actionType: a.action_type as "yellow_card" | "red_card" | "red_yellow_card",
     teamId: a.team_id as string | null,
   }));
 

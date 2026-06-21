@@ -2,6 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import {
+  applyPickerOptionHover,
+  clearPickerOptionHover,
+  logoPlaceholderStyle,
+  pickerChevronStyle,
+  pickerDropdownStyle,
+  pickerEmptyMessageStyle,
+  pickerOptionRowStyle,
+  pickerSearchInputStyle,
+  pickerSearchRowStyle,
+  pickerTriggerStyle,
+} from "@/lib/lab-ui-styles";
 
 export interface TeamPickerTeam {
   id: string;
@@ -72,21 +84,9 @@ export function TeamPicker({
         disabled={disabled}
         onClick={() => !disabled && setOpen((v) => !v)}
         style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "9px 36px 9px 12px",
-          borderRadius: 9,
-          border: open ? "1px solid rgba(191,242,5,0.35)" : "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-          color: selected ? "#fff" : "rgba(255,255,255,0.35)",
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          fontWeight: 600,
+          ...pickerTriggerStyle(open, Boolean(selected)),
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.5 : 1,
-          textAlign: "left",
         }}
       >
         {selected ? (
@@ -98,15 +98,7 @@ export function TeamPicker({
                 style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }}
               />
             ) : (
-              <div
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 5,
-                  backgroundColor: "rgba(255,255,255,0.06)",
-                  flexShrink: 0,
-                }}
-              />
+              <div style={logoPlaceholderStyle} />
             )}
             <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {teamLabel(selected)}
@@ -119,72 +111,28 @@ export function TeamPicker({
           size={14}
           strokeWidth={2}
           style={{
-            position: "absolute",
-            right: 12,
-            top: "50%",
+            ...pickerChevronStyle,
             transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
-            transition: "transform 0.15s",
-            color: "rgba(255,255,255,0.35)",
-            pointerEvents: "none",
           }}
         />
       </button>
 
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            borderRadius: 9,
-            border: "1px solid rgba(255,255,255,0.1)",
-            backgroundColor: "var(--color-surface)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 10px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <Search size={14} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <div style={pickerDropdownStyle}>
+          <div style={pickerSearchRowStyle}>
+            <Search size={14} style={{ color: "var(--color-text-faint)", flexShrink: 0 }} />
             <input
               ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar equipe…"
-              style={{
-                flex: 1,
-                border: "none",
-                background: "transparent",
-                outline: "none",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                color: "var(--color-text-primary)",
-              }}
+              style={pickerSearchInputStyle}
             />
           </div>
           <div style={{ maxHeight: 220, overflowY: "auto" }}>
             {filtered.length === 0 ? (
-              <p
-                style={{
-                  padding: "12px 14px",
-                  margin: 0,
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.3)",
-                }}
-              >
-                Nenhuma equipe encontrada.
-              </p>
+              <p style={pickerEmptyMessageStyle}>Nenhuma equipe encontrada.</p>
             ) : (
               filtered.map((team) => {
                 const isSelected = team.id === value;
@@ -196,28 +144,9 @@ export function TeamPicker({
                       onChange(team.id);
                       setOpen(false);
                     }}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "9px 12px",
-                      border: "none",
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                      backgroundColor: isSelected ? "rgba(191,242,5,0.08)" : "transparent",
-                      color: isSelected ? "#BFF205" : "var(--color-text-primary)",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 12,
-                      fontWeight: isSelected ? 700 : 600,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
-                    }}
+                    style={pickerOptionRowStyle(isSelected)}
+                    onMouseEnter={(e) => applyPickerOptionHover(e, isSelected)}
+                    onMouseLeave={(e) => clearPickerOptionHover(e, isSelected)}
                   >
                     {team.logo_url ? (
                       <img
@@ -226,15 +155,7 @@ export function TeamPicker({
                         style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }}
                       />
                     ) : (
-                      <div
-                        style={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: 5,
-                          backgroundColor: "rgba(255,255,255,0.06)",
-                          flexShrink: 0,
-                        }}
-                      />
+                      <div style={logoPlaceholderStyle} />
                     )}
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {teamLabel(team)}

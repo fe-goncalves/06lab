@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Breadcrumb from "@/app/(lab)/components/breadcrumb";
+import { PersonAvatar } from "@/app/(lab)/components/person-avatar";
 
 type Props = {
   competitionId: string;
@@ -37,7 +38,7 @@ export default function SemClubeClient({
   };
 
   const statusColor: Record<string, string> = {
-    pending: "#A6A6A6",
+    pending: "var(--color-text-secondary)",
     approved: "var(--color-brand)",
     inactive: "var(--color-danger)",
   };
@@ -114,27 +115,14 @@ export default function SemClubeClient({
                     backgroundColor: "var(--color-background)",
                   }}
                 >
-                  {athlete?.photo_url ? (
-                    <img
-                      src={athlete.photo_url}
-                      alt=""
-                      className="h-8 w-8 rounded-full border object-cover"
-                      style={{ borderColor: "var(--color-border)" }}
-                    />
-                  ) : (
-                    <div
-                      className="flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold"
-                      style={{
-                        borderColor: "var(--color-border)",
-                        backgroundColor: "var(--color-surface)",
-                        color: "var(--color-text-primary)",
-                      }}
-                    >
-                      {(athlete?.surname ?? athlete?.full_name ?? "?")
-                        .charAt(0)
-                        .toUpperCase()}
-                    </div>
-                  )}
+                  <PersonAvatar
+                    photoUrl={athlete?.photo_url ?? null}
+                    size={32}
+                    style={{
+                      border: "1px solid var(--color-border)",
+                      backgroundColor: "var(--color-surface)",
+                    }}
+                  />
 
                   <p
                     className="flex-1 text-sm font-medium"

@@ -2,6 +2,19 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
+import {
+  applyPickerOptionHover,
+  clearPickerOptionHover,
+  logoPlaceholderStyle,
+  pickerChevronStyle,
+  pickerDropdownStyle,
+  pickerEmptyMessageStyle,
+  pickerEmptyOptionStyle,
+  pickerOptionRowStyle,
+  pickerSearchInputStyle,
+  pickerSearchRowStyle,
+  pickerTriggerStyle,
+} from "@/lib/lab-ui-styles";
 
 export interface LabPickerOption {
   id: string;
@@ -21,6 +34,10 @@ interface LabPickerProps {
   allowEmpty?: boolean;
   disabled?: boolean;
   showLogos?: boolean;
+  /** Opções do dropdown em Inter (var(--font-sans)) */
+  menuSans?: boolean;
+  /** Trigger em Inter (var(--font-sans)) */
+  triggerSans?: boolean;
 }
 
 export function LabPicker({
@@ -33,13 +50,18 @@ export function LabPicker({
   allowEmpty = true,
   disabled = false,
   showLogos = true,
+  menuSans = false,
+  triggerSans = false,
 }: LabPickerProps) {
+  const menuFont = menuSans ? "var(--font-sans)" : "var(--font-mono)";
+  const triggerFont = triggerSans ? "var(--font-sans)" : "var(--font-mono)";
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.id === value);
+  const hasValue = Boolean(selected || (value === "" && allowEmpty));
 
   const filtered = options.filter((o) => {
     if (!search.trim()) return true;
@@ -86,17 +108,7 @@ export function LabPicker({
         />
       );
     }
-    return (
-      <div
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 5,
-          backgroundColor: "rgba(255,255,255,0.06)",
-          flexShrink: 0,
-        }}
-      />
-    );
+    return <div style={logoPlaceholderStyle} />;
   }
 
   return (
@@ -106,21 +118,9 @@ export function LabPicker({
         disabled={disabled}
         onClick={() => !disabled && setOpen((v) => !v)}
         style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-          padding: "9px 36px 9px 12px",
-          borderRadius: 9,
-          border: open ? "1px solid rgba(191,242,5,0.35)" : "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "var(--color-surface)",
-          color: selected || value === "" ? "#fff" : "rgba(255,255,255,0.35)",
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          fontWeight: 600,
+          ...pickerTriggerStyle(open, hasValue, triggerFont),
           cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.5 : 1,
-          textAlign: "left",
         }}
       >
         {selected ? (
@@ -137,57 +137,23 @@ export function LabPicker({
           size={14}
           strokeWidth={2}
           style={{
-            position: "absolute",
-            right: 12,
-            top: "50%",
+            ...pickerChevronStyle,
             transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
-            transition: "transform 0.15s",
-            color: "rgba(255,255,255,0.35)",
-            pointerEvents: "none",
           }}
         />
       </button>
 
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            borderRadius: 9,
-            border: "1px solid rgba(255,255,255,0.1)",
-            backgroundColor: "var(--color-surface)",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.45)",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              padding: "8px 10px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}
-          >
-            <Search size={14} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+        <div style={pickerDropdownStyle}>
+          <div style={pickerSearchRowStyle}>
+            <Search size={14} style={{ color: "var(--color-text-faint)", flexShrink: 0 }} />
             <input
               ref={searchRef}
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchPlaceholder}
-              style={{
-                flex: 1,
-                border: "none",
-                background: "transparent",
-                outline: "none",
-                fontFamily: "var(--font-mono)",
-                fontSize: 11,
-                color: "var(--color-text-primary)",
-              }}
+              style={pickerSearchInputStyle}
             />
           </div>
           <div style={{ maxHeight: 220, overflowY: "auto" }}>
@@ -195,38 +161,13 @@ export function LabPicker({
               <button
                 type="button"
                 onClick={() => pick("")}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "9px 12px",
-                  border: "none",
-                  borderBottom: "1px solid rgba(255,255,255,0.04)",
-                  backgroundColor: value === "" ? "rgba(191,242,5,0.08)" : "transparent",
-                  color: value === "" ? "#BFF205" : "rgba(255,255,255,0.5)",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  fontWeight: value === "" ? 700 : 600,
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
+                style={{ ...pickerEmptyOptionStyle(value === "", menuFont), display: "flex", alignItems: "center", gap: 10 }}
               >
                 {emptyLabel}
               </button>
             )}
             {filtered.length === 0 ? (
-              <p
-                style={{
-                  padding: "12px 14px",
-                  margin: 0,
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 11,
-                  color: "rgba(255,255,255,0.3)",
-                }}
-              >
-                Nenhum resultado.
-              </p>
+              <p style={pickerEmptyMessageStyle}>Nenhum resultado.</p>
             ) : (
               filtered.map((opt) => {
                 const isSelected = opt.id === value;
@@ -235,28 +176,9 @@ export function LabPicker({
                     key={opt.id}
                     type="button"
                     onClick={() => pick(opt.id)}
-                    style={{
-                      width: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "9px 12px",
-                      border: "none",
-                      borderBottom: "1px solid rgba(255,255,255,0.04)",
-                      backgroundColor: isSelected ? "rgba(191,242,5,0.08)" : "transparent",
-                      color: isSelected ? "#BFF205" : "var(--color-text-primary)",
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 12,
-                      fontWeight: isSelected ? 700 : 600,
-                      cursor: "pointer",
-                      textAlign: "left",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)";
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isSelected) e.currentTarget.style.backgroundColor = "transparent";
-                    }}
+                    style={pickerOptionRowStyle(isSelected, menuFont)}
+                    onMouseEnter={(e) => applyPickerOptionHover(e, isSelected)}
+                    onMouseLeave={(e) => clearPickerOptionHover(e, isSelected)}
                   >
                     <LogoSlot url={opt.logo_url} />
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

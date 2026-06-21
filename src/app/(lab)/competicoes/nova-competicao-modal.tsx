@@ -8,24 +8,35 @@ import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
 import { parseSupabaseError } from "@/lib/error-messages";
 
-export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+export function NovaCompeticaoModal({
+  isOpen,
+  onClose,
+  defaultGender = "male",
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  defaultGender?: "male" | "female";
+}) {
   const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [shortName, setShortName] = useState("");
-  const [gender, setGender] = useState("male");
+  const [gender, setGender] = useState(defaultGender);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen) return;
+    if (isOpen) {
+      setGender(defaultGender);
+      return;
+    }
     setFullName("");
     setShortName("");
-    setGender("male");
+    setGender(defaultGender);
     setFile(null);
     setError(null);
     setLoading(false);
-  }, [isOpen]);
+  }, [isOpen, defaultGender]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -66,7 +77,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
     fontWeight: 800,
     letterSpacing: "0.12em",
     textTransform: "uppercase",
-    color: "rgba(255,255,255,0.3)",
+    color: "var(--color-text-faint)",
     display: "block",
     marginBottom: 5,
   };
@@ -75,8 +86,8 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
     width: "100%",
     padding: "9px 12px",
     borderRadius: 9,
-    border: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--color-input-border)",
+    backgroundColor: "var(--color-input-bg)",
     color: "var(--color-text-primary)",
     fontFamily: "var(--font-mono)",
     fontSize: 12,
@@ -95,7 +106,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
         alignItems: "center",
         justifyContent: "center",
         padding: 16,
-        backgroundColor: "rgba(0,0,0,0.78)",
+        backgroundColor: "var(--color-modal-scrim)",
       }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -108,10 +119,10 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
           width: "100%",
           maxWidth: 440,
           borderRadius: 16,
-          border: "1px solid rgba(255,255,255,0.1)",
-          backgroundColor: "#0e0e0e",
+          border: "1px solid var(--color-input-border-strong)",
+          backgroundColor: "var(--color-modal-bg)",
           overflow: "hidden",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+          boxShadow: "var(--color-modal-shadow)",
           maxHeight: "92vh",
           display: "flex",
           flexDirection: "column",
@@ -121,7 +132,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
         <div
           style={{
             padding: "14px 18px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            borderBottom: "1px solid var(--color-divider-strong)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -137,7 +148,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
                 fontWeight: 800,
                 letterSpacing: "0.16em",
                 textTransform: "uppercase",
-                color: "#BFF205",
+                color: "var(--color-brand)",
                 margin: 0,
               }}
             >
@@ -147,7 +158,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
               style={{
                 fontFamily: "var(--font-mono)",
                 fontSize: 11,
-                color: "rgba(255,255,255,0.3)",
+                color: "var(--color-text-faint)",
                 margin: 0,
                 marginTop: 2,
               }}
@@ -162,13 +173,13 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
               width: 28,
               height: 28,
               borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--color-input-border-strong)",
               backgroundColor: "transparent",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              color: "rgba(255,255,255,0.4)",
+              color: "var(--color-icon-muted)",
             }}
           >
             <X size={14} strokeWidth={2} />
@@ -202,8 +213,8 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
                 onChange={(e) => setFullName(e.target.value)}
                 placeholder="Ex: Campeonato Municipal"
                 style={inputStyle}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#BFF205")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
               />
             </div>
 
@@ -215,8 +226,8 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
                 onChange={(e) => setShortName(e.target.value)}
                 placeholder="Ex: CAMMUN"
                 style={inputStyle}
-                onFocus={(e) => (e.currentTarget.style.borderColor = "#BFF205")}
-                onBlur={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+                onFocus={(e) => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+                onBlur={(e) => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
               />
             </div>
 
@@ -234,7 +245,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
 
             {error && (
               <p
-                style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", margin: 0 }}
+                style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", margin: 0 }}
                 role="alert"
               >
                 {error}
@@ -247,7 +258,7 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
               display: "flex",
               gap: 8,
               padding: "12px 18px",
-              borderTop: "1px solid rgba(255,255,255,0.07)",
+              borderTop: "1px solid var(--color-hover-bg)",
               flexShrink: 0,
             }}
           >
@@ -258,9 +269,9 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
                 flex: 1,
                 padding: 10,
                 borderRadius: 9,
-                border: "1px solid rgba(255,255,255,0.1)",
+                border: "1px solid var(--color-input-border-strong)",
                 backgroundColor: "transparent",
-                color: "rgba(255,255,255,0.4)",
+                color: "var(--color-icon-muted)",
                 fontFamily: "var(--font-mono)",
                 fontSize: 10,
                 fontWeight: 700,
@@ -279,8 +290,8 @@ export function NovaCompeticaoModal({ isOpen, onClose }: { isOpen: boolean; onCl
                 padding: 10,
                 borderRadius: 9,
                 border: "none",
-                backgroundColor: loading || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205",
-                color: "#0a0a0a",
+                backgroundColor: loading || !fullName.trim() ? "var(--color-brand-muted-bg)" : "var(--color-brand)",
+                color: "var(--color-on-brand)",
                 fontFamily: "var(--font-mono)",
                 fontSize: 10,
                 fontWeight: 800,

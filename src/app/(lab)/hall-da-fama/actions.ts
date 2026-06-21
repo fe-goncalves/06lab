@@ -27,6 +27,7 @@ export interface AthleteEntry {
 export interface TeamEntry {
   team_id: string;
   full_name: string;
+  short_name: string | null;
   abbreviation: string | null;
   logo_url: string | null;
   value: number;

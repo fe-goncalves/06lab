@@ -1,9 +1,10 @@
 "use client";
 
 import { createClient } from "@/lib/supabase";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
+import { AuthShell } from "@/app/(lab)/components/auth-shell";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -29,7 +30,19 @@ export default function LoginPage() {
       return;
     }
 
-    // Verifica se o usuário autenticado é um representante ativo
+    const { data: repRecord } = await supabase
+      .from("representatives")
+      .select("id, status")
+      .eq("auth_user_id", signInData.user.id)
+      .maybeSingle();
+
+    if (repRecord && repRecord.status !== "active") {
+      await supabase.auth.signOut();
+      setError("Esta conta de representante está desativada. Entre em contato com a organização.");
+      setLoading(false);
+      return;
+    }
+
     const { data: rep } = await supabase
       .from("representatives")
       .select("id")
@@ -38,7 +51,7 @@ export default function LoginPage() {
       .maybeSingle();
 
     if (rep) {
-      router.push("/representante");
+      router.push("/rep");
     } else {
       router.push("/");
     }
@@ -47,132 +60,48 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4">
-      {/* Glow sutil no topo */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{ background: "var(--gradient-glow)" }}
-      />
-
-      <div className="relative w-full max-w-sm">
-        {/* Logo */}
-        <div className="mb-10 flex flex-col items-center gap-4">
-          <Image
-            src="/brand/logo.svg"
-            alt="06.lab"
-            width={48}
-            height={48}
-            priority
+    <AuthShell>
+      <form onSubmit={handleSubmit} className={styles.authForm}>
+        <div className={styles.field}>
+          <label className={styles.fieldLabel} htmlFor="email">
+            E-mail
+          </label>
+          <input
+            id="email"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className={styles.input}
           />
-          <div className="text-center">
-            <p
-              className="font-display text-2xl tracking-tight"
-              style={{ color: "var(--color-text-primary)" }}
-            >
-              06.lab
-            </p>
-            <p
-              className="mt-1 text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Painel administrativo
-            </p>
-          </div>
         </div>
 
-        {/* Card */}
-        <div
-          className="rounded-2xl border p-8"
-          style={{
-            background: "var(--color-surface)",
-            borderColor: "var(--color-border)",
-          }}
-        >
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="email"
-                className="text-sm"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  background: "var(--color-background)",
-                  borderColor: "var(--color-border)",
-                  color: "var(--color-text-primary)",
-                }}
-                onFocus={(e) =>
-                  (e.currentTarget.style.borderColor = "var(--color-brand)")
-                }
-                onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = "var(--color-border)")
-                }
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="password"
-                className="text-sm"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                Senha
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="rounded-lg border px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  background: "var(--color-background)",
-                  borderColor: "var(--color-border)",
-                  color: "var(--color-text-primary)",
-                }}
-                onFocus={(e) =>
-                  (e.currentTarget.style.borderColor = "var(--color-brand)")
-                }
-                onBlur={(e) =>
-                  (e.currentTarget.style.borderColor = "var(--color-border)")
-                }
-              />
-            </div>
-
-            {error && (
-              <p
-                className="text-sm"
-                role="alert"
-                style={{ color: "var(--color-danger)" }}
-              >
-                {error}
-              </p>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-1 rounded-lg px-4 py-2.5 text-sm font-medium transition-opacity disabled:cursor-not-allowed disabled:opacity-50"
-              style={{
-                background: "var(--color-brand)",
-                color: "#0D0D0D",
-              }}
-            >
-              {loading ? "Entrando…" : "Entrar"}
-            </button>
-          </form>
+        <div className={styles.field}>
+          <label className={styles.fieldLabel} htmlFor="password">
+            Senha
+          </label>
+          <input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={styles.input}
+          />
         </div>
-      </div>
-    </div>
+
+        {error && (
+          <p className={styles.formError} role="alert">
+            {error}
+          </p>
+        )}
+
+        <button type="submit" disabled={loading} className={styles.authSubmitBtn}>
+          {loading ? "Entrando…" : "Entrar"}
+        </button>
+      </form>
+    </AuthShell>
   );
 }

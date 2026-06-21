@@ -2,7 +2,9 @@
 
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase-server";
+import { mapAdminRosterRpcError, type DraftMemberData } from "./admin-roster-rpc-errors";
 
 // ─── Inscrições ───────────────────────────────────────────────────────────────
 
@@ -139,6 +141,44 @@ export async function rejeitarRelatorio(
     .eq("id", id);
 
   if (error) return { error: error.message };
+  return { success: true };
+}
+
+// ─── Solicitações de representantes (roster_requests) ─────────────────────────
+
+export async function decidirSolicitacaoRepresentante(input: {
+  requestId: string;
+  decision: "approved" | "rejected";
+  decisionNote?: string | null;
+  overrideDraftData?: DraftMemberData | null;
+}): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("id, role, organization_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  if (!profile || !["main", "supporter", "admin"].includes(profile.role ?? "")) {
+    return { error: "Sem permissão." };
+  }
+
+  const { error } = await supabase.rpc("admin_decide_roster_request", {
+    p_request_id: input.requestId,
+    p_decision: input.decision,
+    p_decision_note: input.decisionNote?.trim() || null,
+    p_override_draft_data:
+      input.decision === "approved" && input.overrideDraftData
+        ? input.overrideDraftData
+        : null,
+  });
+
+  if (error) return { error: mapAdminRosterRpcError(error) };
+
+  revalidatePath("/aprovacoes");
   return { success: true };
 }
 

@@ -2,7 +2,13 @@
 
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { OrgGestaoPageShell } from "@/app/(lab)/components/org-gestao-page-shell";
 import AprovacoesClient from "./aprovacoes-client";
+import {
+  repRequestTypeLabel,
+  type DraftMemberData,
+  type RepRosterRequest,
+} from "./admin-roster-rpc-errors";
 
 export default async function AprovacoesPage() {
   const supabase = await createClient();
@@ -64,6 +70,118 @@ export default async function AprovacoesPage() {
   const reportsFiltered = (pendingReports ?? []).filter((r: any) =>
     r.matches?.phases?.competition_editions?.competitions?.organization_id === orgId
   );
+
+  // ── Solicitações de representantes ──────────────────────────────────────────
+  const { data: pendingRepRequests } = await supabase
+    .from("roster_requests")
+    .select(`
+      id, request_type, member_type, status, created_at,
+      draft_data, requires_counterparty_approval, counterparty_approved_at,
+      edition_id, athlete_id, staff_member_id, requesting_team_id, source_team_id,
+      requested_by_representative_id,
+      representatives!roster_requests_requested_by_representative_id_fkey(full_name, email, organization_id),
+      athletes(full_name, surname, photo_url, player_positions(full_name, abbreviation)),
+      staff_members(full_name, surname, photo_url, staff_roles(full_name)),
+      competition_editions(id, competitions(full_name, short_name), seasons(name))
+    `)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+
+  const teamIds = new Set<string>();
+  for (const r of pendingRepRequests ?? []) {
+    if (r.requesting_team_id) teamIds.add(r.requesting_team_id as string);
+    if (r.source_team_id) teamIds.add(r.source_team_id as string);
+  }
+
+  const teamMap = new Map<string, { full_name: string; abbreviation: string | null; short_name: string | null }>();
+  if (teamIds.size > 0) {
+    const { data: teamsData } = await supabase
+      .from("teams")
+      .select("id, full_name, abbreviation, short_name, organization_id")
+      .in("id", Array.from(teamIds));
+    for (const t of teamsData ?? []) {
+      if (t.organization_id === orgId) {
+        teamMap.set(t.id as string, {
+          full_name: t.full_name as string,
+          abbreviation: t.abbreviation as string | null,
+          short_name: t.short_name as string | null,
+        });
+      }
+    }
+  }
+
+  const repRequests: RepRosterRequest[] = (pendingRepRequests ?? [])
+    .filter((r: any) =>
+      r.representatives?.organization_id === orgId
+      || teamMap.has(r.requesting_team_id as string),
+    )
+    .map((r: any) => {
+      const isAthlete = r.member_type === "athlete";
+      const draft = (r.draft_data ?? null) as DraftMemberData | null;
+      const athlete = r.athletes as {
+        full_name: string;
+        surname: string | null;
+        photo_url: string | null;
+        player_positions: { full_name: string; abbreviation: string } | null;
+      } | null;
+      const staff = r.staff_members as {
+        full_name: string;
+        surname: string | null;
+        photo_url: string | null;
+        staff_roles: { full_name: string } | null;
+      } | null;
+      const edition = r.competition_editions as {
+        competitions: { full_name: string; short_name: string | null } | null;
+        seasons: { name: string } | null;
+      } | null;
+      const reqTeam = teamMap.get(r.requesting_team_id as string);
+      const srcTeam = r.source_team_id ? teamMap.get(r.source_team_id as string) : null;
+
+      let personName = "—";
+      let personPhoto: string | null = null;
+      let personSubtitle: string | null = null;
+
+      if (isAthlete && athlete) {
+        personName = athlete.surname
+          ? `${athlete.full_name} ${athlete.surname}`
+          : athlete.full_name;
+        personPhoto = athlete.photo_url;
+        personSubtitle = athlete.player_positions?.full_name ?? null;
+      } else if (!isAthlete && staff) {
+        personName = staff.surname ? `${staff.full_name} ${staff.surname}` : staff.full_name;
+        personPhoto = staff.photo_url;
+        personSubtitle = staff.staff_roles?.full_name ?? null;
+      } else if (draft?.full_name) {
+        personName = draft.surname ? `${draft.full_name} ${draft.surname}` : draft.full_name;
+        personSubtitle = "Cadastro novo (draft)";
+      }
+
+      const contextLabel = edition
+        ? `${edition.competitions?.short_name ?? edition.competitions?.full_name ?? "Competição"} · ${edition.seasons?.name ?? "—"}`
+        : "Elenco Geral";
+
+      return {
+        id: r.id as string,
+        requestType: r.request_type as string,
+        memberType: r.member_type as string,
+        createdAt: r.created_at as string,
+        repName: (r.representatives as { full_name: string })?.full_name ?? "—",
+        requestingTeamName: reqTeam?.full_name ?? "—",
+        requestingTeamAbbr: reqTeam?.abbreviation ?? reqTeam?.short_name ?? null,
+        typeLabel: repRequestTypeLabel(r.request_type as string, r.member_type as string),
+        personName,
+        personPhoto,
+        personSubtitle,
+        contextLabel,
+        requiresCounterparty: !!r.requires_counterparty_approval,
+        counterpartyApproved: !!r.counterparty_approved_at,
+        draftData: draft,
+        athleteId: (r.athlete_id as string | null) ?? null,
+        staffMemberId: (r.staff_member_id as string | null) ?? null,
+        editionId: (r.edition_id as string | null) ?? null,
+        sourceTeamName: srcTeam?.full_name ?? null,
+      };
+    });
 
   // ── Monta estrutura agrupada para as inscrições ────────────────────────────
   // Agrupa: competition_id → edition_id → edition_team_id → entries[]
@@ -153,19 +271,12 @@ export default async function AprovacoesPage() {
   }));
 
   return (
-    <div className="p-6 md:p-8">
-      <header className="mb-8">
-        <h1 className="font-display text-2xl font-semibold" style={{ color: "var(--color-text-primary)" }}>
-          Aprovações
-        </h1>
-        <p className="mt-1 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          {rosterFiltered.length + reportsFiltered.length} item{(rosterFiltered.length + reportsFiltered.length) !== 1 ? "s" : ""} aguardando.
-        </p>
-      </header>
+    <OrgGestaoPageShell>
       <AprovacoesClient
         rosterGroups={rosterGroups}
         reports={reportsList}
+        repRequests={repRequests}
       />
-    </div>
+    </OrgGestaoPageShell>
   );
 }

@@ -26,14 +26,14 @@ export default function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
               <Link
                 href={item.href}
                 className="transition-colors hover:text-[var(--color-brand)]"
-                style={{ color: "#A6A6A6" }}
+                style={{ color: "var(--color-text-secondary)" }}
               >
                 {item.label.toUpperCase()}
               </Link>
             ) : (
               <span
                 style={{
-                  color: isLast ? "var(--color-text-primary)" : "#A6A6A6",
+                  color: isLast ? "var(--color-text-primary)" : "var(--color-text-secondary)",
                 }}
               >
                 {item.label.toUpperCase()}

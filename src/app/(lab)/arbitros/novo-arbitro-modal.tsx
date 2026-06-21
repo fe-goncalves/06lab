@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { X, Camera } from "lucide-react";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { PersonAvatarPlaceholder } from "@/app/(lab)/components/person-avatar-placeholder";
 
 const REFEREE_ROLES = [
   { id: "e9bd3156-58b3-4758-8c6e-5d48e53228e0", label: "Árbitro" },
@@ -84,13 +85,13 @@ export function NovoArbitroModal({
   const fieldLabel: React.CSSProperties = {
     fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
     letterSpacing: "0.12em", textTransform: "uppercase",
-    color: "rgba(255,255,255,0.3)", display: "block", marginBottom: 5,
+    color: "var(--color-text-faint)", display: "block", marginBottom: 5,
   };
 
   const inputStyle: React.CSSProperties = {
     width: "100%", padding: "9px 12px", borderRadius: 9,
-    border: "1px solid rgba(255,255,255,0.08)",
-    backgroundColor: "rgba(255,255,255,0.04)",
+    border: "1px solid var(--color-input-border)",
+    backgroundColor: "var(--color-input-bg)",
     color: "var(--color-text-primary)",
     fontFamily: "var(--font-mono)", fontSize: 12,
     outline: "none", boxSizing: "border-box",
@@ -102,17 +103,17 @@ export function NovoArbitroModal({
       style={{
         position: "fixed", inset: 0, zIndex: 50,
         display: "flex", alignItems: "center", justifyContent: "center",
-        padding: 16, backgroundColor: "rgba(0,0,0,0.78)",
+        padding: 16, backgroundColor: "var(--color-modal-scrim)",
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
         width: "100%", maxWidth: 440,
         borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.1)",
-        backgroundColor: "#0e0e0e",
+        border: "1px solid var(--color-input-border-strong)",
+        backgroundColor: "var(--color-modal-bg)",
         overflow: "hidden",
-        boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+        boxShadow: "var(--color-modal-shadow)",
         maxHeight: "92vh",
         display: "flex", flexDirection: "column",
       }}>
@@ -120,16 +121,16 @@ export function NovoArbitroModal({
         {/* Header */}
         <div style={{
           padding: "14px 18px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid var(--color-divider-strong)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           backgroundColor: "rgba(191,242,5,0.03)",
           flexShrink: 0,
         }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-brand)", margin: 0 }}>
               Novo árbitro
             </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-faint)", margin: 0, marginTop: 2 }}>
               Preencha os dados básicos para cadastrar
             </p>
           </div>
@@ -138,14 +139,14 @@ export function NovoArbitroModal({
             onClick={onClose}
             style={{
               width: 28, height: 28, borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--color-input-border-strong)",
               backgroundColor: "transparent",
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: "rgba(255,255,255,0.4)",
+              cursor: "pointer", color: "var(--color-icon-muted)",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "rgba(255,255,255,0.4)"; }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "var(--color-divider-strong)"; e.currentTarget.style.color = "var(--color-text-primary)"; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "var(--color-icon-muted)"; }}
           >
             <X size={14} strokeWidth={2} />
           </button>
@@ -165,9 +166,9 @@ export function NovoArbitroModal({
                   onClick={() => setRefereeRoleId(role.id)}
                   style={{
                     padding: "6px 12px", borderRadius: 20,
-                    border: `1px solid ${refereeRoleId === role.id ? "#BFF205" : "rgba(255,255,255,0.1)"}`,
-                    backgroundColor: refereeRoleId === role.id ? "rgba(191,242,5,0.1)" : "transparent",
-                    color: refereeRoleId === role.id ? "#BFF205" : "rgba(255,255,255,0.35)",
+                    border: `1px solid ${refereeRoleId === role.id ? "var(--color-brand)" : "var(--color-input-border-strong)"}`,
+                    backgroundColor: refereeRoleId === role.id ? "var(--color-brand-muted-bg)" : "transparent",
+                    color: refereeRoleId === role.id ? "var(--color-brand)" : "rgba(255,255,255,0.35)",
                     fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
                     letterSpacing: "0.08em", textTransform: "uppercase",
                     cursor: "pointer", transition: "all 0.12s",
@@ -186,16 +187,14 @@ export function NovoArbitroModal({
               <div style={{ position: "relative" }}>
                 <div style={{
                   width: 56, height: 56, borderRadius: "50%", overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  backgroundColor: "rgba(255,255,255,0.04)",
+                  border: "1px solid var(--color-input-border-strong)",
+                  backgroundColor: "var(--color-input-bg)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
                   {previewUrl ? (
                     <img src={previewUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                   ) : (
-                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.15)" }}>
-                      {fullName ? fullName.slice(0, 2).toUpperCase() : "—"}
-                    </span>
+                    <PersonAvatarPlaceholder size={28} />
                   )}
                 </div>
                 <button
@@ -204,7 +203,7 @@ export function NovoArbitroModal({
                   style={{
                     position: "absolute", bottom: -2, right: -2,
                     width: 20, height: 20, borderRadius: "50%",
-                    backgroundColor: "#BFF205",
+                    backgroundColor: "var(--color-brand)",
                     border: "2px solid #0e0e0e",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     cursor: "pointer",
@@ -214,14 +213,14 @@ export function NovoArbitroModal({
                 </button>
               </div>
               <div>
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.4)", margin: 0 }}>
+                <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-icon-muted)", margin: 0 }}>
                   {file ? file.name : "Nenhuma foto selecionada"}
                 </p>
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   style={{
-                    fontFamily: "var(--font-mono)", fontSize: 10, color: "#BFF205",
+                    fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-brand)",
                     background: "none", border: "none", padding: 0,
                     cursor: "pointer", marginTop: 3,
                   }}
@@ -243,8 +242,8 @@ export function NovoArbitroModal({
               onChange={e => setFullName(e.target.value)}
               placeholder="Ex: João Carlos Silva"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
@@ -272,8 +271,8 @@ export function NovoArbitroModal({
               onChange={e => setPhone(e.target.value)}
               placeholder="(00) 00000-0000"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
@@ -286,13 +285,13 @@ export function NovoArbitroModal({
               onChange={e => setPixKey(e.target.value)}
               placeholder="CPF, e-mail, telefone ou chave aleatória"
               style={inputStyle}
-              onFocus={e => (e.currentTarget.style.borderColor = "#BFF205")}
-              onBlur={e => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+              onFocus={e => (e.currentTarget.style.borderColor = "var(--color-brand)")}
+              onBlur={e => (e.currentTarget.style.borderColor = "var(--color-input-border)")}
             />
           </div>
 
           {error && (
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "#FF4444", margin: 0 }} role="alert">
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-danger)", margin: 0 }} role="alert">
               {error}
             </p>
           )}
@@ -302,7 +301,7 @@ export function NovoArbitroModal({
         <div style={{
           display: "flex", gap: 8,
           padding: "12px 18px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
+          borderTop: "1px solid var(--color-hover-bg)",
           flexShrink: 0,
         }}>
           <button
@@ -310,9 +309,9 @@ export function NovoArbitroModal({
             onClick={onClose}
             style={{
               flex: 1, padding: 10, borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid var(--color-input-border-strong)",
               backgroundColor: "transparent",
-              color: "rgba(255,255,255,0.4)",
+              color: "var(--color-icon-muted)",
               fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
               letterSpacing: "0.08em", textTransform: "uppercase",
               cursor: "pointer",
@@ -326,8 +325,8 @@ export function NovoArbitroModal({
             disabled={loading || !fullName.trim()}
             style={{
               flex: 2, padding: 10, borderRadius: 9, border: "none",
-              backgroundColor: loading || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205",
-              color: "#0a0a0a",
+              backgroundColor: loading || !fullName.trim() ? "var(--color-brand-muted-bg)" : "var(--color-brand)",
+              color: "var(--color-on-brand)",
               fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
               letterSpacing: "0.08em", textTransform: "uppercase",
               cursor: loading || !fullName.trim() ? "not-allowed" : "pointer",

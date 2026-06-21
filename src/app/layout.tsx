@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Space_Mono, Fjalla_One } from "next/font/google";
+import { ThemeProvider } from "@/components/theme-provider";
+import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const inter = Inter({
@@ -36,9 +38,13 @@ export default function RootLayout({
     <html
       lang="pt-BR"
       className={`${inter.variable} ${spaceMono.variable} ${fjallaOne.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-[#0D0D0D] text-[#F2F2F2]">
-        {children}
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="min-h-full flex flex-col">
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

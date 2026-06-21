@@ -357,7 +357,7 @@ async function fetchBestMatchGoals(ctx: HallCtx): Promise<AthleteEntry[]> {
 
 async function fetchTeamEditionAgg(ctx: HallCtx) {
   const editionIds = await editionIdsParaUsar(ctx);
-  if (editionIds.length === 0) return { editionIds, aggArr: [] as { team_id: string; total_matches: number; total_wins: number; total_draws: number; total_goals: number; team: { full_name: string; abbreviation: string | null; logo_url: string | null } }[] };
+  if (editionIds.length === 0) return { editionIds, aggArr: [] as { team_id: string; total_matches: number; total_wins: number; total_draws: number; total_goals: number; team: { full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null } }[] };
 
   let teamStatsQuery = ctx.supabase
     .from("team_edition_stats")
@@ -377,10 +377,10 @@ async function fetchTeamEditionAgg(ctx: HallCtx) {
   }
 
   const teamIds = Array.from(teamAgg.keys());
-  let teamsQuery = ctx.supabase.from("teams").select("id, full_name, abbreviation, logo_url, gender").in("id", teamIds).eq("organization_id", ctx.orgId).eq("is_virtual", false);
+  let teamsQuery = ctx.supabase.from("teams").select("id, full_name, short_name, abbreviation, logo_url, gender").in("id", teamIds).eq("organization_id", ctx.orgId).eq("is_virtual", false);
   if (ctx.genderDb) teamsQuery = teamsQuery.eq("gender", ctx.genderDb);
   const { data: teamsData } = await teamsQuery;
-  const teamsMap = new Map((teamsData ?? []).map((t: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
+  const teamsMap = new Map((teamsData ?? []).map((t: { id: string; full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
 
   const aggArr = Array.from(teamAgg.entries())
     .filter(([id]) => teamsMap.has(id))
@@ -419,8 +419,8 @@ async function fetchTeamTitles(ctx: HallCtx): Promise<TeamEntry[]> {
 
   const teamIds = [...tituloCount.keys()];
   if (teamIds.length === 0) return [];
-  const { data: teamsData } = await ctx.supabase.from("teams").select("id, full_name, abbreviation, logo_url").in("id", teamIds).eq("organization_id", ctx.orgId).eq("is_virtual", false);
-  const teamsMap = new Map((teamsData ?? []).map((t: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
+  const { data: teamsData } = await ctx.supabase.from("teams").select("id, full_name, short_name, abbreviation, logo_url").in("id", teamIds).eq("organization_id", ctx.orgId).eq("is_virtual", false);
+  const teamsMap = new Map((teamsData ?? []).map((t: { id: string; full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
 
   return [...tituloCount.entries()]
     .sort((a, b) => b[1] - a[1])
@@ -449,11 +449,11 @@ async function fetchWinStreak(ctx: HallCtx): Promise<TeamEntry[]> {
   const streakEditionIds = [...new Set(filtered.map((r) => r.edition_id))];
 
   const [teamsRes, editionsRes] = await Promise.all([
-    ctx.supabase.from("teams").select("id, full_name, abbreviation, logo_url").in("id", streakTeamIds).eq("is_virtual", false),
+    ctx.supabase.from("teams").select("id, full_name, short_name, abbreviation, logo_url").in("id", streakTeamIds).eq("is_virtual", false),
     ctx.supabase.from("competition_editions").select("id, competitions(short_name, full_name), seasons(name)").in("id", streakEditionIds),
   ]);
 
-  const teamsMap = new Map((teamsRes.data ?? []).map((t: { id: string; full_name: string; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
+  const teamsMap = new Map((teamsRes.data ?? []).map((t: { id: string; full_name: string; short_name: string | null; abbreviation: string | null; logo_url: string | null }) => [t.id, t]));
   const editionsMap = new Map((editionsRes.data ?? []).map((e: { id: string; competitions?: { short_name?: string; full_name?: string }; seasons?: { name?: string } }) => {
     const compName = e.competitions?.short_name ?? e.competitions?.full_name ?? "";
     const seasonName = e.seasons?.name ?? "";

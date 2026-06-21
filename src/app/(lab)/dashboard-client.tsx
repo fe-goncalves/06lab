@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Dice6, Search, Bell, Calendar, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { SearchModal } from "@/app/(lab)/components/search/SearchModal";
+import { LAB_ACCENT, labAccentRgba } from "@/lib/lab-theme";
 
 type Team = {
   id: string;
@@ -107,10 +108,10 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  scheduled: "#A6A6A6",
-  ongoing: "#BFF205",
-  finished: "#A6A6A6",
-  postponed: "#FF4444",
+  scheduled: "var(--color-text-secondary)",
+  ongoing: "var(--color-brand)",
+  finished: "var(--color-text-secondary)",
+  postponed: "var(--color-danger)",
 };
 
 export default function DashboardClient({
@@ -369,18 +370,18 @@ export default function DashboardClient({
             type="button"
             onClick={() => setActiveTab("dashboard")}
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeTab === "dashboard" ? "var(--color-brand)" : "#A6A6A6" }}
+            style={{ color: activeTab === "dashboard" ? "var(--color-brand)" : "var(--color-text-secondary)" }}
           >
-            <Dice6 size={16} strokeWidth={2} style={{ color: activeTab === "dashboard" ? "var(--color-brand)" : "#A6A6A6" }} />
+            <Dice6 size={16} strokeWidth={2} style={{ color: activeTab === "dashboard" ? "var(--color-brand)" : "var(--color-text-secondary)" }} />
             DASHBOARD
           </button>
           <button
             type="button"
             onClick={() => setActiveTab("jogos")}
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeTab === "jogos" ? "var(--color-brand)" : "#A6A6A6" }}
+            style={{ color: activeTab === "jogos" ? "var(--color-brand)" : "var(--color-text-secondary)" }}
           >
-            <Calendar size={16} strokeWidth={2} style={{ color: activeTab === "jogos" ? "var(--color-brand)" : "#A6A6A6" }} />
+            <Calendar size={16} strokeWidth={2} style={{ color: activeTab === "jogos" ? "var(--color-brand)" : "var(--color-text-secondary)" }} />
             JOGOS
           </button>
         </div>
@@ -392,7 +393,7 @@ export default function DashboardClient({
             type="button"
             onClick={() => setSearchOpen(true)}
             className="transition-opacity hover:opacity-70"
-            style={{ color: "#A6A6A6" }}
+            style={{ color: "var(--color-text-secondary)" }}
             title="Buscar (Ctrl+K)"
           >
             <Search size={17} strokeWidth={2} />
@@ -404,13 +405,13 @@ export default function DashboardClient({
               type="button"
               onClick={() => setShowNotif(v => !v)}
               className="relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors"
-              style={{ borderColor: "var(--color-border)", color: "#A6A6A6" }}
+              style={{ borderColor: "var(--color-border)", color: "var(--color-text-secondary)" }}
             >
               <Bell size={16} strokeWidth={2} />
               {unreadCount > 0 && (
                 <span
                   className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-xs font-bold"
-                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+                  style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
                 >
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
@@ -508,11 +509,11 @@ export default function DashboardClient({
             <div className="mt-6 flex items-center gap-3">
               <button type="button" onClick={handleRefresh} disabled={refreshing}
                 className="font-mono text-xs transition-opacity hover:opacity-70 disabled:opacity-40"
-                style={{ color: "#A6A6A6" }}>
+                style={{ color: "var(--color-text-secondary)" }}>
                 {refreshing ? "ATUALIZANDO..." : "ATUALIZAR DADOS"}
               </button>
               {updatedAt && (
-                <span className="font-mono text-xs" style={{ color: "#555" }}>
+                <span className="font-mono text-xs" style={{ color: "var(--color-kbd-text)" }}>
                   Última atualização: {new Date(updatedAt).toLocaleString("pt-BR")}
                 </span>
               )}
@@ -552,7 +553,7 @@ export default function DashboardClient({
                     >
                       <span
                         className="font-mono text-xs"
-                        style={{ color: isSelected ? "var(--color-background)" : "#A6A6A6" }}
+                        style={{ color: isSelected ? "var(--color-background)" : "var(--color-text-secondary)" }}
                       >
                         {DAYS_SHORT[(day.getDay() + 6) % 7].toUpperCase()}
                       </span>
@@ -564,7 +565,7 @@ export default function DashboardClient({
                       </span>
                       <span
                         className="font-mono text-xs"
-                        style={{ color: isSelected ? "var(--color-background)" : "#555" }}
+                        style={{ color: isSelected ? "var(--color-on-brand)" : "var(--color-inactive-label)" }}
                       >
                         {MONTHS_SHORT[day.getMonth()]}
                       </span>
@@ -588,7 +589,7 @@ export default function DashboardClient({
           <div className="flex-1 overflow-y-auto px-8 py-6">
             {loadingMatches ? (
               <div className="flex items-center justify-center py-16">
-                <p className="font-mono text-sm" style={{ color: "#A6A6A6" }}>Carregando...</p>
+                <p className="font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>Carregando...</p>
               </div>
             ) : Object.keys(matchesByCompetition).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
@@ -598,7 +599,7 @@ export default function DashboardClient({
                 <p className="font-display text-xl" style={{ color: "var(--color-text-primary)" }}>
                   Sem partidas
                 </p>
-                <p className="mt-2 font-mono text-sm" style={{ color: "#A6A6A6" }}>
+                <p className="mt-2 font-mono text-sm" style={{ color: "var(--color-text-secondary)" }}>
                   Nenhuma partida agendada para {selectedDate.getDate()} de {MONTHS[selectedDate.getMonth()].toLowerCase()}.
                 </p>
               </div>
@@ -616,7 +617,7 @@ export default function DashboardClient({
                       <p className="font-mono text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
                         {group.compName.toUpperCase()}
                       </p>
-                      <span className="font-mono text-xs" style={{ color: "#555" }}>
+                      <span className="font-mono text-xs" style={{ color: "var(--color-kbd-text)" }}>
                         {group.matches.length} {group.matches.length === 1 ? "partida" : "partidas"}
                       </span>
                     </div>
@@ -630,7 +631,7 @@ export default function DashboardClient({
                         <Link
                           key={m.id}
                           href={`/partidas/${m.id}`}
-                          className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[rgba(255,255,255,0.03)]"
+                          className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-[var(--color-hover-bg-subtle)]"
                           style={{
                             borderTop: idx > 0 ? `1px solid var(--color-border)` : "none",
                           }}
@@ -639,12 +640,12 @@ export default function DashboardClient({
                           <div className="w-14 shrink-0 text-center">
                             <p
                               className="font-mono text-xs font-bold"
-                              style={{ color: STATUS_COLOR[m.status] ?? "#A6A6A6" }}
+                              style={{ color: STATUS_COLOR[m.status] ?? "var(--color-text-secondary)" }}
                             >
                               {STATUS_LABEL[m.status] ?? m.status.toUpperCase()}
                             </p>
                             {m.match_time && m.status === "scheduled" && (
-                              <p className="font-mono text-xs" style={{ color: "#555" }}>
+                              <p className="font-mono text-xs" style={{ color: "var(--color-kbd-text)" }}>
                                 {m.match_time.slice(0, 5)}
                               </p>
                             )}
@@ -664,7 +665,7 @@ export default function DashboardClient({
                                   color: m.status === "finished" && m.score_a > m.score_b
                                     ? "var(--color-text-primary)"
                                     : m.status === "finished"
-                                    ? "#A6A6A6"
+                                    ? "var(--color-text-secondary)"
                                     : "var(--color-text-primary)",
                                   fontWeight: m.status === "finished" && m.score_a > m.score_b ? 600 : 400,
                                 }}>
@@ -673,7 +674,7 @@ export default function DashboardClient({
                               </div>
                               <span
                                 className="font-display text-lg font-bold shrink-0"
-                                style={{ color: m.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}
+                                style={{ color: m.status === "scheduled" ? "var(--color-inactive-label)" : "var(--color-text-primary)" }}
                               >
                                 {m.status === "scheduled" ? "-" : m.score_a}
                               </span>
@@ -691,7 +692,7 @@ export default function DashboardClient({
                                   color: m.status === "finished" && m.score_b > m.score_a
                                     ? "var(--color-text-primary)"
                                     : m.status === "finished"
-                                    ? "#A6A6A6"
+                                    ? "var(--color-text-secondary)"
                                     : "var(--color-text-primary)",
                                   fontWeight: m.status === "finished" && m.score_b > m.score_a ? 600 : 400,
                                 }}>
@@ -700,7 +701,7 @@ export default function DashboardClient({
                               </div>
                               <span
                                 className="font-display text-lg font-bold shrink-0"
-                                style={{ color: m.status === "scheduled" ? "#555" : "var(--color-text-primary)" }}
+                                style={{ color: m.status === "scheduled" ? "var(--color-inactive-label)" : "var(--color-text-primary)" }}
                               >
                                 {m.status === "scheduled" ? "-" : m.score_b}
                               </span>
@@ -818,7 +819,7 @@ function CalendarModal({
 
         <div className="mb-2 grid grid-cols-7 gap-1">
           {DAYS_MODAL.map((label) => (
-            <div key={label} className="text-center font-mono text-[11px]" style={{ color: "#A6A6A6" }}>
+            <div key={label} className="text-center font-mono text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
               {label}
             </div>
           ))}
@@ -840,7 +841,7 @@ function CalendarModal({
                 className="flex h-12 flex-col items-center justify-center rounded-md transition-colors"
                 style={{
                   backgroundColor: isSelected ? "var(--color-brand)" : "transparent",
-                  opacity: isCurrentMonth ? 1 : 0.35,
+                  opacity: isCurrentMonth ? 1 : "var(--calendar-muted-opacity)",
                 }}
               >
                 <span
@@ -868,7 +869,7 @@ function CalendarModal({
           <button type="button" onClick={onGoToday} className="font-mono text-xs" style={{ color: "var(--color-brand)" }}>
             Hoje
           </button>
-          <p className="font-mono text-xs" style={{ color: "#A6A6A6" }}>
+          <p className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
             • Dias com partidas
           </p>
         </div>
@@ -887,16 +888,15 @@ function CalendarModal({
 
 function TeamCard({ team }: { team: Team }) {
   const [hovered, setHovered] = useState(false);
-  const color = team.primary_color ?? "#BFF205";
 
   return (
     <Link
       href={`/equipes/${team.id}`}
       className="relative flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border transition-all duration-200"
       style={{
-        borderColor: hovered ? color : "var(--color-border)",
-        backgroundColor: hovered ? `${color}22` : "transparent",
-        boxShadow: hovered ? `0 0 12px ${color}55` : "none",
+        borderColor: hovered ? LAB_ACCENT : "var(--color-border)",
+        backgroundColor: hovered ? labAccentRgba(0.13) : "transparent",
+        boxShadow: hovered ? `0 0 12px ${labAccentRgba(0.33)}` : "none",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -906,14 +906,14 @@ function TeamCard({ team }: { team: Team }) {
           src={team.logo_url}
           alt={team.abbreviation ?? team.full_name}
           className="h-10 w-10 rounded object-contain transition-all duration-200"
-          style={{ opacity: hovered ? 1 : 0.35 }}
+          style={{ opacity: hovered ? 1 : "var(--thumb-opacity)" }}
         />
       ) : (
         <span
           className="font-mono text-xs font-bold transition-all duration-200"
           style={{
-            color: hovered ? color : "var(--color-text-secondary)",
-            opacity: hovered ? 1 : 0.5,
+            color: hovered ? LAB_ACCENT : "var(--color-text-secondary)",
+            opacity: hovered ? 1 : "var(--thumb-text-opacity)",
           }}
         >
           {team.abbreviation?.slice(0, 3) ?? team.full_name.slice(0, 3)}

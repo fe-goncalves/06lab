@@ -12,14 +12,14 @@ type StaffRole = { id: string; full_name: string };
 const inputStyle: React.CSSProperties = {
   width: "100%",
   padding: "9px 12px",
-  backgroundColor: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.08)",
+  backgroundColor: "var(--color-input-bg)",
+  border: "1px solid var(--color-input-border)",
   borderRadius: 9,
   fontFamily: "var(--font-mono)",
   fontSize: 12,
   color: "var(--color-text-primary)",
   outline: "none",
-  colorScheme: "dark" as any,
+  
 };
 
 const labelStyle: React.CSSProperties = {
@@ -28,7 +28,7 @@ const labelStyle: React.CSSProperties = {
   fontWeight: 700,
   letterSpacing: "0.12em",
   textTransform: "uppercase" as const,
-  color: "rgba(255,255,255,0.35)",
+  color: "var(--color-text-muted)",
   marginBottom: 6,
   display: "block",
 };
@@ -117,7 +117,7 @@ export function NovoMembroModal({
         position: "fixed", inset: 0, zIndex: 50,
         display: "flex", alignItems: "center", justifyContent: "center",
         padding: 16,
-        backgroundColor: "rgba(0,0,0,0.78)",
+        backgroundColor: "var(--color-modal-scrim)",
       }}
       onClick={onClose}
     >
@@ -132,8 +132,8 @@ export function NovoMembroModal({
           maxHeight: "90vh",
           overflowY: "auto",
           borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "#0e0e0e",
+          border: "1px solid var(--color-input-border)",
+          backgroundColor: "var(--color-modal-bg)",
           padding: 24,
         }}
       >
@@ -153,10 +153,10 @@ export function NovoMembroModal({
             onClick={onClose}
             style={{
               width: 28, height: 28, borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.08)",
-              backgroundColor: "rgba(255,255,255,0.04)",
+              border: "1px solid var(--color-input-border)",
+              backgroundColor: "var(--color-input-bg)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", color: "rgba(255,255,255,0.4)",
+              cursor: "pointer", color: "var(--color-icon-muted)",
             }}
           >
             <X size={14} strokeWidth={2} />
@@ -214,12 +214,12 @@ export function NovoMembroModal({
                       ? "1px solid rgba(191,242,5,0.4)"
                       : "1px solid rgba(255,255,255,0.08)",
                     backgroundColor: gender === opt.value
-                      ? "rgba(191,242,5,0.08)"
+                      ? "var(--color-brand-selected-bg)"
                       : "rgba(255,255,255,0.03)",
                     fontFamily: "var(--font-mono)",
                     fontSize: 11,
                     fontWeight: gender === opt.value ? 700 : 400,
-                    color: gender === opt.value ? "#BFF205" : "rgba(255,255,255,0.4)",
+                    color: gender === opt.value ? "var(--color-brand)" : "var(--color-icon-muted)",
                     cursor: "pointer",
                     transition: "all 0.15s",
                   }}
@@ -296,9 +296,9 @@ export function NovoMembroModal({
           {error && (
             <p style={{
               fontFamily: "var(--font-mono)", fontSize: 11,
-              color: "#FF4444",
-              backgroundColor: "rgba(255,68,68,0.07)",
-              border: "1px solid rgba(255,68,68,0.2)",
+              color: "var(--color-danger)",
+              backgroundColor: "var(--color-danger-muted-bg)",
+              border: "1px solid var(--color-danger-muted-border)",
               borderRadius: 8, padding: "8px 12px", margin: 0,
             }}>
               {error}
@@ -314,8 +314,8 @@ export function NovoMembroModal({
               padding: "10px 16px",
               borderRadius: 9,
               border: "none",
-              backgroundColor: loading ? "rgba(191,242,5,0.3)" : "#BFF205",
-              color: "#0a0a0a",
+              backgroundColor: loading ? "var(--color-brand-muted-bg)" : "var(--color-brand)",
+              color: "var(--color-on-brand)",
               fontFamily: "var(--font-mono)",
               fontSize: 12,
               fontWeight: 700,

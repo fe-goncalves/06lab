@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { NovaEquipeModal } from "./nova-equipe-modal";
 import { Plus, SquarePen, Eye, Users } from "lucide-react";
+import { entityColorHexAlpha } from "@/lib/lab-theme";
 
 type Team = {
   id: string;
@@ -15,6 +16,7 @@ type Team = {
   primary_color: string | null;
   secondary_color: string | null;
   founded_year: number | null;
+  is_virtual?: boolean | null;
 };
 
 function normalizeGender(gender: string | null): "male" | "female" | "other" {
@@ -57,15 +59,15 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
             type="button"
             onClick={() => setActiveTab("male")}
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeTab === "male" ? "var(--color-brand)" : "#A6A6A6" }}
+            style={{ color: activeTab === "male" ? "var(--color-brand)" : "var(--color-text-secondary)" }}
           >
-            <Users size={16} strokeWidth={2} style={{ color: activeTab === "male" ? "var(--color-brand)" : "#A6A6A6" }} />
+            <Users size={16} strokeWidth={2} style={{ color: activeTab === "male" ? "var(--color-brand)" : "var(--color-text-secondary)" }} />
             MASCULINO
             <span
               className="font-mono text-xs rounded px-1.5 py-0.5"
               style={{
-                backgroundColor: activeTab === "male" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                color: activeTab === "male" ? "var(--color-brand)" : "#555",
+                backgroundColor: activeTab === "male" ? "var(--color-brand-filter-bg)" : "var(--color-divider-strong)",
+                color: activeTab === "male" ? "var(--color-brand)" : "var(--color-inactive-label)",
               }}
             >
               {maleCount}
@@ -76,15 +78,15 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
             type="button"
             onClick={() => setActiveTab("female")}
             className="flex items-center gap-2 font-mono text-sm transition-opacity"
-            style={{ color: activeTab === "female" ? "var(--color-brand)" : "#A6A6A6" }}
+            style={{ color: activeTab === "female" ? "var(--color-brand)" : "var(--color-text-secondary)" }}
           >
-            <Users size={16} strokeWidth={2} style={{ color: activeTab === "female" ? "var(--color-brand)" : "#A6A6A6" }} />
+            <Users size={16} strokeWidth={2} style={{ color: activeTab === "female" ? "var(--color-brand)" : "var(--color-text-secondary)" }} />
             FEMININO
             <span
               className="font-mono text-xs rounded px-1.5 py-0.5"
               style={{
-                backgroundColor: activeTab === "female" ? "rgba(191,242,5,0.15)" : "rgba(255,255,255,0.06)",
-                color: activeTab === "female" ? "var(--color-brand)" : "#555",
+                backgroundColor: activeTab === "female" ? "var(--color-brand-filter-bg)" : "var(--color-divider-strong)",
+                color: activeTab === "female" ? "var(--color-brand)" : "var(--color-inactive-label)",
               }}
             >
               {femaleCount}
@@ -96,7 +98,7 @@ export default function EquipesClient({ teams: initialTeams }: { teams: Team[] }
           type="button"
           onClick={() => { setEditingTeam(null); setModalOpen(true); }}
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-opacity hover:opacity-80"
-          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}
+          style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}
         >
           <Plus size={15} strokeWidth={2.5} />
           Nova equipe
@@ -166,7 +168,7 @@ function TeamRow({
 }) {
   const [hovered, setHovered] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const neonColor = team.primary_color ?? "var(--color-brand)";
+  const hoverColor = team.primary_color;
 
   return (
     <div
@@ -179,7 +181,7 @@ function TeamRow({
       className="relative overflow-hidden"
       style={{
         borderTop: isFirst ? "none" : "1px solid var(--color-border)",
-        opacity: hovered ? 1 : 0.45,
+        opacity: hovered ? 1 : "var(--list-row-opacity)",
         transition: "opacity 0.15s ease",
       }}
     >
@@ -189,7 +191,7 @@ function TeamRow({
         style={{
           opacity: hovered ? 0.45 : 0,
           transition: "opacity 0.18s ease",
-          background: `radial-gradient(220px circle at ${mousePos.x}px ${mousePos.y}px, ${neonColor}66 0%, transparent 70%)`,
+          background: `radial-gradient(220px circle at ${mousePos.x}px ${mousePos.y}px, ${entityColorHexAlpha(hoverColor, "66")} 0%, transparent 70%)`,
         }}
       />
       <Link
@@ -219,16 +221,17 @@ function TeamRow({
 
         {/* Ações */}
         <div className="flex items-center gap-4 shrink-0">
-          {/* CORRIGIDO: button em vez de Link para evitar <a> aninhado */}
-          <button
-            type="button"
-            title="Editar equipe"
-            className="transition-colors hover:text-[var(--color-brand)]"
-            style={{ color: "var(--color-text-secondary)" }}
-            onClick={e => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
-          >
-            <SquarePen size={17} strokeWidth={1.8} />
-          </button>
+          {!team.is_virtual && (
+            <button
+              type="button"
+              title="Editar equipe"
+              className="transition-colors hover:text-[var(--color-brand)]"
+              style={{ color: "var(--color-text-secondary)" }}
+              onClick={e => { e.preventDefault(); e.stopPropagation(); onEdit(); }}
+            >
+              <SquarePen size={17} strokeWidth={1.8} />
+            </button>
+          )}
           <Link
             href="#"
             title="Ver no 06.score"

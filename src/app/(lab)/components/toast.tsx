@@ -54,7 +54,7 @@ export function ToastContainer() {
           style={{
             backgroundColor: "var(--color-surface)",
             borderColor: item.type === "success"
-              ? "rgba(191,242,5,0.3)"
+              ? "var(--color-brand-muted-bg)"
               : "rgba(255,68,68,0.3)",
             minWidth: "280px",
             maxWidth: "400px",
@@ -63,7 +63,7 @@ export function ToastContainer() {
           {item.type === "success" ? (
             <CheckCircle size={16} strokeWidth={2} style={{ color: "var(--color-brand)", flexShrink: 0 }} />
           ) : (
-            <XCircle size={16} strokeWidth={2} style={{ color: "#FF4444", flexShrink: 0 }} />
+            <XCircle size={16} strokeWidth={2} style={{ color: "var(--color-danger)", flexShrink: 0 }} />
           )}
           <p className="flex-1 font-mono text-xs" style={{ color: "var(--color-text-primary)" }}>
             {item.message}
@@ -72,7 +72,7 @@ export function ToastContainer() {
             type="button"
             onClick={() => dismiss(item.id)}
             className="shrink-0 transition-opacity hover:opacity-70"
-            style={{ color: "#A6A6A6" }}
+            style={{ color: "var(--color-text-secondary)" }}
           >
             <X size={14} strokeWidth={2} />
           </button>

@@ -67,7 +67,7 @@ export default function EdicoesSection({ competitionId, seasons, editions: initi
           </label>
           <button type="button" onClick={handleCreate} disabled={loading || !seasonId}
             className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
             {loading ? "Criando…" : "Criar edição"}
           </button>
           {error && <p className="w-full text-sm" style={{ color: "var(--color-danger)" }}>{error}</p>}

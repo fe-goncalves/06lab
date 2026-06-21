@@ -78,3 +78,30 @@ export async function deletarCategoriaGlobal(
   revalidatePath("/categorias");
   return { success: true };
 }
+
+export async function reordenarCategoriasGlobal(
+  orderedIds: string[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: profile } = await supabase
+    .from("user_profiles").select("organization_id")
+    .eq("auth_user_id", user.id).maybeSingle();
+
+  if (!profile?.organization_id) return { error: "Organização não encontrada." };
+  if (orderedIds.length === 0) return { error: "Lista vazia." };
+
+  for (let i = 0; i < orderedIds.length; i++) {
+    const { error } = await supabase
+      .from("categories")
+      .update({ display_order: i + 1 })
+      .eq("id", orderedIds[i])
+      .eq("organization_id", profile.organization_id);
+    if (error) return { error: error.message };
+  }
+
+  revalidatePath("/categorias");
+  return { success: true };
+}

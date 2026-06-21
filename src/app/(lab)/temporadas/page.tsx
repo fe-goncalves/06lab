@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { OrgGestaoPageShell } from "@/app/(lab)/components/org-gestao-page-shell";
 import TemporadasClient from "./temporadas-client";
 
 export default async function TemporadasPage() {
@@ -25,5 +26,9 @@ export default async function TemporadasPage() {
       .order("name", { ascending: true }),
   ]);
 
-  return <TemporadasClient years={years ?? []} seasons={seasons ?? []} />;
+  return (
+    <OrgGestaoPageShell>
+      <TemporadasClient years={years ?? []} seasons={seasons ?? []} />
+    </OrgGestaoPageShell>
+  );
 }

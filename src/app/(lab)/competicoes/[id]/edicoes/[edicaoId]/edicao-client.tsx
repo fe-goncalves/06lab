@@ -229,7 +229,7 @@ export default function EdicaoClient({
           </label>
           <button type="button" onClick={handleSaveConfig} disabled={savingConfig}
             className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+            style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
             {savingConfig ? "Salvando…" : "Salvar configurações"}
           </button>
         </div>
@@ -263,7 +263,7 @@ export default function EdicaoClient({
             </label>
             <button type="button" onClick={handleAddWindow} disabled={savingWindow}
               className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
               {savingWindow ? "Salvando…" : "Adicionar"}
             </button>
             {windowError && <p className="w-full text-sm" style={{ color: "var(--color-danger)" }}>{windowError}</p>}
@@ -322,7 +322,7 @@ export default function EdicaoClient({
             </label>
             <button type="button" onClick={handleAddTeam} disabled={addingTeam || !selectedTeamId}
               className="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+              style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
               {addingTeam ? "Adicionando…" : "Adicionar"}
             </button>
             {teamError && <p className="w-full text-sm" style={{ color: "var(--color-danger)" }}>{teamError}</p>}
@@ -398,7 +398,7 @@ export default function EdicaoClient({
                   </div>
                   {phase.is_current && (
                     <span className="rounded px-2 py-0.5 text-xs font-mono"
-                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-background)" }}>
+                      style={{ backgroundColor: "var(--color-brand)", color: "var(--color-on-brand)" }}>
                       atual
                     </span>
                   )}

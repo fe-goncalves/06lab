@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Breadcrumb from "@/app/(lab)/components/breadcrumb";
 import { toast } from "@/app/(lab)/components/toast";
 import {
   editarCompeticao,
@@ -11,10 +10,24 @@ import {
   editarEdicaoNaConfiguracao,
   deletarEdicao,
   atualizarOrdemEdicoesAction,
+  desativarCompeticao,
+  reativarCompeticao,
+  excluirCompeticao,
 } from "../../actions";
 import { Plus, Trash2, X, Pencil, GripVertical } from "lucide-react";
 import { LabSelect } from "@/app/(lab)/components/lab-select";
+import { LabSwitch } from "@/app/(lab)/components/lab-switch";
+import { GenderSwitch, normalizePersonGender } from "@/app/(lab)/components/gender-switch";
 import { ImageCropUpload } from "@/app/(lab)/components/image-crop-upload";
+import { EntityHubShell } from "@/app/(lab)/components/entity-hub-shell";
+import {
+  modalCloseButtonStyle,
+  modalHeaderDividerStyle,
+  modalOverlayStyle,
+  modalPanelStyle,
+  secondaryButtonStyle,
+} from "@/lib/lab-ui-styles";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -24,6 +37,7 @@ type Competition = {
   category_id: string | null; division_above_ids: string | null;
   division_below_ids: string | null; division_same_ids: string | null;
   home_priority: number | null;
+  is_active?: boolean | null;
 };
 
 type OtherCompetition = { id: string; full_name: string; short_name: string | null; logo_url: string | null };
@@ -38,12 +52,27 @@ type Edition = {
 };
 type Season = { id: string; name: string; year_value: number };
 
+type DeleteCheck = { canDelete: boolean; reasons: string[] };
+
 type Props = {
   competition: Competition;
   allCompetitions: OtherCompetition[];
   globalCategories: GlobalCategory[];
   editions: Edition[];
   seasons: Season[];
+  deleteCheck: DeleteCheck;
+  genderLocked: boolean;
+  supportsLifecycle: boolean;
+};
+
+type EditionFormData = {
+  seasonId: string;
+  customName: string;
+  status: string;
+  isCurrent: boolean;
+  startDate: string;
+  endDate: string;
+  isHidden: boolean;
 };
 
 // ─── Estilos compartilhados ───────────────────────────────────────────────────
@@ -51,13 +80,13 @@ type Props = {
 const fieldLabel: React.CSSProperties = {
   fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800,
   letterSpacing: "0.12em", textTransform: "uppercase",
-  color: "rgba(255,255,255,0.4)", display: "block", marginBottom: 6,
+  color: "var(--color-icon-muted)", display: "block", marginBottom: 6,
 };
 
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "9px 12px", borderRadius: 9,
-  border: "1px solid rgba(255,255,255,0.08)",
-  backgroundColor: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--color-input-border)",
+  backgroundColor: "var(--color-input-bg)",
   color: "var(--color-text-primary)",
   fontFamily: "var(--font-mono)", fontSize: 12,
   outline: "none", boxSizing: "border-box",
@@ -66,23 +95,23 @@ const inputStyle: React.CSSProperties = {
 
 const cardStyle: React.CSSProperties = {
   borderRadius: 16,
-  border: "1px solid rgba(255,255,255,0.06)",
-  backgroundColor: "rgba(255,255,255,0.03)",
+  border: "1px solid var(--color-divider-strong)",
+  backgroundColor: "var(--color-hover-bg-subtle)",
   padding: 20,
 };
 
 function focusBrand(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "#BFF205";
+  e.currentTarget.style.borderColor = "var(--color-brand)";
 }
 
 function blurBrand(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+  e.currentTarget.style.borderColor = "var(--color-input-border)";
 }
 
 function SectionHeader({ label }: { label: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205" }}>
+      <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-brand)" }}>
         {label}
       </span>
       <div style={{ flex: 1, height: 1, background: "linear-gradient(to right, rgba(191,242,5,0.25), transparent)" }} />
@@ -125,14 +154,14 @@ function CompetitionAvatar({ comp }: { comp: OtherCompetition }) {
   return (
     <div style={{
       width: 32, height: 32, borderRadius: 8, overflow: "hidden", flexShrink: 0,
-      border: "1px solid rgba(255,255,255,0.08)",
-      backgroundColor: "rgba(255,255,255,0.04)",
+      border: "1px solid var(--color-input-border)",
+      backgroundColor: "var(--color-input-bg)",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       {comp.logo_url ? (
         <img src={comp.logo_url} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
       ) : (
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.35)" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700, color: "var(--color-text-muted)" }}>
           {label.slice(0, 2).toUpperCase()}
         </span>
       )}
@@ -160,10 +189,10 @@ function DivisionLinkSection({
   return (
     <div style={cardStyle}>
       <SectionHeader label={label} />
-      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 14, marginTop: -8 }}>{desc}</p>
+      <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-faint)", marginBottom: 14, marginTop: -8 }}>{desc}</p>
 
       {linkedIds.length === 0 ? (
-        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)", margin: 0 }}>
+        <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-hint)", margin: 0 }}>
           Nenhuma competição vinculada.
         </p>
       ) : (
@@ -175,26 +204,26 @@ function DivisionLinkSection({
               <div key={id} style={{
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "8px 10px", borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.06)",
-                backgroundColor: "rgba(255,255,255,0.02)",
+                border: "1px solid var(--color-divider-strong)",
+                backgroundColor: "var(--color-hover-bg-subtle)",
               }}>
                 {comp ? <CompetitionAvatar comp={comp} /> : (
-                  <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "rgba(255,255,255,0.04)", flexShrink: 0 }} />
+                  <div style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: "var(--color-input-bg)", flexShrink: 0 }} />
                 )}
                 <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {displayName}
                 </span>
                 <button type="button" onClick={() => onEdit(id)} title="Alterar nível" style={{
                   padding: 6, borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                  border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
-                  color: "rgba(255,255,255,0.35)",
+                  border: "1px solid var(--color-input-border)", backgroundColor: "transparent",
+                  color: "var(--color-text-muted)",
                 }}>
                   <Pencil size={13} />
                 </button>
                 <button type="button" onClick={() => onRemove(id)} title="Remover vínculo" style={{
                   padding: 6, borderRadius: 8, cursor: "pointer", flexShrink: 0,
-                  border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
-                  color: "rgba(255,255,255,0.35)",
+                  border: "1px solid var(--color-input-border)", backgroundColor: "transparent",
+                  color: "var(--color-text-muted)",
                 }}>
                   <X size={13} />
                 </button>
@@ -257,7 +286,7 @@ function DivisionLinkModal({
   return (
     <div
       style={{
-        position: "fixed", inset: 0, zIndex: 60,
+        position: "fixed", inset: 0, zIndex: 200,
         display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
         backgroundColor: "rgba(0,0,0,0.75)",
       }}
@@ -268,31 +297,31 @@ function DivisionLinkModal({
         aria-modal="true"
         style={{
           width: "100%", maxWidth: 480, borderRadius: 16,
-          border: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "#0e0e0e", overflow: "hidden",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
+          border: "1px solid var(--color-input-border)",
+          backgroundColor: "var(--color-modal-bg)", overflow: "hidden",
+          boxShadow: "var(--color-modal-shadow)",
           maxHeight: "85vh", display: "flex", flexDirection: "column",
         }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{
-          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)",
+          padding: "14px 18px", borderBottom: "1px solid var(--color-divider-strong)",
           display: "flex", alignItems: "center", justifyContent: "space-between",
           backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0,
         }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "var(--color-brand)", margin: 0 }}>
               {mode === "add" ? "Vincular competição" : "Alterar nível"}
             </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-faint)", margin: 0, marginTop: 2 }}>
               Busque e selecione o nível hierárquico
             </p>
           </div>
           <button type="button" onClick={onClose} style={{
             width: 28, height: 28, borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
+            border: "1px solid var(--color-input-border-strong)", backgroundColor: "transparent",
             display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", color: "rgba(255,255,255,0.4)",
+            cursor: "pointer", color: "var(--color-icon-muted)",
           }}>
             <X size={14} strokeWidth={2} />
           </button>
@@ -316,7 +345,7 @@ function DivisionLinkModal({
               </div>
               <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 4, minHeight: 120, maxHeight: 240 }}>
                 {available.length === 0 ? (
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", margin: 0, padding: "12px 0" }}>
+                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text-faint)", margin: 0, padding: "12px 0" }}>
                     Nenhuma competição disponível.
                   </p>
                 ) : available.map(c => (
@@ -324,11 +353,11 @@ function DivisionLinkModal({
                     style={{
                       display: "flex", alignItems: "center", gap: 10, width: "100%",
                       padding: "9px 10px", borderRadius: 10, cursor: "pointer", textAlign: "left",
-                      border: `1px solid ${selectedId === c.id ? "rgba(191,242,5,0.35)" : "rgba(255,255,255,0.06)"}`,
-                      backgroundColor: selectedId === c.id ? "rgba(191,242,5,0.08)" : "transparent",
+                      border: `1px solid ${selectedId === c.id ? "var(--color-brand-border)" : "var(--color-divider-strong)"}`,
+                      backgroundColor: selectedId === c.id ? "var(--color-brand-selected-bg)" : "transparent",
                     }}
-                    onMouseEnter={e => { if (selectedId !== c.id) e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.04)"; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === c.id ? "rgba(191,242,5,0.08)" : "transparent"; }}
+                    onMouseEnter={e => { if (selectedId !== c.id) e.currentTarget.style.backgroundColor = "var(--color-hover-bg)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = selectedId === c.id ? "var(--color-brand-selected-bg)" : "transparent"; }}
                   >
                     <CompetitionAvatar comp={c} />
                     <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -343,7 +372,7 @@ function DivisionLinkModal({
           {mode === "edit" && selectedComp && (
             <div style={{
               display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10,
-              border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.02)",
+              border: "1px solid var(--color-divider-strong)", backgroundColor: "var(--color-hover-bg-subtle)",
             }}>
               <CompetitionAvatar comp={selectedComp} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 600, color: "var(--color-text-primary)" }}>
@@ -360,9 +389,9 @@ function DivisionLinkModal({
                   <button key={lvl} type="button" onClick={() => setLevel(lvl)}
                     style={{
                       padding: "8px 14px", borderRadius: 9, cursor: "pointer",
-                      border: `1px solid ${level === lvl ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`,
+                      border: `1px solid ${level === lvl ? "var(--color-brand-border)" : "var(--color-input-border)"}`,
                       backgroundColor: level === lvl ? "rgba(191,242,5,0.12)" : "transparent",
-                      color: level === lvl ? "#BFF205" : "rgba(255,255,255,0.4)",
+                      color: level === lvl ? "var(--color-brand)" : "var(--color-icon-muted)",
                       fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: level === lvl ? 800 : 500,
                       letterSpacing: "0.06em", textTransform: "uppercase",
                     }}>
@@ -374,11 +403,11 @@ function DivisionLinkModal({
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid var(--color-hover-bg)", flexShrink: 0 }}>
           <button type="button" onClick={onClose} style={{
             flex: 1, padding: 10, borderRadius: 9,
-            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
-            color: "rgba(255,255,255,0.4)",
+            border: "1px solid var(--color-input-border-strong)", backgroundColor: "transparent",
+            color: "var(--color-icon-muted)",
             fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
             letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer",
           }}>
@@ -386,8 +415,8 @@ function DivisionLinkModal({
           </button>
           <button type="button" onClick={handleConfirm} disabled={!selectedId || !level} style={{
             flex: 2, padding: 10, borderRadius: 9, border: "none",
-            backgroundColor: !selectedId || !level ? "rgba(191,242,5,0.3)" : "#BFF205",
-            color: "#0a0a0a", cursor: !selectedId || !level ? "not-allowed" : "pointer",
+            backgroundColor: !selectedId || !level ? "var(--color-brand-muted-bg)" : "var(--color-brand)",
+            color: "var(--color-on-brand)", cursor: !selectedId || !level ? "not-allowed" : "pointer",
             fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
             letterSpacing: "0.08em", textTransform: "uppercase",
           }}>
@@ -446,7 +475,7 @@ const EDITION_STATUS_OPTIONS = [
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  planned: "#A6A6A6", ongoing: "#BFF205", closed: "#555",
+  planned: "var(--color-text-secondary)", ongoing: "var(--color-brand)", closed: "#555",
 };
 
 // ─── Modal de criação/edição de edição ────────────────────────────────────────
@@ -464,193 +493,174 @@ function EdicaoModal({
   usedSeasonIds: Set<string>;
   initial?: Edition;
   onClose: () => void;
-  onSave: (data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) => Promise<void>;
+  onSave: (data: EditionFormData) => Promise<void>;
 }) {
   const availableSeasons = mode === "create"
-    ? seasons.filter(s => !usedSeasonIds.has(s.id))
+    ? seasons.filter((s) => !usedSeasonIds.has(s.id))
     : seasons;
 
   const [seasonId, setSeasonId] = useState(
-    mode === "edit" ? (initial?.season_id ?? "") : (availableSeasons[0]?.id ?? "")
+    mode === "edit" ? (initial?.season_id ?? "") : (availableSeasons[0]?.id ?? ""),
   );
   const [customName, setCustomName] = useState(initial?.custom_name ?? "");
   const [status, setStatus] = useState(initial?.status ?? "planned");
   const [isCurrent, setIsCurrent] = useState(initial?.is_current ?? false);
+  const [isHidden, setIsHidden] = useState(initial?.is_hidden ?? false);
   const [startDate, setStartDate] = useState(toDateInputValue(initial?.start_date));
   const [endDate, setEndDate] = useState(toDateInputValue(initial?.end_date));
   const [saving, setSaving] = useState(false);
 
-  const selectedSeason = seasons.find(s => s.id === seasonId);
-  const displayName = customName.trim() || (selectedSeason ? selectedSeason.name + (selectedSeason.year_value ? " " + selectedSeason.year_value : "") : "");
+  const selectedSeason = seasons.find((s) => s.id === seasonId);
+  const displayName = customName.trim()
+    || (selectedSeason ? `${selectedSeason.name}${selectedSeason.year_value ? ` ${selectedSeason.year_value}` : ""}` : "");
 
   async function handleSubmit() {
     setSaving(true);
-    await onSave({ seasonId, customName, status, isCurrent, startDate, endDate });
+    await onSave({ seasonId, customName, status, isCurrent, startDate, endDate, isHidden });
     setSaving(false);
   }
 
   const canSubmit = !(mode === "create" && availableSeasons.length === 0);
 
   return (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 50,
-        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
-        backgroundColor: "rgba(0,0,0,0.75)",
-      }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-    >
+    <div style={{ ...modalOverlayStyle, zIndex: 200 }} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div
         role="dialog"
         aria-modal="true"
-        style={{
-          width: "100%", maxWidth: 440, borderRadius: 16,
-          border: "1px solid rgba(255,255,255,0.08)",
-          backgroundColor: "#0e0e0e", overflow: "hidden",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.8)",
-          maxHeight: "92vh", display: "flex", flexDirection: "column",
-        }}
-        onClick={e => e.stopPropagation()}
+        style={{ ...modalPanelStyle, maxWidth: 480, maxHeight: "92vh", display: "flex", flexDirection: "column" }}
+        onClick={(e) => e.stopPropagation()}
       >
         <div style={{
-          padding: "14px 18px", borderBottom: "1px solid rgba(255,255,255,0.07)",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          backgroundColor: "rgba(191,242,5,0.03)", flexShrink: 0,
+          padding: "16px 20px",
+          ...modalHeaderDividerStyle,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexShrink: 0,
         }}>
           <div>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.16em", textTransform: "uppercase", color: "#BFF205", margin: 0 }}>
+            <p style={{
+              fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 800,
+              letterSpacing: "0.1em", textTransform: "uppercase",
+              color: "var(--color-text-primary)", margin: 0,
+            }}>
               {mode === "create" ? "Nova edição" : "Editar edição"}
             </p>
-            <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0, marginTop: 2 }}>
+            <p className={styles.hubRowMetaPrimary} style={{ margin: "4px 0 0" }}>
               {mode === "create" ? "Vincule uma temporada a esta competição" : "Atualize os dados da edição"}
             </p>
           </div>
-          <button type="button" onClick={onClose} style={{
-            width: 28, height: 28, borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            cursor: "pointer", color: "rgba(255,255,255,0.4)",
-          }}>
+          <button type="button" onClick={onClose} style={{ ...modalCloseButtonStyle, cursor: "pointer" }}>
             <X size={14} strokeWidth={2} />
           </button>
         </div>
 
-        <div style={{ overflowY: "auto", flex: 1, padding: "16px 18px", display: "flex", flexDirection: "column", gap: 14 }}>
-          <div>
-            <span style={fieldLabel}>Temporada</span>
-            {mode === "create" && availableSeasons.length === 0 ? (
-              <p style={{ ...inputStyle, color: "#A6A6A6", margin: 0 }}>
-                Todas as temporadas já têm edição criada.
-              </p>
-            ) : (
+        <div style={{ padding: "16px 20px", overflowY: "auto", flex: 1 }}>
+          <div className={styles.fieldStack}>
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Temporada</span>
+              {mode === "create" && availableSeasons.length === 0 ? (
+                <p className={styles.fieldHint} style={{ margin: 0 }}>
+                  Todas as temporadas já têm edição criada.
+                </p>
+              ) : (
+                <LabSelect
+                  value={seasonId}
+                  onChange={setSeasonId}
+                  disabled={mode === "edit"}
+                  menuSans
+                  triggerSans
+                  options={(mode === "create" ? availableSeasons : seasons).map((s) => ({
+                    value: s.id,
+                    label: `${s.name}${s.year_value ? ` — ${String(s.year_value)}` : ""}`,
+                  }))}
+                />
+              )}
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.fieldLabel} htmlFor="edicao-custom-name">
+                Nome da edição
+                <span style={{ fontWeight: 400, letterSpacing: "0.04em", color: "var(--hub-body-subtle)", marginLeft: 6 }}>
+                  (opcional)
+                </span>
+              </label>
+              <input
+                id="edicao-custom-name"
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                placeholder={selectedSeason ? `${selectedSeason.name}${selectedSeason.year_value ? ` ${selectedSeason.year_value}` : ""}` : "Ex: 2026 I"}
+                className={styles.input}
+              />
+              {displayName && (
+                <p className={styles.fieldHint} style={{ margin: "6px 0 0" }}>
+                  Será exibido como: <strong>{displayName.toUpperCase()}</strong>
+                </p>
+              )}
+            </div>
+
+            <div className={styles.field}>
+              <span className={styles.fieldLabel}>Status</span>
               <LabSelect
-                value={seasonId}
-                onChange={setSeasonId}
-                disabled={mode === "edit"}
-                style={{ opacity: mode === "edit" ? 0.6 : 1 }}
-                options={(mode === "create" ? availableSeasons : seasons).map((s) => ({
-                  value: s.id,
-                  label: `${s.name}${s.year_value ? ` — ${String(s.year_value)}` : ""}`,
-                }))}
-              />
-            )}
-          </div>
-
-          <div>
-            <span style={fieldLabel}>
-              Nome da edição
-              <span style={{ fontWeight: 400, letterSpacing: "0.06em", color: "rgba(255,255,255,0.25)", marginLeft: 6 }}>(opcional)</span>
-            </span>
-            <input
-              type="text"
-              value={customName}
-              onChange={e => setCustomName(e.target.value)}
-              placeholder={selectedSeason ? selectedSeason.name + (selectedSeason.year_value ? " " + selectedSeason.year_value : "") : "Ex: 2026 I"}
-              style={inputStyle}
-              onFocus={focusBrand}
-              onBlur={blurBrand}
-            />
-            {displayName && (
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 6, marginBottom: 0 }}>
-                Será exibido como: <strong style={{ color: "var(--color-text-primary)" }}>{displayName}</strong>
-              </p>
-            )}
-          </div>
-
-          <div>
-            <span style={fieldLabel}>Status</span>
-            <LabSelect value={status} onChange={setStatus}
-              options={EDITION_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <span style={fieldLabel}>Data de início</span>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                style={{ ...inputStyle, colorScheme: "dark" as const }}
-                onFocus={focusBrand}
-                onBlur={blurBrand}
+                value={status}
+                onChange={setStatus}
+                menuSans
+                triggerSans
+                options={EDITION_STATUS_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
               />
             </div>
-            <div>
-              <span style={fieldLabel}>Data de fim</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                style={{ ...inputStyle, colorScheme: "dark" as const }}
-                onFocus={focusBrand}
-                onBlur={blurBrand}
-              />
-            </div>
-          </div>
 
-          <div
-            style={{
-              display: "flex", alignItems: "flex-start", gap: 12, padding: 12, borderRadius: 10, cursor: "pointer",
-              border: `1px solid ${isCurrent ? "rgba(191,242,5,0.4)" : "rgba(255,255,255,0.08)"}`,
-              backgroundColor: isCurrent ? "rgba(191,242,5,0.05)" : "transparent",
-            }}
-            onClick={() => setIsCurrent(v => !v)}
-          >
-            <div style={{
-              marginTop: 2, width: 16, height: 16, flexShrink: 0, borderRadius: 4,
-              border: `2px solid ${isCurrent ? "#BFF205" : "rgba(255,255,255,0.15)"}`,
-              backgroundColor: isCurrent ? "#BFF205" : "transparent",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {isCurrent && <span style={{ fontSize: 10, color: "#0a0a0a", fontWeight: 900 }}>✓</span>}
+            <div className={styles.fieldRow2}>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel} htmlFor="edicao-start">Data de início</label>
+                <input id="edicao-start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={styles.input} />
+              </div>
+              <div className={styles.field}>
+                <label className={styles.fieldLabel} htmlFor="edicao-end">Data de fim</label>
+                <input id="edicao-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className={styles.input} />
+              </div>
             </div>
-            <div>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>Edição atual</p>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 4, marginBottom: 0 }}>
-                Marca esta como a edição em vigor desta competição. Apenas uma pode ser a atual por vez.
-              </p>
+
+            <div className={styles.toggleRow}>
+              <div>
+                <span className={styles.toggleTitle}>Edição atual</span>
+                <span className={styles.toggleDesc}>
+                  Marca esta como a edição em vigor. Apenas uma pode ser a atual por vez.
+                </span>
+              </div>
+              <LabSwitch checked={isCurrent} onChange={setIsCurrent} variant="glass" />
+            </div>
+
+            <div className={styles.toggleRow}>
+              <div>
+                <span className={styles.toggleTitle}>Visível</span>
+                <span className={styles.toggleDesc}>
+                  Edições ocultas não aparecem no hub nem no 06.score.
+                </span>
+              </div>
+              <LabSwitch checked={!isHidden} onChange={(v) => setIsHidden(!v)} variant="glass" />
             </div>
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: 8, padding: "12px 18px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <button type="button" onClick={onClose} style={{
-            flex: 1, padding: 10, borderRadius: 9,
-            border: "1px solid rgba(255,255,255,0.1)", backgroundColor: "transparent",
-            color: "rgba(255,255,255,0.4)",
-            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 700,
-            letterSpacing: "0.08em", textTransform: "uppercase", cursor: "pointer",
-          }}>
+        <div style={{
+          display: "flex",
+          gap: 8,
+          padding: "12px 20px",
+          borderTop: "1px solid var(--hub-row-divider)",
+          flexShrink: 0,
+        }}>
+          <button type="button" onClick={onClose} style={{ ...secondaryButtonStyle, flex: 1, cursor: "pointer" }}>
             Cancelar
           </button>
-          <button type="button" onClick={handleSubmit} disabled={saving || !canSubmit} style={{
-            flex: 2, padding: 10, borderRadius: 9, border: "none",
-            backgroundColor: saving || !canSubmit ? "rgba(191,242,5,0.3)" : "#BFF205",
-            color: "#0a0a0a",
-            fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-            letterSpacing: "0.08em", textTransform: "uppercase",
-            cursor: saving || !canSubmit ? "not-allowed" : "pointer",
-          }}>
+          <button
+            type="button"
+            onClick={() => void handleSubmit()}
+            disabled={saving || !canSubmit}
+            className={styles.modalPrimaryBtn}
+            style={{ flex: 2 }}
+          >
             {saving ? (mode === "create" ? "Criando…" : "Salvando…") : (mode === "create" ? "Criar edição" : "Salvar")}
           </button>
         </div>
@@ -662,16 +672,17 @@ function EdicaoModal({
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function ConfiguracoesCompeticaoClient({
-  competition, allCompetitions, globalCategories, editions: initialEditions, seasons,
+  competition, allCompetitions, globalCategories, editions: initialEditions, seasons, deleteCheck,
+  genderLocked, supportsLifecycle,
 }: Props) {
   const router = useRouter();
 
-  const [activeTab, setActiveTab] = useState<"geral" | "temporadas">("geral");
+  const [activeTab, setActiveTab] = useState<"geral" | "divisoes" | "temporadas">("geral");
 
   // Geral
   const [fullName, setFullName] = useState(competition.full_name ?? "");
   const [shortName, setShortName] = useState(competition.short_name ?? "");
-  const [gender, setGender] = useState(competition.gender ?? "male");
+  const [gender, setGender] = useState<"male" | "female">(() => normalizePersonGender(competition.gender));
   const [pinned, setPinned] = useState(competition.pinned_in_sidebar ?? false);
   const [primaryColor, setPrimaryColor] = useState(competition.primary_color ?? "");
   const [suggestedColors, setSuggestedColors] = useState<string[]>([]);
@@ -680,8 +691,18 @@ export default function ConfiguracoesCompeticaoClient({
   const [pendingLogo, setPendingLogo] = useState<File | null>(null);
   const [headerLogoUrl, setHeaderLogoUrl] = useState<string | null>(competition.logo_url ?? null);
   const [categoryId, setCategoryId] = useState(competition.category_id ?? "");
-  const [homePriority, setHomePriority] = useState(competition.home_priority ?? 0);
+  const [homePriority] = useState(competition.home_priority ?? 0);
   const [saving, setSaving] = useState(false);
+  const [isActive, setIsActive] = useState(competition.is_active !== false);
+  const [togglingActive, setTogglingActive] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [canDelete, setCanDelete] = useState(deleteCheck.canDelete);
+  const [deleteReasons, setDeleteReasons] = useState(deleteCheck.reasons);
+
+  useEffect(() => {
+    setCanDelete(deleteCheck.canDelete);
+    setDeleteReasons(deleteCheck.reasons);
+  }, [deleteCheck]);
 
   // Divisões
   const [aboveIds, setAboveIds] = useState<string[]>(() => parseIds(competition.division_above_ids));
@@ -747,15 +768,6 @@ export default function ConfiguracoesCompeticaoClient({
       void persistEditionsState(updated);
       return updated;
     });
-  }
-
-  async function toggleEditionHidden(id: string) {
-    const next = editions.map(ed =>
-      ed.id === id ? { ...ed, is_hidden: !ed.is_hidden } : ed,
-    );
-    setEditions(next);
-    const ok = await persistEditionsState(next);
-    if (!ok) setEditions(editions);
   }
 
   async function handlePendingLogoChange(file: File | null) {
@@ -839,8 +851,10 @@ export default function ConfiguracoesCompeticaoClient({
     router.refresh();
   }
 
-  async function handleCreateEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) {
-    const result = await criarEdicaoNaConfiguracao(competition.id, data.seasonId, data.customName, data.isCurrent, data.startDate, data.endDate);
+  async function handleCreateEdition(data: EditionFormData) {
+    const result = await criarEdicaoNaConfiguracao(
+      competition.id, data.seasonId, data.customName, data.isCurrent, data.startDate, data.endDate, data.isHidden,
+    );
     if ("error" in result) { toast("error", result.error); return; }
     const season = seasons.find(s => s.id === data.seasonId);
     const newEd: Edition = {
@@ -849,7 +863,7 @@ export default function ConfiguracoesCompeticaoClient({
       start_date: data.startDate.trim() || null, end_date: data.endDate.trim() || null,
       season_name: season?.name ?? "—", year_value: season?.year_value ?? 0,
       display_order: editions.length + 1,
-      is_hidden: false,
+      is_hidden: data.isHidden,
     };
     setEditions(prev => {
       const updated = data.isCurrent ? prev.map(e => ({ ...e, is_current: false })) : prev;
@@ -859,14 +873,17 @@ export default function ConfiguracoesCompeticaoClient({
     toast("success", "Edição criada.");
   }
 
-  async function handleEditEdition(data: { seasonId: string; customName: string; status: string; isCurrent: boolean; startDate: string; endDate: string }) {
+  async function handleEditEdition(data: EditionFormData) {
     if (!editingEdition) return;
-    const result = await editarEdicaoNaConfiguracao(editingEdition.id, competition.id, data.status, data.customName, data.isCurrent, data.startDate, data.endDate);
+    const result = await editarEdicaoNaConfiguracao(
+      editingEdition.id, competition.id, data.status, data.customName, data.isCurrent, data.startDate, data.endDate, data.isHidden,
+    );
     if ("error" in result) { toast("error", result.error); return; }
     setEditions(prev => prev.map(e => {
       if (e.id === editingEdition.id) return {
         ...e, status: data.status, custom_name: data.customName.trim() || null, is_current: data.isCurrent,
         start_date: data.startDate.trim() || null, end_date: data.endDate.trim() || null,
+        is_hidden: data.isHidden,
       };
       if (data.isCurrent) return { ...e, is_current: false };
       return e;
@@ -883,380 +900,421 @@ export default function ConfiguracoesCompeticaoClient({
     if ("error" in result) { toast("error", result.error); return; }
     setEditions(prev => prev.filter(e => e.id !== id));
     toast("success", "Edição removida.");
+    router.refresh();
+  }
+
+  async function handleToggleActive(next: boolean) {
+    setTogglingActive(true);
+    const result = next
+      ? await reativarCompeticao(competition.id)
+      : await desativarCompeticao(competition.id);
+    setTogglingActive(false);
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    setIsActive(next);
+    if (!next) {
+      setPinned(false);
+      setCanDelete(false);
+      setDeleteReasons((prev) => {
+        if (prev.some((r) => r.includes("desative"))) return prev;
+        return ["desative a competição antes de excluir", ...prev];
+      });
+    } else {
+      const nextReasons = deleteReasons.filter((r) => !r.includes("desative"));
+      setDeleteReasons(nextReasons);
+      setCanDelete(nextReasons.length === 0);
+    }
+    toast("success", next ? "Competição reativada." : "Competição desativada.");
+    router.refresh();
+  }
+
+  async function handleDeleteCompetition() {
+    if (!confirm("Tem certeza? Esta ação é irreversível e remove a competição permanentemente.")) return;
+    setDeleting(true);
+    const result = await excluirCompeticao(competition.id);
+    setDeleting(false);
+    if ("error" in result) {
+      toast("error", result.error);
+      return;
+    }
+    toast("success", "Competição excluída.");
+    router.push("/competicoes");
   }
 
   const tabs = [
     { key: "geral" as const, label: "GERAL" },
     { key: "temporadas" as const, label: "EDIÇÕES" },
+    { key: "divisoes" as const, label: "DIVISÕES" },
   ];
 
+  const genderLabel = gender === "female" ? "Feminino" : "Masculino";
+  const titleLabel = (shortName || fullName || "Competição").toUpperCase();
+  const logoFallback = titleLabel.slice(0, 2);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", backgroundColor: "#0e0e0e" }}>
-
-      {/* Header */}
-      <div style={{ backgroundColor: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <div style={{ padding: "20px 32px 0" }}>
-          <Breadcrumb items={[
-            { label: "Competições", href: "/competicoes" },
-            { label: competition.full_name ?? "Competição", href: "/competicoes/" + competition.id },
-            { label: "Configurações" },
-          ]} />
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 16, marginBottom: 16 }}>
-            <div style={{
-              width: 52, height: 52, borderRadius: 12, overflow: "hidden",
-              border: "2px solid rgba(191,242,5,0.3)",
-              backgroundColor: "rgba(255,255,255,0.04)",
-              display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-            }}>
-              {displayLogo ? (
-                <img src={displayLogo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
-              ) : (
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.3)" }}>
-                  {(shortName || fullName).slice(0, 2).toUpperCase()}
-                </span>
-              )}
-            </div>
-
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 900, color: "var(--color-text-primary)", margin: 0, lineHeight: 1.1 }}>
-                {(fullName || "Competição").toUpperCase()}
-              </h1>
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 3, display: "block" }}>
-                {gender === "male" ? "MASCULINO" : "FEMININO"} · CONFIGURAÇÕES
-              </span>
-            </div>
-
-            {activeTab === "geral" && (
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saving || !fullName.trim()}
-                style={{
-                  padding: "9px 18px", borderRadius: 9, border: "none", flexShrink: 0,
-                  backgroundColor: saving || !fullName.trim() ? "rgba(191,242,5,0.3)" : "#BFF205",
-                  color: "#0a0a0a",
-                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-                  letterSpacing: "0.08em", textTransform: "uppercase",
-                  cursor: saving || !fullName.trim() ? "not-allowed" : "pointer",
-                  transition: "all 0.12s",
-                }}
-              >
-                {saving ? "Salvando…" : "Salvar alterações"}
-              </button>
+    <>
+      <EntityHubShell
+        hubClassName={`${styles.adminHub} ${styles.hubListPage} ${styles.competicaoConfigHub}`}
+        contentClassName={styles.hallMain}
+        breadcrumb={[
+          { label: "Competições", href: "/competicoes" },
+          { label: competition.full_name ?? "Competição", href: `/competicoes/${competition.id}` },
+          { label: "Configurações" },
+        ]}
+        avatar={(
+          <div className={styles.logoSlot}>
+            {displayLogo ? (
+              <img src={displayLogo} alt="" className={styles.logoImg} />
+            ) : (
+              <span className={styles.logoInitials}>{logoFallback}</span>
             )}
           </div>
+        )}
+        title={titleLabel}
+        subtitle={`${genderLabel} · Configurações`}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={(key) => setActiveTab(key as "geral" | "divisoes" | "temporadas")}
+        showSave={activeTab === "geral" || activeTab === "divisoes"}
+        saveFormId="comp-config-form"
+        saving={saving}
+        saveLabel="Salvar alterações"
+      >
+        <form
+          id="comp-config-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleSave();
+          }}
+          style={{ display: "none" }}
+          aria-hidden
+        />
 
-          <div style={{ display: "flex", gap: 24 }}>
-            {tabs.map(tab => (
-              <button key={tab.key} type="button" onClick={() => setActiveTab(tab.key)}
-                style={{
-                  padding: "0 0 12px", border: "none", background: "none", cursor: "pointer",
-                  borderBottom: `2px solid ${activeTab === tab.key ? "#BFF205" : "transparent"}`,
-                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-                  letterSpacing: "0.12em", textTransform: "uppercase",
-                  color: activeTab === tab.key ? "#BFF205" : "rgba(255,255,255,0.3)",
-                  transition: "color 0.12s",
-                }}>
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ flex: 1, padding: "24px 32px" }}>
-
-        {/* ══ GERAL ══ */}
         {activeTab === "geral" && (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, alignItems: "start", maxWidth: 960 }}>
-
-            {/* Identidade Visual */}
-            <div style={cardStyle}>
-              <SectionHeader label="Logo" />
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 20 }}>
-                <ImageCropUpload
-                  value={pendingLogo}
-                  onChange={handlePendingLogoChange}
-                  existingUrl={logoUrl}
-                  label=""
-                  placeholder="Enviar logo"
-                  aspect={1}
-                  accept="image/png,image/webp,image/jpeg"
-                />
+          <div className={styles.contentWide}>
+            <div className={styles.listPanel}>
+              <div className={styles.listPanelHeader}>
+                <div className={styles.listPanelTitle}>
+                  <span className={styles.listPanelName}>Competição</span>
+                </div>
               </div>
+              <div className={`${styles.hubPanelBody} ${styles.fieldStack}`}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+                  <ImageCropUpload
+                    value={pendingLogo}
+                    onChange={handlePendingLogoChange}
+                    existingUrl={logoUrl}
+                    label=""
+                    placeholder="Enviar logo"
+                    aspect={1}
+                    accept="image/png,image/webp,image/jpeg"
+                  />
+                </div>
 
-              <SectionHeader label="Cor principal" />
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                <div style={{
-                  width: 36, height: 36, borderRadius: 9, flexShrink: 0,
-                  border: `2px solid ${primaryColor || "rgba(255,255,255,0.08)"}`,
-                  backgroundColor: primaryColor || "rgba(255,255,255,0.04)",
-                }} />
-                <input type="text" value={primaryColor}
-                  onChange={e => setPrimaryColor(e.target.value)}
-                  onFocus={focusBrand}
-                  onBlur={e => {
-                    blurBrand(e);
-                    let v = e.target.value.trim();
-                    if (v && !v.startsWith("#")) v = "#" + v;
-                    setPrimaryColor(v);
-                  }}
-                  placeholder="#RRGGBB" maxLength={7}
-                  style={{ ...inputStyle, flex: 1 }}
-                />
-                <input type="color"
-                  value={primaryColor && /^#[0-9a-fA-F]{6}$/.test(primaryColor) ? primaryColor : "#000000"}
-                  onChange={e => setPrimaryColor(e.target.value)}
-                  style={{ width: 36, height: 36, flexShrink: 0, cursor: "pointer", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", padding: 2, backgroundColor: "rgba(255,255,255,0.04)" }}
-                />
-                {primaryColor && (
-                  <button type="button" onClick={() => { setPrimaryColor(""); setSuggestedColors([]); }}
-                    style={{ width: 36, height: 36, flexShrink: 0, borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent", color: "rgba(255,255,255,0.4)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <X size={14} />
-                  </button>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel} htmlFor="comp-primary-color">Cor principal</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: 9, flexShrink: 0,
+                      border: `2px solid ${primaryColor || "var(--hub-glass-border)"}`,
+                      backgroundColor: primaryColor || "var(--hub-input-bg)",
+                    }} />
+                    <input
+                      id="comp-primary-color"
+                      type="text"
+                      value={primaryColor}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      onBlur={(e) => {
+                        let v = e.target.value.trim();
+                        if (v && !v.startsWith("#")) v = `#${v}`;
+                        setPrimaryColor(v);
+                      }}
+                      placeholder="#RRGGBB"
+                      maxLength={7}
+                      className={styles.input}
+                    />
+                    <input
+                      type="color"
+                      value={primaryColor && /^#[0-9a-fA-F]{6}$/.test(primaryColor) ? primaryColor : "#000000"}
+                      onChange={(e) => setPrimaryColor(e.target.value)}
+                      style={{ width: 36, height: 36, flexShrink: 0, cursor: "pointer", borderRadius: 9, border: "1px solid var(--hub-glass-border)", padding: 2, background: "transparent" }}
+                      aria-label="Seletor de cor"
+                    />
+                    {primaryColor && (
+                      <button
+                        type="button"
+                        onClick={() => { setPrimaryColor(""); setSuggestedColors([]); }}
+                        className={styles.hubIconActionBtn}
+                        aria-label="Limpar cor"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {extractingColors && (
+                  <p className={styles.fieldHint}>Analisando cores da logo…</p>
+                )}
+                {suggestedColors.length > 0 && (
+                  <div className={styles.field}>
+                    <span className={styles.fieldLabel}>Cores detectadas</span>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {suggestedColors.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setPrimaryColor(c)}
+                          title={c}
+                          style={{
+                            width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
+                            backgroundColor: c,
+                            boxShadow: primaryColor === c
+                              ? "0 0 0 2px var(--color-brand), 0 0 0 4px var(--color-modal-bg)"
+                              : "0 0 0 1px var(--hub-glass-border)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel} htmlFor="comp-full-name">Nome completo</label>
+                  <input
+                    id="comp-full-name"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className={styles.input}
+                    required
+                  />
+                </div>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel} htmlFor="comp-short-name">Nome curto</label>
+                  <input
+                    id="comp-short-name"
+                    type="text"
+                    value={shortName}
+                    onChange={(e) => setShortName(e.target.value)}
+                    className={styles.input}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <span className={styles.fieldLabel}>Gênero</span>
+                  <GenderSwitch
+                    value={gender}
+                    onChange={setGender}
+                    disabled={genderLocked}
+                    hint={genderLocked ? "Não é possível alterar após criar edições nesta competição." : undefined}
+                  />
+                </div>
+                <div className={styles.field}>
+                  <span className={styles.fieldLabel}>Categoria</span>
+                  <LabSelect
+                    value={categoryId}
+                    onChange={setCategoryId}
+                    placeholder="Sem categoria"
+                    menuSans
+                    triggerSans
+                    options={globalCategories.map((cat) => ({ value: cat.id, label: cat.label }))}
+                  />
+                </div>
+                {globalCategories.length === 0 && (
+                  <p className={styles.fieldHint}>Nenhuma categoria cadastrada. Crie em Organização › Gestão.</p>
+                )}
+
+                <div className={styles.toggleRow}>
+                  <div>
+                    <span className={styles.toggleTitle}>Fixar na sidebar</span>
+                    <span className={styles.toggleDesc}>Exibe atalho fixo no menu lateral</span>
+                  </div>
+                  <LabSwitch
+                    checked={pinned}
+                    onChange={setPinned}
+                    disabled={!isActive}
+                    variant="glass"
+                  />
+                </div>
+
+                {supportsLifecycle && (
+                  <div className={styles.toggleRow}>
+                    <div>
+                      <span className={styles.toggleTitle}>Competição ativa</span>
+                      <span className={styles.toggleDesc}>
+                        Competições inativas somem da listagem e não aparecem no hub público
+                      </span>
+                    </div>
+                    <LabSwitch
+                      checked={isActive}
+                      onChange={(v) => void handleToggleActive(v)}
+                      disabled={togglingActive}
+                      variant="glass"
+                    />
+                  </div>
                 )}
               </div>
-              {extractingColors && (
-                <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>Analisando cores da logo…</p>
-              )}
-              {suggestedColors.length > 0 && (
-                <div>
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
-                    Cores detectadas
+            </div>
+
+            {supportsLifecycle && (
+              <div className={styles.dangerZone}>
+                <p className={styles.dangerTitle}>Zona de perigo</p>
+                {canDelete ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleDeleteCompetition()}
+                    disabled={deleting}
+                    className={styles.dangerBtn}
+                  >
+                    {deleting ? "Excluindo…" : "Excluir competição"}
+                  </button>
+                ) : (
+                  <p className={styles.dangerDesc}>
+                    Exclusão indisponível{deleteReasons.length > 0 ? `: ${deleteReasons.join(", ")}.` : "."}
                   </p>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {suggestedColors.map(c => (
-                      <button key={c} type="button" onClick={() => setPrimaryColor(c)} title={c}
-                        style={{
-                          position: "relative", width: 32, height: 32, borderRadius: 8, border: "none", cursor: "pointer",
-                          backgroundColor: c,
-                          boxShadow: primaryColor === c ? "0 0 0 2px #BFF205, 0 0 0 4px #0e0e0e" : "0 0 0 1px rgba(255,255,255,0.15)",
-                        }}>
-                        {primaryColor === c && (
-                          <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900, color: "#fff", textShadow: "0 1px 3px rgba(0,0,0,0.8)" }}>✓</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Dados */}
-            <div style={cardStyle}>
-              <SectionHeader label="Dados" />
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <div>
-                  <span style={fieldLabel}>Nome completo</span>
-                  <input type="text" value={fullName} onChange={e => setFullName(e.target.value)} style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
-                </div>
-                <div>
-                  <span style={fieldLabel}>Nome curto</span>
-                  <input type="text" value={shortName} onChange={e => setShortName(e.target.value)} style={inputStyle} onFocus={focusBrand} onBlur={blurBrand} />
-                </div>
-                <div>
-                  <span style={fieldLabel}>Gênero</span>
-                  <LabSelect value={gender} onChange={setGender} options={[
-                    { value: "male", label: "Masculino" },
-                    { value: "female", label: "Feminino" },
-                  ]} />
-                </div>
-                <div>
-                  <span style={fieldLabel}>Categoria</span>
-                  <LabSelect value={categoryId} onChange={setCategoryId} placeholder="Sem categoria"
-                    options={globalCategories.map((cat) => ({ value: cat.id, label: cat.label }))} />
-                  {globalCategories.length === 0 && (
-                    <p style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 6 }}>
-                      Nenhuma categoria cadastrada. Crie em Configurações do sistema.
-                    </p>
-                  )}
-                </div>
-                <div
-                  style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", paddingTop: 4 }}
-                  onClick={() => setPinned(v => !v)}
-                >
-                  <div style={{
-                    position: "relative", width: 36, height: 20, borderRadius: 10, flexShrink: 0,
-                    backgroundColor: pinned ? "#BFF205" : "rgba(255,255,255,0.1)",
-                    transition: "background-color 0.12s",
-                  }}>
-                    <div style={{
-                      position: "absolute", top: 2, width: 16, height: 16, borderRadius: "50%", backgroundColor: "#fff",
-                      transition: "transform 0.12s",
-                      transform: pinned ? "translateX(18px)" : "translateX(2px)",
-                    }} />
-                  </div>
-                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "var(--color-text-primary)" }}>Fixar na sidebar</span>
-                </div>
-                <div style={{ maxWidth: 160 }}>
-                  <span style={fieldLabel}>Prioridade na home</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={homePriority}
-                    onChange={e => setHomePriority(Number(e.target.value))}
-                    placeholder="0"
-                    style={inputStyle}
-                    onFocus={focusBrand}
-                    onBlur={blurBrand}
-                  />
-                  <p style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 4 }}>Maior = primeiro</p>
-                </div>
+                )}
               </div>
-            </div>
-
+            )}
           </div>
         )}
 
-        {/* ══ EDIÇÕES ══ */}
+        {activeTab === "divisoes" && (
+          <div className={styles.contentWide}>
+            <div className={styles.listPanel}>
+              <div className={styles.listPanelHeader}>
+                <div className={styles.listPanelTitle}>
+                  <span className={styles.listPanelName}>Vínculos de divisão</span>
+                </div>
+                <button type="button" onClick={openDivAddModal} className={styles.saveBtn}>
+                  <Plus size={14} />
+                  Adicionar
+                </button>
+              </div>
+              <div className={`${styles.hubPanelBody} ${styles.fieldStack}`}>
+                <DivisionLinkSection
+                  label="Acima"
+                  desc="Competições de nível superior"
+                  linkedIds={aboveIds}
+                  allCompetitions={allCompetitions}
+                  onEdit={openDivEditModal}
+                  onRemove={(id) => removeLink("above", id)}
+                />
+                <DivisionLinkSection
+                  label="Mesmo nível"
+                  desc="Competições paralelas"
+                  linkedIds={sameIds}
+                  allCompetitions={allCompetitions}
+                  onEdit={openDivEditModal}
+                  onRemove={(id) => removeLink("same", id)}
+                />
+                <DivisionLinkSection
+                  label="Abaixo"
+                  desc="Competições de nível inferior"
+                  linkedIds={belowIds}
+                  allCompetitions={allCompetitions}
+                  onEdit={openDivEditModal}
+                  onRemove={(id) => removeLink("below", id)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === "temporadas" && (
-          <div style={{ maxWidth: 560 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 20 }}>
-              <p style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.35)", margin: 0 }}>
-                Arraste para reordenar. Edições ocultas não aparecem no hub nem no 06.score.
-                {savingEditionOrder && <span style={{ marginLeft: 8, color: "#BFF205" }}>Salvando…</span>}
-              </p>
-              <button type="button" onClick={() => setShowCreateModal(true)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
-                  padding: "8px 14px", borderRadius: 9, cursor: "pointer",
-                  border: "1px solid rgba(191,242,5,0.4)", backgroundColor: "rgba(191,242,5,0.08)",
-                  color: "#BFF205",
-                  fontFamily: "var(--font-mono)", fontSize: 10, fontWeight: 800,
-                  letterSpacing: "0.08em", textTransform: "uppercase",
-                }}>
-                <Plus size={13} />
+          <div className={`${styles.contentWide} ${styles.personListHub}`}>
+            <div className={styles.editionConfigToolbar}>
+              <h3 className={styles.editionConfigToolbarTitle}>
+                Edições
+                <span className={styles.editionConfigCount}>{sortedEditions.length}</span>
+              </h3>
+              <button type="button" onClick={() => setShowCreateModal(true)} className={styles.saveBtn}>
+                <Plus size={14} />
                 Nova edição
               </button>
             </div>
 
-            <div style={{ borderRadius: 16, border: "1px solid rgba(255,255,255,0.06)", backgroundColor: "rgba(255,255,255,0.03)", overflow: "hidden" }}>
+            <p className={styles.fieldHint} style={{ margin: "0 0 16px" }}>
+              Arraste para reordenar. Edições ocultas não aparecem no hub nem no 06.score.
+              {savingEditionOrder && <span style={{ marginLeft: 8, color: "var(--color-brand)" }}>Salvando…</span>}
+            </p>
+
+            <div className={styles.hubListBare}>
               {sortedEditions.length === 0 && (
-                <p style={{ padding: "32px 20px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 11, color: "rgba(255,255,255,0.3)", margin: 0 }}>
-                  Nenhuma edição cadastrada para esta competição.
-                </p>
+                <div className={styles.listPanelEmpty}>
+                  <p className={styles.listPanelEmptyTitle}>Nenhuma edição</p>
+                  <p className={styles.listPanelEmptyDesc}>Crie a primeira edição desta competição.</p>
+                </div>
               )}
-              {sortedEditions.map((ed, idx) => {
-                const edDisplayName = ed.custom_name ?? (ed.season_name + (ed.year_value ? " " + ed.year_value : ""));
+              {sortedEditions.map((ed) => {
+                const edDisplayName = (ed.custom_name ?? (`${ed.season_name}${ed.year_value ? ` ${ed.year_value}` : ""}`)).toUpperCase();
                 const isDragging = draggingEditionId === ed.id;
+                const statusLabel = EDITION_STATUS_OPTIONS.find((o) => o.value === ed.status)?.label ?? ed.status;
                 return (
                   <div
                     key={ed.id}
+                    className={`${styles.athleteListRow} ${isDragging ? styles.hubListRowSelected : ""}`}
+                    style={{ opacity: ed.is_hidden ? 0.55 : 1 }}
                     draggable
                     onDragStart={() => setDraggingEditionId(ed.id)}
                     onDragEnd={() => setDraggingEditionId(null)}
-                    onDragOver={e => { e.preventDefault(); }}
-                    onDrop={e => {
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
                       e.preventDefault();
                       if (draggingEditionId) reorderEditions(draggingEditionId, ed.id);
                       setDraggingEditionId(null);
                     }}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-                      padding: "16px 20px",
-                      borderTop: idx > 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                      backgroundColor: isDragging ? "rgba(191,242,5,0.04)" : "transparent",
-                      opacity: ed.is_hidden ? 0.55 : 1,
-                      transition: "background-color 0.12s, opacity 0.12s",
-                    }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{ color: "rgba(255,255,255,0.25)", cursor: "grab", flexShrink: 0, display: "flex", alignItems: "center" }}
-                        title="Arrastar para reordenar"
-                      >
-                        <GripVertical size={16} />
-                      </div>
+                    <div className={styles.athleteListRowInner}>
+                      <span className={styles.hubDragHandle} title="Arrastar para reordenar">
+                        <GripVertical size={16} strokeWidth={2} />
+                      </span>
                       <Link
-                        href={"/competicoes/" + competition.id + "?edicao=" + ed.id}
-                        style={{ flex: 1, minWidth: 0, textDecoration: "none" }}
+                        href={`/competicoes/${competition.id}?edicao=${ed.id}`}
+                        className={styles.athleteListRowLink}
                       >
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, fontWeight: 700, color: "var(--color-text-primary)", margin: 0 }}>
-                              {edDisplayName}
-                            </p>
+                        <div className={styles.athleteListDetails}>
+                          <p className={styles.editionConfigRowTitle}>{edDisplayName}</p>
+                          <div className={styles.hubChipRow} style={{ marginTop: 6 }}>
                             {ed.is_current && (
-                              <span style={{
-                                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
-                                padding: "2px 8px", borderRadius: 20,
-                                backgroundColor: "rgba(191,242,5,0.12)", color: "#BFF205",
-                                border: "1px solid rgba(191,242,5,0.2)",
-                              }}>
-                                ATUAL
-                              </span>
+                              <span className={`${styles.hubChip} ${styles.hubChipBrand}`}>ATUAL</span>
                             )}
-                            {ed.is_hidden && (
-                              <span style={{
-                                fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
-                                padding: "2px 8px", borderRadius: 20,
-                                backgroundColor: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.4)",
-                                border: "1px solid rgba(255,255,255,0.1)",
-                              }}>
-                                OCULTA
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                            <span style={{
-                              fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 800, letterSpacing: "0.06em",
-                              padding: "2px 8px", borderRadius: 6,
-                              backgroundColor: ed.status === "ongoing" ? "rgba(191,242,5,0.12)" : "rgba(255,255,255,0.06)",
-                              color: STATUS_COLOR[ed.status] ?? "#A6A6A6",
-                            }}>
-                              {EDITION_STATUS_OPTIONS.find(o => o.value === ed.status)?.label ?? ed.status}
+                            {ed.is_hidden && <span className={styles.hubChip}>OCULTA</span>}
+                            <span className={ed.status === "ongoing" ? `${styles.hubChip} ${styles.hubChipBrand}` : styles.hubChip}>
+                              {statusLabel}
                             </span>
-                            {ed.year_value > 0 && (
-                              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{ed.year_value}</span>
-                            )}
+                            {ed.year_value > 0 && <span className={styles.hubChip}>{ed.year_value}</span>}
                           </div>
                         </div>
                       </Link>
-                    </div>
-
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <span style={{ fontFamily: "var(--font-mono)", fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.06em" }}>Visível</span>
+                      <div className={styles.hubRowActionsHover}>
                         <button
                           type="button"
-                          disabled={savingEditionOrder}
-                          onClick={() => void toggleEditionHidden(ed.id)}
-                          style={{
-                            width: 44, height: 24, borderRadius: 12, border: "none", cursor: savingEditionOrder ? "wait" : "pointer",
-                            backgroundColor: !ed.is_hidden ? "#BFF205" : "rgba(255,255,255,0.1)",
-                            transition: "background 0.15s", position: "relative" as const, flexShrink: 0,
-                            opacity: savingEditionOrder ? 0.6 : 1,
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEditingEdition(ed);
                           }}
+                          className={styles.hubIconActionBtn}
+                          aria-label="Editar edição"
                         >
-                          <div style={{
-                            position: "absolute", top: 3,
-                            left: !ed.is_hidden ? 23 : 3,
-                            width: 18, height: 18, borderRadius: "50%",
-                            backgroundColor: !ed.is_hidden ? "#0a0a0a" : "#555",
-                            transition: "left 0.15s",
-                          }} />
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            void handleDeleteEdition(ed.id);
+                          }}
+                          disabled={deletingEditionId === ed.id}
+                          className={`${styles.rowActionBtn} ${styles.rowActionBtnDanger}`}
+                          aria-label="Excluir edição"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
-                      <button type="button"
-                        onClick={() => setEditingEdition(ed)}
-                        style={{
-                          padding: 6, borderRadius: 8, cursor: "pointer",
-                          border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
-                          color: "rgba(255,255,255,0.4)",
-                        }}>
-                        <Pencil size={13} />
-                      </button>
-                      <button type="button"
-                        onClick={() => void handleDeleteEdition(ed.id)}
-                        disabled={deletingEditionId === ed.id}
-                        style={{
-                          padding: 6, borderRadius: 8, cursor: deletingEditionId === ed.id ? "not-allowed" : "pointer",
-                          border: "1px solid rgba(255,255,255,0.08)", backgroundColor: "transparent",
-                          color: "#FF4444", opacity: deletingEditionId === ed.id ? 0.4 : 1,
-                        }}>
-                        <Trash2 size={13} />
-                      </button>
                     </div>
                   </div>
                 );
@@ -1264,8 +1322,20 @@ export default function ConfiguracoesCompeticaoClient({
             </div>
           </div>
         )}
+      </EntityHubShell>
 
-      </div>
+      {divModalOpen && (
+        <DivisionLinkModal
+          open={divModalOpen}
+          mode={divModalMode}
+          allCompetitions={allCompetitions}
+          allLinkedIds={allLinkedIds}
+          editFromType={divEditFrom}
+          initialSelectedId={divEditId}
+          onClose={() => setDivModalOpen(false)}
+          onConfirm={confirmDivLink}
+        />
+      )}
 
       {showCreateModal && (
         <EdicaoModal
@@ -1288,6 +1358,6 @@ export default function ConfiguracoesCompeticaoClient({
         />
       )}
 
-    </div>
+    </>
   );
 }

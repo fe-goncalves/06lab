@@ -108,13 +108,14 @@ export async function resolverEditionIds(
 
 export function teamEntryFrom(
   teamId: string,
-  team: { full_name?: string; logo_url?: string | null; abbreviation?: string | null } | undefined,
+  team: { full_name?: string; short_name?: string | null; logo_url?: string | null; abbreviation?: string | null } | undefined,
   value: number,
   subtitle?: string | null,
 ): TeamEntry {
   return {
     team_id: teamId,
     full_name: team?.full_name ?? "",
+    short_name: team?.short_name ?? null,
     abbreviation: team?.abbreviation ?? null,
     logo_url: team?.logo_url ?? null,
     value,

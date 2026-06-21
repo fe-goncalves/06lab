@@ -122,6 +122,167 @@ export async function editarMembro(
   return { success: true };
 }
 
+function subtractDay(iso: string): string {
+  const d = new Date(iso + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function rangesOverlap(
+  aStart: string,
+  aEnd: string | null,
+  bStart: string,
+  bEnd: string | null,
+): boolean {
+  const ae = aEnd ?? "9999-12-31";
+  const be = bEnd ?? "9999-12-31";
+  return aStart <= be && bStart <= ae;
+}
+
+export async function transferirMembro(
+  staffMemberId: string,
+  startedAt: string,
+  teamId: string | null,
+  leaveFree: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: allStints } = await supabase
+    .from("staff_team_stints")
+    .select("id, started_at, ended_at, is_current")
+    .eq("staff_member_id", staffMemberId);
+
+  const current = (allStints ?? []).find((s) => s.ended_at === null || s.is_current);
+
+  if (leaveFree) {
+    if (!current) return { error: "Já está sem clube." };
+    if (startedAt <= current.started_at) return { error: "A data deve ser posterior ao início do vínculo atual." };
+    const { error } = await supabase
+      .from("staff_team_stints")
+      .update({ ended_at: startedAt, is_current: false })
+      .eq("id", current.id);
+    if (error) return { error: error.message };
+    return { success: true };
+  }
+
+  if (!teamId) return { error: "Selecione uma equipe." };
+
+  if (current) {
+    if (startedAt <= current.started_at) return { error: "A data deve ser posterior ao início do vínculo atual." };
+    const prevEnd = subtractDay(startedAt);
+    const { error: endErr } = await supabase
+      .from("staff_team_stints")
+      .update({ ended_at: prevEnd < current.started_at ? current.started_at : prevEnd, is_current: false })
+      .eq("id", current.id);
+    if (endErr) return { error: endErr.message };
+  } else {
+    for (const s of allStints ?? []) {
+      if (rangesOverlap(startedAt, null, s.started_at, s.ended_at)) {
+        return { error: "A data conflita com um vínculo existente." };
+      }
+    }
+  }
+
+  const { error } = await supabase.from("staff_team_stints").insert({
+    staff_member_id: staffMemberId,
+    team_id: teamId,
+    started_at: startedAt,
+    is_current: true,
+    ended_at: null,
+    movement_type: "transfer",
+  });
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function editarStintMembroCompleto(
+  stintId: string,
+  payload: {
+    startedAt: string;
+    endedAt: string | null;
+    isCurrent: boolean;
+    isActive: boolean;
+    hideFreeAfter?: boolean;
+  },
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  const { data: stint } = await supabase
+    .from("staff_team_stints")
+    .select("id, staff_member_id")
+    .eq("id", stintId)
+    .maybeSingle();
+  if (!stint) return { error: "Vínculo não encontrado." };
+
+  const { data: allStints } = await supabase
+    .from("staff_team_stints")
+    .select("id, started_at, ended_at")
+    .eq("staff_member_id", stint.staff_member_id);
+
+  if (payload.endedAt && payload.startedAt > payload.endedAt) {
+    return { error: "A data de fim não pode ser anterior ao início." };
+  }
+
+  const effectiveEnd = payload.isCurrent ? null : payload.endedAt;
+  for (const other of allStints ?? []) {
+    if (other.id === stintId) continue;
+    if (rangesOverlap(payload.startedAt, effectiveEnd, other.started_at, other.ended_at)) {
+      return { error: "O período conflita com outro vínculo." };
+    }
+  }
+
+  if (payload.isCurrent) {
+    const others = (allStints ?? []).filter((s) => s.id !== stintId);
+    const latestOther = others.reduce((max, s) => (s.started_at > max ? s.started_at : max), "");
+    if (latestOther && payload.startedAt < latestOther) {
+      return { error: "Só pode ser atual se a data de início for a mais recente." };
+    }
+    for (const other of others) {
+      if (other.ended_at !== null) {
+        await supabase
+          .from("staff_team_stints")
+          .update({ is_current: false })
+          .eq("id", other.id);
+        continue;
+      }
+      const prevEnd = subtractDay(payload.startedAt);
+      const effectiveEnd = prevEnd < other.started_at ? other.started_at : prevEnd;
+      await supabase
+        .from("staff_team_stints")
+        .update({ is_current: false, ended_at: effectiveEnd })
+        .eq("id", other.id);
+    }
+  } else {
+    await supabase
+      .from("staff_team_stints")
+      .update({ is_current: false })
+      .eq("staff_member_id", stint.staff_member_id)
+      .neq("id", stintId);
+  }
+
+  const updatePayload: Record<string, unknown> = {
+    started_at: payload.startedAt,
+    ended_at: payload.isCurrent ? null : payload.endedAt,
+    is_current: payload.isCurrent,
+    is_active: payload.isActive,
+  };
+  if (payload.hideFreeAfter !== undefined) {
+    updatePayload.hide_free_after = payload.hideFreeAfter;
+  }
+
+  const { error } = await supabase
+    .from("staff_team_stints")
+    .update(updatePayload)
+    .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
 export async function vincularMembroEquipe(
   staffMemberId: string,
   teamId: string,
@@ -211,11 +372,32 @@ export async function removerStintMembro(
 
   const { data: stint } = await supabase
     .from("staff_team_stints")
-    .select("ended_at")
+    .select("id, staff_member_id, ended_at, is_current, started_at")
     .eq("id", stintId)
     .maybeSingle();
 
-  if (stint?.ended_at === null) return { error: "Não é possível remover o vínculo atual. Use a aba Informações para transferir o membro." };
+  if (!stint) return { error: "Vínculo não encontrado." };
+  if (stint.ended_at === null || stint.is_current) {
+    return { error: "Não é possível excluir o vínculo atual. Transfira ou encerre antes." };
+  }
+
+  const { data: siblings } = await supabase
+    .from("staff_team_stints")
+    .select("id, started_at, ended_at")
+    .eq("staff_member_id", stint.staff_member_id)
+    .neq("id", stintId)
+    .order("started_at", { ascending: true });
+
+  const chron = siblings ?? [];
+  for (let i = 1; i < chron.length; i++) {
+    const prev = chron[i - 1];
+    const next = chron[i];
+    const ae = prev.ended_at ?? "9999-12-31";
+    const be = next.ended_at ?? "9999-12-31";
+    if (prev.started_at <= be && next.started_at <= ae) {
+      return { error: "Excluir este vínculo deixaria períodos sobrepostos no histórico." };
+    }
+  }
 
   const { error } = await supabase
     .from("staff_team_stints")
@@ -259,6 +441,122 @@ export async function toggleStintMembroAtivo(
     .from("staff_team_stints")
     .update({ is_active: isActive })
     .eq("id", stintId);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function reordenarStints(
+  updates: { id: string; display_order: number }[],
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Não autenticado." };
+
+  for (const update of updates) {
+    const { error } = await supabase
+      .from("staff_team_stints")
+      .update({ display_order: update.display_order })
+      .eq("id", update.id);
+    if (error) return { error: error.message };
+  }
+  return { success: true };
+}
+
+async function getOrganizationId(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase
+    .from("user_profiles")
+    .select("organization_id")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  return profile?.organization_id ?? null;
+}
+
+export async function toggleMembroAtivo(
+  id: string,
+  isActive: boolean,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const organization_id = await getOrganizationId(supabase);
+  if (!organization_id) return { error: "Organização não encontrada." };
+
+  const { error } = await supabase
+    .from("staff_members")
+    .update({ is_active: isActive })
+    .eq("id", id)
+    .eq("organization_id", organization_id);
+
+  if (error) return { error: error.message };
+  return { success: true };
+}
+
+export async function verificarPodeExcluirMembro(
+  id: string,
+): Promise<{ canDelete: boolean; reasons: string[] }> {
+  const supabase = await createClient();
+  const organization_id = await getOrganizationId(supabase);
+  if (!organization_id) return { canDelete: false, reasons: ["Organização não encontrada."] };
+
+  const { data: member } = await supabase
+    .from("staff_members")
+    .select("id")
+    .eq("id", id)
+    .eq("organization_id", organization_id)
+    .maybeSingle();
+
+  if (!member) return { canDelete: false, reasons: ["Membro não encontrado."] };
+
+  const reasons: string[] = [];
+
+  const [
+    { count: rosterCount },
+    { count: currentTeamCount },
+    { count: lineupCount },
+  ] = await Promise.all([
+    supabase
+      .from("edition_roster_entries")
+      .select("id", { count: "exact", head: true })
+      .eq("staff_member_id", id)
+      .eq("member_type", "staff"),
+    supabase
+      .from("staff_team_stints")
+      .select("id", { count: "exact", head: true })
+      .eq("staff_member_id", id)
+      .eq("is_current", true),
+    supabase
+      .from("match_staff_lineups")
+      .select("id", { count: "exact", head: true })
+      .eq("staff_member_id", id),
+  ]);
+
+  if ((rosterCount ?? 0) > 0) reasons.push("possui inscrições em competições");
+  if ((currentTeamCount ?? 0) > 0) reasons.push("possui vínculo com equipe atual");
+  if ((lineupCount ?? 0) > 0) reasons.push("possui participação em jogos");
+
+  return { canDelete: reasons.length === 0, reasons };
+}
+
+export async function excluirMembro(
+  id: string,
+): Promise<{ success: true } | { error: string }> {
+  const supabase = await createClient();
+  const organization_id = await getOrganizationId(supabase);
+  if (!organization_id) return { error: "Organização não encontrada." };
+
+  const check = await verificarPodeExcluirMembro(id);
+  if (!check.canDelete) {
+    return { error: `Não é possível excluir: ${check.reasons.join(", ")}.` };
+  }
+
+  const { error } = await supabase
+    .from("staff_members")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", organization_id);
 
   if (error) return { error: error.message };
   return { success: true };

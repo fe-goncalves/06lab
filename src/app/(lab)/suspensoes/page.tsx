@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { redirect } from "next/navigation";
+import { OrgGestaoPageShell } from "@/app/(lab)/components/org-gestao-page-shell";
 import SuspensoesClient from "./suspensoes-client";
 
 export default async function SuspensoesPage() {
@@ -37,6 +38,7 @@ export default async function SuspensoesPage() {
     id: s.id,
     athlete_id: s.athlete_id,
     athlete_name: s.athletes?.full_name ?? "—",
+    athlete_surname: s.athletes?.surname ?? null,
     scope_type: s.scope_type,
     scope_edition_id: s.scope_edition_id ?? "",
     edition_label: s.competition_editions
@@ -56,14 +58,8 @@ export default async function SuspensoesPage() {
   }));
 
   return (
-    <div className="p-6 md:p-8">
-      <header className="mb-8">
-        <h1 className="font-display text-2xl font-semibold" style={{ color: "var(--color-text-primary)" }}>Suspensões</h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          Visão consolidada de todas as suspensões. Para criar ou editar, acesse o hub da competição.
-        </p>
-      </header>
+    <OrgGestaoPageShell>
       <SuspensoesClient suspensions={suspensionsList} editions={editionsList} />
-    </div>
+    </OrgGestaoPageShell>
   );
 }

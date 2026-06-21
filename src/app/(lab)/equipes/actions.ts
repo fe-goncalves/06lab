@@ -134,13 +134,17 @@ export async function editarEquipe(
 
   const { data: existing, error: fetchErr } = await supabase
     .from("teams")
-    .select("id, logo_url")
+    .select("id, logo_url, is_virtual")
     .eq("id", id)
     .eq("organization_id", orgId)
     .maybeSingle();
 
   if (fetchErr || !existing) {
     return { error: "Equipe não encontrada ou sem permissão." };
+  }
+
+  if (existing.is_virtual) {
+    return { error: "\"Sem Clube\" é um pool do sistema e não pode ser editado." };
   }
 
   const full_name = String(formData.get("full_name") ?? "").trim();

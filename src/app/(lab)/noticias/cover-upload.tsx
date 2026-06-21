@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import ReactCrop, { type Crop, centerCrop, makeAspectCrop } from "react-image-crop";
 import { compressNewsImage } from "@/lib/images/compress-news-image";
 import "react-image-crop/dist/ReactCrop.css";
 import { Upload, X, Check } from "lucide-react";
+import {
+  modalOverlayStyle,
+  modalPanelStyle,
+  modalHeaderDividerStyle,
+  modalCloseButtonStyle,
+  secondaryButtonStyle,
+} from "@/lib/lab-ui-styles";
+import styles from "@/app/(lab)/components/entity-hub.module.css";
 
 type Props = {
   existingUrl: string | null;
@@ -16,7 +24,7 @@ function centerAspectCrop(width: number, height: number, aspect: number): Crop {
   return centerCrop(
     makeAspectCrop({ unit: "%", width: 90 }, aspect, width, height),
     width,
-    height
+    height,
   );
 }
 
@@ -73,11 +81,11 @@ export default function CoverUpload({ existingUrl, onFileReady, onExistingUrl }:
       0,
       0,
       canvas.width,
-      canvas.height
+      canvas.height,
     );
 
     const blob = await new Promise<Blob>((res, rej) =>
-      canvas.toBlob((b) => (b ? res(b) : rej(new Error("Falha ao exportar recorte"))), "image/png")
+      canvas.toBlob((b) => (b ? res(b) : rej(new Error("Falha ao exportar recorte"))), "image/png"),
     );
 
     const croppedFile = new File([blob], "cover.png", { type: "image/png" });
@@ -106,105 +114,84 @@ export default function CoverUpload({ existingUrl, onFileReady, onExistingUrl }:
 
   return (
     <div>
-      {/* Modal de crop */}
       {cropping && srcImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-6"
-          style={{ backgroundColor: "rgba(0,0,0,0.85)" }}
-        >
+        <div style={modalOverlayStyle} onClick={cancelCrop}>
           <div
-            className="flex w-full max-w-2xl flex-col gap-4 rounded-xl p-6"
-            style={{ backgroundColor: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+            style={{ ...modalPanelStyle, maxWidth: 720, width: "100%" }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <p className="font-mono text-sm font-bold uppercase" style={{ color: "var(--color-text-primary)" }}>
-                Recortar capa — 16:9
-              </p>
-              <button type="button" onClick={cancelCrop} style={{ color: "var(--color-text-secondary)" }}>
-                <X size={18} strokeWidth={2} />
-              </button>
+            <div style={{
+              padding: "16px 20px",
+              ...modalHeaderDividerStyle,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}>
+              <p className={styles.sectionTitle}>Recortar capa — 16:9</p>
+              <button type="button" onClick={cancelCrop} style={modalCloseButtonStyle}>×</button>
             </div>
-
-            <div className="flex items-center justify-center overflow-hidden rounded" style={{ maxHeight: "400px" }}>
-              <ReactCrop
-                crop={crop}
-                onChange={(c) => setCrop(c)}
-                onComplete={(c) => setCompletedCrop(c)}
-                aspect={ASPECT}
-                minWidth={100}
-              >
-                <img
-                  ref={imgRef}
-                  src={srcImage}
-                  onLoad={onImageLoad}
-                  style={{ maxHeight: "400px", maxWidth: "100%", display: "block" }}
-                  alt="Recortar"
-                />
-              </ReactCrop>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={cancelCrop}
-                className="rounded px-4 py-2 font-mono text-sm transition-opacity hover:opacity-70"
-                style={{ border: "1px solid var(--color-border)", color: "var(--color-text-secondary)" }}
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={applyCrop}
-                disabled={compressing || !completedCrop}
-                className="flex items-center gap-2 rounded px-4 py-2 font-mono text-sm font-bold uppercase transition-opacity hover:opacity-80 disabled:opacity-50"
-                style={{ backgroundColor: "var(--color-brand)", color: "#0D0D0D" }}
-              >
-                <Check size={14} strokeWidth={2.5} />
-                {compressing ? "Comprimindo..." : "Aplicar"}
-              </button>
+            <div style={{ padding: "20px" }}>
+              <div className="flex items-center justify-center overflow-hidden rounded-xl" style={{ maxHeight: 400 }}>
+                <ReactCrop
+                  crop={crop}
+                  onChange={(c) => setCrop(c)}
+                  onComplete={(c) => setCompletedCrop(c)}
+                  aspect={ASPECT}
+                  minWidth={100}
+                >
+                  <img
+                    ref={imgRef}
+                    src={srcImage}
+                    onLoad={onImageLoad}
+                    style={{ maxHeight: 400, maxWidth: "100%", display: "block" }}
+                    alt="Recortar"
+                  />
+                </ReactCrop>
+              </div>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+                <button type="button" onClick={cancelCrop} style={secondaryButtonStyle}>
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={applyCrop}
+                  disabled={compressing || !completedCrop}
+                  className={styles.saveBtn}
+                >
+                  <Check size={14} strokeWidth={2.5} />
+                  {compressing ? "Comprimindo…" : "Aplicar"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Preview ou área de upload */}
       {preview ? (
-        <div className="relative">
-          <img
-            src={preview}
-            alt="Capa"
-            className="w-full rounded object-cover"
-            style={{ aspectRatio: "16/9" }}
-          />
-          <button
-            type="button"
-            onClick={removeCover}
-            className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full"
-            style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff" }}
-          >
-            <X size={12} strokeWidth={2.5} />
-          </button>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute bottom-2 right-2 rounded px-2 py-1 font-mono text-xs transition-opacity hover:opacity-80"
-            style={{ backgroundColor: "rgba(0,0,0,0.7)", color: "#fff" }}
-          >
-            Trocar
-          </button>
+        <div className={styles.newsCoverPreviewWrap}>
+          <img src={preview} alt="Capa" className={styles.newsCoverPreviewImg} />
+          <div className={styles.newsCoverPreviewActions}>
+            <button type="button" onClick={removeCover} className={styles.newsCoverPreviewBtn}>
+              <X size={12} strokeWidth={2.5} />
+            </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className={styles.newsCoverPreviewBtn}
+            >
+              Trocar
+            </button>
+          </div>
         </div>
       ) : (
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded py-8 transition-colors hover:bg-white/5"
-          style={{ border: "1px dashed var(--color-border)", aspectRatio: "16/9" }}
+          className={styles.newsCoverUploadBtn}
         >
-          <Upload size={20} strokeWidth={1.5} style={{ color: "var(--color-text-secondary)" }} />
-          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)" }}>
-            Clique para enviar
-          </span>
-          <span className="font-mono text-xs" style={{ color: "var(--color-text-secondary)", opacity: 0.6 }}>
+          <Upload size={22} strokeWidth={1.5} style={{ color: "var(--hub-body-subtle)" }} />
+          <span className={styles.newsCoverUploadHint}>Clique para enviar</span>
+          <span className={styles.newsCoverUploadHint} style={{ opacity: 0.65 }}>
             Será recortado em 16:9
           </span>
         </button>
